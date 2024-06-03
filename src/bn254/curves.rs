@@ -790,7 +790,7 @@ mod test {
 
     #[test]
     fn test_scalar_mulx() {
-        let scalar_mulx = G1Projective::scalar_mulx(1);
+        let scalar_mulx = G1Projective::scalar_mulx(4);
         println!("G1.scalar_mulx: {} bytes", scalar_mulx.len());
 
         let mut prng = ChaCha20Rng::seed_from_u64(0);
@@ -816,7 +816,7 @@ mod test {
 
     #[test]
     fn test_scalar_muls() {
-        for i in 1..11 {
+        for i in 1..7 {
             println!("G1.scalar_mulx({}): {} bytes", i, G1Projective::scalar_mulx(i).len());
         }
     }

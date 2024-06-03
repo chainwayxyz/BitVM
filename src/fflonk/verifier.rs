@@ -1835,11 +1835,11 @@ mod test {
 
             { G1Projective::roll(1) }
             { Fr::fromaltstack() }
-            { G1Projective::scalar_mulx(5) }
+            { G1Projective::scalar_mulx(4) }
 
             { G1Projective::roll(1) }
             { Fr::fromaltstack() }
-            { G1Projective::scalar_mulx(5) }
+            { G1Projective::scalar_mulx(4) }
 
             { G1Projective::add() }
             { G1Projective::add() }
@@ -1866,7 +1866,7 @@ mod test {
 
             // [y, scalar_f1, scalar_f2, scalar_e, scalar_j, e.x, e.y, e.z ] | [f.z, f.y, f.x]
             { Fr::fromaltstack() }
-            { G1Projective::scalar_mulx(5) }
+            { G1Projective::scalar_mulx(4) }
         }
     }
 
@@ -1886,7 +1886,7 @@ mod test {
             { Fq::push_dec(w1y) }
             { Fq::push_dec("1") }
             { Fr::fromaltstack() }
-            { G1Projective::scalar_mulx(5) }
+            { G1Projective::scalar_mulx(4) }
             // [y, scalar_f1, scalar_f2, scalar_e, j.x, j.y, j.z ] | [f.z, f.y, f.x, e.z, e.y, e.x]
         }
     }
@@ -1915,7 +1915,7 @@ mod test {
             {Fr::fromaltstack()}
 
             // W2 * y ] | [f, e, j]
-            { G1Projective::scalar_mulx(5) }
+            { G1Projective::scalar_mulx(4) }
 
             // W2 * y, j, e, f ]
             { G1Projective::fromaltstack() }
