@@ -9,6 +9,66 @@ static G1_DOUBLE_PROJECTIVE: OnceLock<Script> = OnceLock::new();
 static G1_NONZERO_ADD_PROJECTIVE: OnceLock<Script> = OnceLock::new();
 static G1_SCALAR_MUL_LOOP: OnceLock<Script> = OnceLock::new();
 
+fn if_vec(a: u32) -> Vec<u32> {
+    if a == 1 {
+        return vec![1, 0];
+    }
+    let mut v = Vec::new();
+    let v2 = if_vec(a - 1);
+    for b in v2.iter() {
+        v.push(2 * b + 1);
+    }
+    for b in v2 {
+        v.push(2 * b);
+    }
+    return v;
+}
+
+fn vec_to_script(v: Vec<u32>, z: bool, k: u32) -> Script {
+    if v.len() == 2 {
+        if z {
+            return script! {
+                OP_IF
+                    { G1Projective::copy(k - v[0]) }
+                    OP_TRUE
+                OP_ELSE
+                    OP_FALSE
+                OP_ENDIF
+            };
+        }
+        else {
+            return script! {
+                OP_IF
+                    { G1Projective::copy(k - v[0]) }
+                OP_ELSE
+                    { G1Projective::copy(k - v[1]) }
+                OP_ENDIF
+            };
+        }
+    }
+    let mut v1 = v.clone();
+    let v2 = v1.split_off(v1.len() / 2);
+    if z {
+        return script! {
+            OP_IF
+                { vec_to_script(v1, false, k) }
+                OP_TRUE
+            OP_ELSE
+                { vec_to_script(v2, true, k) }
+            OP_ENDIF
+        };
+    }
+    else {
+        return script! {
+            OP_IF
+                { vec_to_script(v1, false, k) }
+            OP_ELSE
+                { vec_to_script(v2, false, k) }
+            OP_ENDIF
+        };
+    }
+}
+
 pub struct G1Projective;
 
 impl G1Projective {
@@ -397,6 +457,80 @@ impl G1Projective {
         );
         Script::from(script_bytes)
     }
+
+    pub fn scalar_mulx(x: u32) -> Script {
+        let mut r = Fr::N_BITS % x;
+        if r == 0 {
+            r = x;
+        }
+        let k = (Fr::N_BITS - r) / x;
+
+        let loop_code = G1_SCALAR_MUL_LOOP
+            .get_or_init(|| {
+                script! {
+                    for _ in 0..x {
+                        { G1Projective::double() }
+                    }
+
+                    for _ in 0..x {
+                        OP_FROMALTSTACK
+                    }
+                    { vec_to_script(if_vec(x), true, 2_u32.pow(x)) }
+                    OP_IF
+                        { G1Projective::add() }
+                    OP_ENDIF
+                }
+            })
+            .as_bytes()
+            .to_vec();
+
+        let mut script_bytes = vec![];
+
+        script_bytes.extend(
+            script! {
+                { Fr::convert_to_le_bits_toaltstack() }
+
+                for i in 2..2_u32.pow(x) {
+                    if i % 2 == 0 {
+                        { G1Projective::copy(i / 2 - 1) }
+                        { G1Projective::double() }
+                    }
+                    else {
+                        { G1Projective::copy(0) }
+                        { G1Projective::copy(i - 1) }
+                        { G1Projective::add() }
+                    }
+                }
+
+                { G1Projective::push_zero() }
+
+                for _ in 0..r {
+                    OP_FROMALTSTACK
+                }
+                { vec_to_script(if_vec(r), true, 2_u32.pow(x)) }
+                OP_IF
+                    { G1Projective::add() }
+                OP_ENDIF
+            }
+            .as_bytes(),
+        );
+
+        for _ in 0..k {
+            script_bytes.extend(loop_code.clone());
+        }
+
+        script_bytes.extend_from_slice(
+            script! {
+                { G1Projective::toaltstack() }
+                for _ in 0..2_usize.pow(x) - 1 {
+                    { G1Projective::drop() }
+                }
+                { G1Projective::fromaltstack() }
+            }
+            .as_bytes(),
+        );
+        Script::from(script_bytes)
+    }
 }
 
 pub struct G1Affine;
@@ -651,6 +785,39 @@ mod test {
             };
             let exec_result = execute_script(script);
             assert!(exec_result.success);
+        }
+    }
+
+    #[test]
+    fn test_scalar_mulx() {
+        let scalar_mulx = G1Projective::scalar_mulx(1);
+        println!("G1.scalar_mulx: {} bytes", scalar_mulx.len());
+
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        for _ in 0..1 {
+            let scalar = Fr::rand(&mut prng);
+
+            let p = ark_bn254::G1Projective::rand(&mut prng);
+            let q = p.mul(scalar);
+
+            let script = script! {
+                { g1_projective_push(p) }
+                { fr_push(scalar) }
+                { scalar_mulx.clone() }
+                { g1_projective_push(q) }
+                { G1Projective::equalverify() }
+                OP_TRUE
+            };
+            let exec_result = execute_script(script);
+            assert!(exec_result.success);
+        }
+    }
+
+    #[test]
+    fn test_scalar_muls() {
+        for i in 1..11 {
+            println!("G1.scalar_mulx({}): {} bytes", i, G1Projective::scalar_mulx(i).len());
         }
     }
 
