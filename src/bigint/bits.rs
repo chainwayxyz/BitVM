@@ -1,3 +1,5 @@
+use bitcoin::opcodes::all::OP_TOALTSTACK;
+
 use crate::bigint::BigIntImpl;
 use crate::treepp::{pushable, script, Script};
 use std::cmp::min;
@@ -43,6 +45,15 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
                 { limb_to_le_bits_toaltstack(LIMB_SIZE) }
             }
             { limb_to_le_bits_toaltstack(N_BITS - LIMB_SIZE * (Self::N_LIMBS - 1)) }
+        }
+    }
+
+    pub fn convert_to_le_base4_toaltstack() -> Script {
+        script! {
+            { Self::convert_to_le_bits() }
+            for _ in 0..N_BITS / 2 {
+                OP_OVER OP_ADD OP_ADD OP_TOALTSTACK
+            }
         }
     }
 }
@@ -577,6 +588,39 @@ mod test {
                 for i in 0..U64::N_BITS {
                     OP_FROMALTSTACK
                     { bits[(U64::N_BITS - 1 - i) as usize] }
+                    OP_EQUALVERIFY
+                }
+                OP_TRUE
+            };
+
+            let exec_result = execute_script(script);
+            assert!(exec_result.success);
+        }
+    }
+
+    #[test]
+    fn test_ubigint_to_le_base4_toaltstack() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        for _ in 0..1 {
+            let a: BigUint = prng.sample(RandomBits::new(U254::N_BITS as u64));
+
+            let mut bits = vec![];
+            let mut cur = a.clone();
+            for _ in 0..U254::N_BITS / 2 {
+                let x = if cur.bit(0) { 1 } else { 0 };
+                cur.shr_assign(1);
+                let y = if cur.bit(0) { 1 } else { 0 };
+                cur.shr_assign(1);
+                bits.push(2 * y + x);
+            }
+
+            let script = script! {
+                { U254::push_u32_le(&a.to_u32_digits()) }
+                { U254::convert_to_le_base4_toaltstack() }
+                for i in 0..U254::N_BITS / 2 {
+                    OP_FROMALTSTACK
+                    { bits[(U254::N_BITS / 2 - 1 - i) as usize] }
                     OP_EQUALVERIFY
                 }
                 OP_TRUE

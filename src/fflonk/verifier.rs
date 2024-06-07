@@ -42,110 +42,34 @@ mod test {
         inp_2: &str,
     ) -> Script {
         script! {
-            // push C0
-            {
-                Fq::push_dec(
-                    c0_x
-                )
-            }
-            {
-                Fq::push_dec(
-                    c0_y
-                )
-            }
-            // push the public input
-            {
-                Fq::push_dec(inp_1)
-            }
-            {
-                Fq::push_dec(inp_2)
-            }
             // push C1
-            {
-                Fq::push_dec(
-                    c1_x
-                )
-            }
-            {
-                Fq::push_dec(
-                    c1_y
-                )
-            }
+            { Fq::push_dec(c1_x) }
+            { Fq::push_dec(c1_y) }
+            { G1Affine::convert_to_compressed() }
+            
+            // push the public input
+            { Fq::push_dec(inp_2) }
+            { Fq::convert_to_be_bytes() }
+            { Fq::push_dec(inp_1) }
+            { Fq::convert_to_be_bytes() }
 
-            // send C0 to altstack
-            {
-                Fq::roll(4)
-            }
-            {
-                Fq::toaltstack()
-            }
-            {
-                Fq::roll(4)
-            }
-            {
-                Fq::toaltstack()
-            }
-
-            // send the public input to altstack
-            {
-                Fq::roll(3)
-            }
-            {
-                Fq::toaltstack()
-            }
-            {
-                Fq::roll(2)
-            }
-            {
-                Fq::toaltstack()
-            }
-
-            // convert C1 into bytes
-            {
-                G1Affine::convert_to_compressed()
-            }
-
-            // convert the public input into bytes
-            {
-                Fq::fromaltstack()
-            }
-            {
-                Fq::convert_to_be_bytes()
-            }
-            {
-                Fq::fromaltstack()
-            }
-            {
-                Fq::convert_to_be_bytes()
-            }
-
-            // convert C0 into bytes
-            {
-                Fq::fromaltstack()
-            }
-            {
-                Fq::fromaltstack()
-            }
-            {
-                G1Affine::convert_to_compressed()
-            }
+            // push C0
+            { Fq::push_dec(c0_x) }
+            { Fq::push_dec(c0_y) }
+            { G1Affine::convert_to_compressed() }
 
             // compute the hash
-            {
-                hash.clone()
-            }
-            {
-                Fr::from_hash()
-            }
+            { hash.clone() }
+            { Fr::from_hash() }
         }
     }
 
     fn compute_challenges_gamma(hash: &Script) -> Script {
         script! {
-         { Fr::copy(0) }
-         { Fr::convert_to_be_bytes() }
-         { hash.clone() }
-         { Fr::from_hash() }
+            { Fr::copy(0) }
+            { Fr::convert_to_be_bytes() }
+            { hash.clone() }
+            { Fr::from_hash() }
         }
     }
 
@@ -169,65 +93,71 @@ mod test {
         t2w: &str,
     ) -> Script {
         script! {
-            // push xi seed
-            { Fr::push_dec(xi) }
-
             // push the polynomial evaluations
-
-            // ql
-            { Fr::push_dec(ql) }
-
-            // qr
-            { Fr::push_dec(qr) }
-
-            // qm
-            { Fr::push_dec(qm) }
-
-            // qo
-            { Fr::push_dec(qo) }
-
-            // qc
-            { Fr::push_dec(qc) }
-
-            // s1
-            { Fr::push_dec(s1) }
-
-            // s2
-            { Fr::push_dec(s2) }
-
-            // s3
-            { Fr::push_dec(s3) }
-
-            // a
-            { Fr::push_dec(a) }
-
-            // b
-            { Fr::push_dec(b) }
-
-            // c
-            { Fr::push_dec(c) }
-
-            // z
-            { Fr::push_dec(z) }
-
-            // zw
-            { Fr::push_dec(zw) }
-
-            // t1w
-            { Fr::push_dec(t1w) }
 
             // t2w
             { Fr::push_dec(t2w) }
-
-            for i in 1..16 {
-                { Fr::roll(16 - i) } { Fr::toaltstack() }
-            }
-
             { Fr::convert_to_be_bytes() }
 
-            for _ in 0..15 {
-                { Fr::fromaltstack() } { Fr::convert_to_be_bytes() }
-            }
+            // t1w
+            { Fr::push_dec(t1w) }
+            { Fr::convert_to_be_bytes() }
+
+            // zw
+            { Fr::push_dec(zw) }
+            { Fr::convert_to_be_bytes() }
+
+            // z
+            { Fr::push_dec(z) }
+            { Fr::convert_to_be_bytes() }
+
+            // c
+            { Fr::push_dec(c) }
+            { Fr::convert_to_be_bytes() }
+
+            // b
+            { Fr::push_dec(b) }
+            { Fr::convert_to_be_bytes() }
+
+            // a
+            { Fr::push_dec(a) }
+            { Fr::convert_to_be_bytes() }
+
+            // s3
+            { Fr::push_dec(s3) }
+            { Fr::convert_to_be_bytes() }
+
+            // s2
+            { Fr::push_dec(s2) }
+            { Fr::convert_to_be_bytes() }
+
+            // s1
+            { Fr::push_dec(s1) }
+            { Fr::convert_to_be_bytes() }
+
+            // qc
+            { Fr::push_dec(qc) }
+            { Fr::convert_to_be_bytes() }
+
+            // qo
+            { Fr::push_dec(qo) }
+            { Fr::convert_to_be_bytes() }
+
+            // qm
+            { Fr::push_dec(qm) }
+            { Fr::convert_to_be_bytes() }
+
+            // qr
+            { Fr::push_dec(qr) }
+            { Fr::convert_to_be_bytes() }
+
+            // ql
+            { Fr::push_dec(ql) }
+            { Fr::convert_to_be_bytes() }
+
+            // push xi seed
+            { Fr::push_dec(xi) }
+            { Fr::convert_to_be_bytes() }
 
             {hash.clone()}
             { Fr::from_hash() }
@@ -245,7 +175,6 @@ mod test {
 
             { Fr::roll(2) }
             { Fr::toaltstack() }
-
             { G1Affine::convert_to_compressed() }
             { Fr::fromaltstack() }
             { Fr::convert_to_be_bytes() }
@@ -265,7 +194,6 @@ mod test {
 
             { Fr::roll(2) }
             { Fr::toaltstack() }
-
             { G1Affine::convert_to_compressed() }
             { Fr::fromaltstack() }
             { Fr::convert_to_be_bytes() }
@@ -1963,7 +1891,7 @@ mod test {
             { Fr::fromaltstack() }
             { Fq::roll(6)} {Fq::roll(6)} {Fq::roll(6)} // [c0, c1, q1, c2]
             { Fr::fromaltstack() } // [c0, c1, q1, c2, q2]
-            { G1Projective::batched_scalar_mul::<2>() }
+            { G1Projective::batched_scalar_mul_apbq() }
             { G1Projective::add() }
 
         }

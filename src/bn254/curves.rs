@@ -333,6 +333,17 @@ impl G1Projective {
         digits
     }
 
+    /// Convert a number to digits
+    fn to_digits_helper4<const DIGIT_COUNT: usize>(mut number: u32) -> [u8; DIGIT_COUNT] {
+        let mut digits: [u8; DIGIT_COUNT] = [0; DIGIT_COUNT];
+        for i in 0..DIGIT_COUNT {
+            let digit = number % 4;
+            number = (number - digit) / 4;
+            digits[i] = digit as u8;
+        }
+        digits
+    }
+
     /// input stack: point_0, scalar_0, ..., point_{TERMS-1}, scalar_{TERMS-1}
     /// output stack: sum of scalar_i * point_i for 0..TERMS
     /// comments: pi -> point_i, si -> scalar_i
@@ -409,6 +420,95 @@ impl G1Projective {
             {G1Projective::fromaltstack()}
         };
         s
+    }
+
+    /// input stack: P a Q b
+    /// output stack aP + bQ
+    pub fn batched_scalar_mul_apbq() -> Script {
+        const TERMS: usize = 2;
+        script! {
+            // convert scalars to bit-style
+            for i in 0..1 {
+                {Fq::roll(4 * (TERMS - i - 1) as u32)} { Fr::convert_to_le_base4_toaltstack() }
+            }
+
+            for term in 1..TERMS {
+                {Fq::roll(4 * (TERMS - term - 1) as u32)} { Fr::convert_to_le_base4_toaltstack() }
+
+                for _ in 0..Fr::N_BITS {
+                    OP_FROMALTSTACK
+                }
+
+                // zip scalars
+                // [p0, p1, s1_0, s1_1, s1_2, ..., s0_0, s0_1, s0_2, ...]
+                for i in 0..Fr::N_BITS / 2 {
+                    {Fr::N_BITS / 2 - i} OP_ROLL
+                    for _ in 0..term {OP_DUP OP_ADD OP_DUP OP_ADD} OP_ADD //  s0_0 + s1_0*4
+                    OP_TOALTSTACK
+                }
+            }
+
+            // 2P
+            for _ in 0..TERMS {
+                {G1Projective::copy(TERMS as u32 - 1)}
+                {G1Projective::double()}
+            }
+
+            // 3P
+            for _ in 0..TERMS {
+                {G1Projective::copy(TERMS as u32 - 1)}
+                {G1Projective::copy(2 * TERMS as u32)}
+                {G1Projective::add()}
+            }
+
+            // now we have [P_0, P_1, ..., P_terms-1, 2P_0, 2P_1, ..., 2P_terms-1, 3P_0, 3P_1, ..., 3P_terms-1]
+
+            {G1Projective::push_zero()}
+            {G1Projective::toaltstack()}
+
+            for i in 1..(u32::pow(4, TERMS as u32)) {
+                {G1Projective::push_zero()}
+                for (j, mark) in Self::to_digits_helper4::<TERMS>(i as u32).iter().enumerate() {
+                    if *mark != 0 {
+                        {G1Projective::copy(TERMS as u32 * (4 - *mark as u32) - j as u32)} // copy
+                        {G1Projective::add()}
+                    }
+                }
+                {G1Projective::toaltstack()}
+            }
+
+            for _ in 0..3 * TERMS {
+                {G1Projective::drop()}
+            }
+
+            for _ in 0..(u32::pow(4, TERMS as u32)) {
+                {G1Projective::fromaltstack()}
+            }
+
+            {G1Projective::push_zero()} // target
+            // [p1+p0, p1, p0, 0, target]
+            for i in 0..Fr::N_BITS / 2 {
+                OP_FROMALTSTACK // idx = s1_0*2 + s0_0
+                OP_1ADD // idx + 1
+
+                {G1Projective::pick()}
+
+                {G1Projective::add()}
+                // jump the last one
+                if i != Fr::N_BITS / 2 - 1 {
+                    {G1Projective::double()}
+                    {G1Projective::double()}
+                }
+            }
+
+            // clear stack
+            {G1Projective::toaltstack()}
+            for _ in 0..u32::pow(4, TERMS as u32) {
+                {G1Projective::drop()}
+            }
+
+            {G1Projective::fromaltstack()}
+        }
     }
 
     // [g1projective, scalar]
@@ -922,6 +1022,41 @@ mod test {
             let exec_result = execute_script(script);
             // println!("res: {:100}", exec_result);
             // println!("res stack length: {}", exec_result.final_stack.len());
+            assert_eq!(exec_result.success, true);
+        }
+    }
+
+    #[test]
+    fn test_batched_scalar_mul_apbq() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let batch_mul2 = G1Projective::batched_scalar_mul_apbq();
+        println!("bn254.batch_mul_apbq size is {}", batch_mul2.len());
+
+        for _ in 0..1 {
+            let scalar0 = Fr::rand(&mut prng);
+            println!("scalar0 => {}", scalar0);
+            let point0 = ark_bn254::G1Projective::rand(&mut prng);
+            let scalar1 = Fr::rand(&mut prng);
+            println!("scalar1 => {}", scalar1);
+            let point1 = ark_bn254::G1Projective::rand(&mut prng);
+
+            // batched_scalar_mul
+            let q0 = point0.mul(scalar0);
+            let q1 = point1.mul(scalar1);
+            let q0q1 = q0.add(q1);
+
+            let script = script! {
+                { g1_projective_push(point0) }
+                { fr_push(scalar0) }
+                { g1_projective_push(point1) }
+                { fr_push(scalar1) }
+                { batch_mul2.clone() }
+                { g1_projective_push(q0q1) }
+                { G1Projective::equalverify() }
+                OP_TRUE
+            };
+            let exec_result = execute_script(script);
             assert_eq!(exec_result.success, true);
         }
     }

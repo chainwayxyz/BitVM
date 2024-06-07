@@ -68,6 +68,9 @@ pub trait Fp254Impl {
     fn convert_to_le_bits_toaltstack() -> Script { U254::convert_to_le_bits_toaltstack() }
 
     #[inline]
+    fn convert_to_le_base4_toaltstack() -> Script { U254::convert_to_le_base4_toaltstack() }
+
+    #[inline]
     fn push_modulus() -> Script { Self::push_hex(Self::MODULUS) }
 
     #[inline]
