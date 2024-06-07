@@ -195,6 +195,17 @@ impl G1Projective {
         }
     }
 
+    /// [P_n, P_n-1, ..., P_1, P_0, k] -> [P_n, P_n-1, ..., P_1, P_0, P_k]
+    pub fn pick() -> Script {
+        script! {
+            OP_1ADD OP_DUP OP_DUP OP_ADD OP_DUP OP_DUP OP_ADD OP_DUP OP_ADD OP_DUP OP_DUP OP_ADD OP_ADD OP_ADD OP_ADD // 27(k+1)
+            for _ in 0..27 {
+                OP_DUP OP_PICK OP_SWAP
+            }
+            OP_DROP
+        }
+    }
+
     pub fn roll(mut a: u32) -> Script {
         a *= 3;
         script! {
@@ -378,16 +389,9 @@ impl G1Projective {
             // for i in 0..Fr::N_BITS {
             for i in 0..Fr::N_BITS {
                 OP_FROMALTSTACK // idx = s1_0*2 + s0_0
-                OP_1 OP_ADD // idx + 1
+                OP_1ADD // idx + 1
 
-                // simulate {G1Projective::pick()}
-                for _ in 0..26 { OP_DUP }
-                for _ in 0..26 { OP_ADD }
-                {26} OP_ADD // [p1+p0, p1, p0, 0, target, 27*(idx+1)+26]
-                for _ in 0..26 {OP_DUP}
-                for _ in 0..26 {OP_TOALTSTACK}
-                OP_PICK
-                for _ in 0..26 {OP_FROMALTSTACK OP_PICK}
+                {G1Projective::pick()}
 
                 {G1Projective::add()}
                 // jump the last one
@@ -674,6 +678,41 @@ mod test {
     }
 
     #[test]
+    fn test_pick() {
+        println!("G1.pick: {} bytes", G1Projective::pick().len());
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        for _ in 0..1 {
+            let a = ark_bn254::G1Projective::rand(&mut prng);
+            let b = ark_bn254::G1Projective::rand(&mut prng);
+            let c = ark_bn254::G1Projective::rand(&mut prng);
+
+            let script = script! {
+                { g1_projective_push(a) }
+                { g1_projective_push(b) }
+                { g1_projective_push(c) }
+
+                // Pick a
+                { 2 }
+                { G1Projective::pick() }
+
+                // Push another `a` and then compare
+                { g1_projective_push(a) }
+                { G1Projective::equalverify() }
+
+                // Drop the original a b and c
+                { G1Projective::drop() }
+                { G1Projective::drop() }
+                { G1Projective::drop() }
+                OP_TRUE
+            };
+            println!("curves::test_pick = {} bytes", script.len());
+            let exec_result = execute_script(script);
+            assert!(exec_result.success);
+        }
+    }
+
+    #[test]
     fn test_double_projective() {
         println!("G1.double: {} bytes", G1Projective::double().len());
         let mut prng = ChaCha20Rng::seed_from_u64(0);
@@ -854,10 +893,8 @@ mod test {
     fn test_batched_scalar_mul2() {
         let mut prng = ChaCha20Rng::seed_from_u64(0);
 
-        // println!(
-        // "script size is {}",
-        // G1Projective::batched_scalar_mul::<2>().len()
-        // );
+        let batch_mul2 = G1Projective::batched_scalar_mul::<2>();
+        println!("bn254.batch_mul<2> size is {}", batch_mul2.len());
 
         for _ in 0..1 {
             let scalar0 = Fr::rand(&mut prng);
@@ -877,7 +914,7 @@ mod test {
                 { fr_push(scalar0) }
                 { g1_projective_push(point1) }
                 { fr_push(scalar1) }
-                { G1Projective::batched_scalar_mul::<2>() }
+                { batch_mul2.clone() }
                 { g1_projective_push(q0q1) }
                 { G1Projective::equalverify() }
                 OP_TRUE
