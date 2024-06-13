@@ -22,6 +22,12 @@ mod test {
     use rand_chacha::ChaCha20Rng;
     use std::ops::Neg;
     use std::str::FromStr;
+    use serde::Deserialize;
+    use serde::Serialize;
+    use std::io::BufReader;
+    use std::ops::Rem;
+    use std::ops::Mul;
+    use num_traits::Pow;
 
     fn fq12_push(element: ark_bn254::Fq12) -> Script {
         script! {
@@ -218,6 +224,7 @@ mod test {
         w4_2: &str,
         w4_3: &str,
         wr: &str,
+        power: u32,
     ) -> Script {
         script! {
             // push xiseed
@@ -373,25 +380,10 @@ mod test {
 
             // xiN
             { Fr::copy(0) }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
+            for _ in 0..power {
+                { Fr::square() }
+            }
 
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
-            { Fr::square() }
             // [beta, gamma, alpha, y, pH0w8_0, pH0w8_1, pH0w8_2, pH0w8_3, pH0w8_4, pH0w8_5, pH0w8_6, pH0w8_7,
             // pH1w4_0, pH1w4_1, pH1w4_2, pH1w4_3, pH2w3_0, pH2w3_1, pH2w3_2, pH3w3_0, pH3w3_1, pH2w3_2, xi, xiN]
 
@@ -407,7 +399,7 @@ mod test {
     // pH3w3_0(3), pH2w3_0(6), pH1w4_0(10), pH0w8_0(18)
 
     /// compute inversions
-    fn compute_inversions(w: &str, inv: &str) -> Script {
+    fn compute_inversions(w: &str, inv: &str, power_of_two: &str) -> Script {
         script! {
             // push Z_H
             { Fr::copy(0) }
@@ -1030,20 +1022,20 @@ mod test {
             { Fr::copy(1) }
             // [ xi | Z_H, prod_1, prod_2, LiS0_1, LiS0_2, LiS0_3, LiS0_4, LiS0_5, LiS0_6, LiS0_7, LiS0_8, LiS1_1, LiS1_2, LiS1_3, LiS1_4, LiS2_1, LiS2_2, LiS2_3, LiS3_1, LiS3_2, LiS3_3]
 
-            // Li_1 = 262144 * (xi - 1)
+            // Li_1 = 2^power  * (xi - 1)
             { Fr::copy(0) }
             { Fr::push_one() }
             { Fr::sub(1, 0) }
-            { Fr::push_dec("262144") }
+            { Fr::push_dec(power_of_two) }
             { Fr::mul() }
             { Fr::toaltstack() }
             // [ xi | Z_H, prod_1, prod_2, LiS0_1, LiS0_2, LiS0_3, LiS0_4, LiS0_5, LiS0_6, LiS0_7, LiS0_8, LiS1_1, LiS1_2, LiS1_3, LiS1_4, LiS2_1, LiS2_2, LiS2_3, LiS3_1, LiS3_2, LiS3_3, Li_1]
 
-            // Li_2 = 262144 * (xi - w1)
+            // Li_2 = 2^power * (xi - w1)
             { Fr::copy(0) }
             { Fr::push_dec(w) }
             { Fr::sub(1, 0) }
-            { Fr::push_dec("262144") }
+            { Fr::push_dec(power_of_two) }
             { Fr::mul() }
             { Fr::toaltstack() }
             // [ xi | Z_H, prod_1, prod_2, LiS0_1, LiS0_2, LiS0_3, LiS0_4, LiS0_5, LiS0_6, LiS0_7, LiS0_8, LiS1_1, LiS1_2, LiS1_3, LiS1_4, LiS2_1, LiS2_2, LiS2_3, LiS3_1, LiS3_2, LiS3_3, Li_1, Li_2]
@@ -2147,72 +2139,115 @@ mod test {
         (c, wi)
     }
 
+    #[derive(Serialize, Deserialize, Debug)]
+    struct Polynomials {
+        pub C1: Vec<String>,
+        pub C2: Vec<String>,
+        pub W1: Vec<String>,
+        pub W2: Vec<String>,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct Evaluations {
+        pub ql: String,
+        pub qr: String,
+        pub qm: String,
+        pub qo: String,
+        pub qc: String,
+        pub s1: String,
+        pub s2: String,
+        pub s3: String,
+        pub a: String,
+        pub b: String,
+        pub c: String,
+        pub z: String,
+        pub zw: String,
+        pub t1w: String,
+        pub t2w: String,
+        pub inv: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct Proof {
+        pub polynomials: Polynomials,
+        pub evaluations: Evaluations,
+        pub protocol: String,
+        pub curve: String,
+    }
+
+    type PublicInputs = Vec<String>;
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct VerificationKey {
+        pub protocol: String,
+        pub curve: String,
+        pub nPublic: u32,
+        pub power: u32,
+        pub k1: String,
+        pub k2: String,
+        pub w: String,
+        pub w3: String,
+        pub w4: String,
+        pub w8: String,
+        pub wr: String,
+        pub X_2: Vec<Vec<String>>,
+        pub C0: Vec<String>,
+    }
+
+    fn mul_bigints(a: &str, b: &str) -> String {
+        let m = BigUint::from_str_radix(Fr::MODULUS, 16).unwrap();
+        BigUint::from_str(a).unwrap().rem(&m).mul(BigUint::from_str(b).unwrap().rem(&m)).rem(&m).to_string()
+    }
+
     #[test]
     fn test_fflonk_verifier() {
-        let (c0_x, c0_y, c0_z, c1_x, c1_y, c1_z, inp_1, inp_2) = (
-            "303039279492065453055049758769758984569666029850327527958551993331680103359",
-            "15061669176783843627135305167141360334623983780813847469326507992811672859575",
-            "1",
-            "8993820735255461694205287896466659762517378169680151817278189507219986014273",
-            "20608602847008036615737932995836476570376266531776948091942386633580114403199",
-            "1",
-            "246513590391103489634602289097178521809",
-            "138371009144214353742010089705444713455",
-        );
+        let proof: Proof = serde_json::from_reader(BufReader::new(std::fs::File::open("src/fflonk/circom_new/proof.json").unwrap())).unwrap();
+        let public_inputs: PublicInputs = serde_json::from_reader(BufReader::new(std::fs::File::open("src/fflonk/circom_new/public.json").unwrap())).unwrap();
+        let vk: VerificationKey = serde_json::from_reader(BufReader::new(std::fs::File::open("src/fflonk/circom_new/verification_key.json").unwrap())).unwrap();
+
+        let (c0_x, c0_y, c0_z) = (&vk.C0[0], &vk.C0[1], &vk.C0[2]);
+        let (c1_x, c1_y, c1_z) = (&proof.polynomials.C1[0], &proof.polynomials.C1[1], &proof.polynomials.C1[2]);
+        let (inp_1, inp_2) = (&public_inputs[0], &public_inputs[1]);
         let (xi, ql, qr, qm, qo, qc, s1, s2, s3, a, b, c, z, zw, t1w, t2w) = (
-            "12675309311304482509247823029963782393309524866265275290730041635615278736000",
-            "4305584171954448775801758618991977283131671407134816099015723841718827300684",
-            "12383383973686840675128398394454489421896122330596726461131121746926747341189",
-            "84696450614978050680673343346456326547032107368333805624994614151289555853",
-            "3940439340424631873531863239669720717811550024514867065774687720368464792371",
-            "16961785810060156933739931986193776143069216115530808410139185289490606944009",
-            "12474437127153975801320290893919924661315458586210754316226946498711086665749",
-            "599434615255095347665395089945860172292558760398201299457995057871688253664",
-            "16217604511932175446614838218599989473511950977205890369538297955449224727219",
-            "7211168621666826182043583595845418959530786367587156242724929610231435505336",
-            "848088075173937026388846472327431819307508078325359401333033359624801042",
-            "18963734392470978715233675860777231227480937309534365140504133190694875258320",
-            "2427313569771756255376235777000596702684056445296844486767054635200432142794",
-            "8690328511114991742730387856275843464438882369629727414507275814599493141660",
-            "20786626696833495453279531623626288211765949258916047124642669459480728122908",
-            "12092130080251498309415337127155404037148503145602589831662396526189421234148",
+            "12689550030062890801637923481955716373838976328283659717575442923498443587040", // "12675309311304482509247823029963782393309524866265275290730041635615278736000", // 
+            &proof.evaluations.ql,
+            &proof.evaluations.qr,
+            &proof.evaluations.qm,
+            &proof.evaluations.qo,
+            &proof.evaluations.qc,
+            &proof.evaluations.s1,
+            &proof.evaluations.s2,
+            &proof.evaluations.s3,
+            &proof.evaluations.a,
+            &proof.evaluations.b,
+            &proof.evaluations.c,
+            &proof.evaluations.z,
+            &proof.evaluations.zw,
+            &proof.evaluations.t1w,
+            &proof.evaluations.t2w,
         );
-        let (w1_x, w1_y, w1_z) = (
-            "32650538602400348219903702316313439265244325226254563471430382441955222030",
-            "1102261574488401129043229793384018650738538286437537952751903719159654317199",
-            "1",
-        );
+        let (w1_x, w1_y, w1_z) = (&proof.polynomials.W1[0], &proof.polynomials.W1[1], &proof.polynomials.W1[2]);
+        let (w2_x, w2_y, w2_z) = (&proof.polynomials.W2[0], &proof.polynomials.W2[1], &proof.polynomials.W2[2]);
+        let (c2_x, c2_y, c2_z) = (&proof.polynomials.C2[0], &proof.polynomials.C2[1], &proof.polynomials.C2[2]);
 
-        let (w2_x, w2_y, w2_z) = (
-            "11695827642347470645483614914520090101440686332033956264171712726147972703435",
-            "8930092616903485317239646434389939466400752538134075201209141980838088395614",
-            "1",
-        );
+        let w8_1 = &vk.w8;
+        let w8_2 = &mul_bigints(&w8_1, &w8_1);
+        let w8_3 = &mul_bigints(&w8_1, &w8_2);
+        let w8_4 = &mul_bigints(&w8_1, &w8_3);
+        let w8_5 = &mul_bigints(&w8_1, &w8_4);
+        let w8_6 = &mul_bigints(&w8_1, &w8_5);
+        let w8_7 = &mul_bigints(&w8_1, &w8_6);
+        let w3_1 = &vk.w3;
+        let w3_2 = &mul_bigints(&w3_1, &w3_1);
+        let w4_1 = &vk.w4;
+        let w4_2 = &mul_bigints(&w4_1, &w4_1);
+        let w4_3 = &mul_bigints(&w4_1, &w4_2);
+        let wr = &vk.wr;
+        let w1 = &vk.w;
 
-        let (c2_x, c2_y, c2_z) = (
-            "7381325072443970270370678023564870071058744625357849943766655609499175274412",
-            "15178578915928592705383893120230835636411008017183180871962629962483134367891",
-            "1",
-        );
-        let (w8_1, w8_2, w8_3, w8_4, w8_5, w8_6, w8_7, w3, w3_2, w4, w4_2, w4_3, wr) = (
-            "19540430494807482326159819597004422086093766032135589407132600596362845576832",
-            "21888242871839275217838484774961031246007050428528088939761107053157389710902",
-            "13274704216607947843011480449124596415239537050559949017414504948711435969894",
-            "21888242871839275222246405745257275088548364400416034343698204186575808495616",
-            "2347812377031792896086586148252853002454598368280444936565603590212962918785",
-            "4407920970296243842541313971887945403937097133418418784715",
-            "8613538655231327379234925296132678673308827349856085326283699237864372525723",
-            "21888242871839275217838484774961031246154997185409878258781734729429964517155",
-            "4407920970296243842393367215006156084916469457145843978461",
-            "21888242871839275217838484774961031246007050428528088939761107053157389710902",
-            "21888242871839275222246405745257275088548364400416034343698204186575808495616",
-            "4407920970296243842541313971887945403937097133418418784715",
-            "19699792133865984655632994927951174943026102279822605383822362801478354085676",
-        );
-        let (w1, inv) = (
-            "11699596668367776675346610687704220591435078791727316319397053191800576917728",
-            "21247383512588455895834686692756529012394058115069710447132959660051940541361",
-        );
+        let inv = &proof.evaluations.inv;
+
+        let power = vk.power;
 
         let (g1_x, g1_y, g1_z) = ("1", "2", "1");
 
@@ -2235,15 +2270,15 @@ mod test {
 
         let projective = ark_bn254::G1Projective::new(
             ark_bn254::Fq::from_str(
-                "21025932300722401404248737517866966587837387913191004025854702115722286998035",
+                "17392493962668485422847832810450317120468695437741515358105392110777011339440",
             )
             .unwrap(),
             ark_bn254::Fq::from_str(
-                "5748766770337880144484917096976043621609890780406924686031233755006782215858",
+                "19058238150666138597730624113230593410334346892746601984762948287111488457568",
             )
             .unwrap(),
             ark_bn254::Fq::from_str(
-                "18747233771850556311508953762939425433543524671221692065979284256379095132287",
+                "12173842531532356740183192091144277363986262136460934396353007164220840048183",
             )
             .unwrap(),
         );
@@ -2275,37 +2310,19 @@ mod test {
 
         let Q1 = ark_bn254::g2::G2Affine::new(
             ark_bn254::Fq2::new(
-                ark_bn254::Fq::from_str(
-                    "21831381940315734285607113342023901060522397560371972897001948545212302161822",
-                )
-                .unwrap(),
-                ark_bn254::Fq::from_str(
-                    "17231025384763736816414546592865244497437017442647097510447326538965263639101",
-                )
-                .unwrap(),
+                ark_bn254::Fq::from_str(&vk.X_2[0][0]).unwrap(),
+                ark_bn254::Fq::from_str(&vk.X_2[0][1]).unwrap(),
             ),
             ark_bn254::Fq2::new(
-                ark_bn254::Fq::from_str(
-                    "2388026358213174446665280700919698872609886601280537296205114254867301080648",
-                )
-                .unwrap(),
-                ark_bn254::Fq::from_str(
-                    "11507326595632554467052522095592665270651932854513688777769618397986436103170",
-                )
-                .unwrap(),
+                ark_bn254::Fq::from_str(&vk.X_2[1][0]).unwrap(),
+                ark_bn254::Fq::from_str(&vk.X_2[1][1]).unwrap(),
             ),
         );
         let Q1_prepared = G2Prepared::from(-Q1);
 
         let w2 = ark_bn254::g1::G1Affine::new(
-            ark_bn254::Fq::from_str(
-                "11695827642347470645483614914520090101440686332033956264171712726147972703435",
-            )
-            .unwrap(),
-            ark_bn254::Fq::from_str(
-                "8930092616903485317239646434389939466400752538134075201209141980838088395614",
-            )
-            .unwrap(),
+            ark_bn254::Fq::from_str(&proof.polynomials.W2[0]).unwrap(),
+            ark_bn254::Fq::from_str(&proof.polynomials.W2[1]).unwrap(),
         );
 
         let f = Bn254::multi_miller_loop([affine, w2], [Q0, -Q1]).0;
@@ -2365,18 +2382,19 @@ mod test {
                     w8_5,
                     w8_6,
                     w8_7,
-                    w3,
+                    w3_1,
                     w3_2,
-                    w4,
+                    w4_1,
                     w4_2,
                     w4_3,
                     wr,
+                    power,
                 )
             }
             // [beta, gamma, alpha, y, pH0w8_0, pH0w8_1, pH0w8_2, pH0w8_3, pH0w8_4, pH0w8_5, pH0w8_6, pH0w8_7,
             // pH1w4_0, pH1w4_1, pH1w4_2, pH1w4_3, pH2w3_0, pH2w3_1, pH2w3_2, pH3w3_0, pH3w3_1, pH2w3_2, xi, zh]
 
-            { compute_inversions(w1, inv) }
+            { compute_inversions(w1, inv, &2_u32.pow(power).to_string()) }
             // [beta, gamma, alpha, y, pH0w8_0, pH0w8_1, pH0w8_2, pH0w8_3, pH0w8_4, pH0w8_5, pH0w8_6, pH0w8_7,
             // pH1w4_0, pH1w4_1, pH1w4_2, pH1w4_3, pH2w3_0, pH2w3_1, pH2w3_2, pH3w3_0, pH3w3_1, pH2w3_2, xi, zh,
             // ZH, DenH1, DenH2, LiS0_1, LiS0_2, LiS0_3, ...]
@@ -2426,7 +2444,7 @@ mod test {
             // push G1x, G1y (3 elements)
             { Fq::push_dec(w1_x) }
             { Fq::push_dec(w1_y) }
-            { Fq::push_dec("1") }
+            { Fq::push_dec(w1_z) }
             { G1Projective::neg() }
             { G1Projective::toaltstack() } // [| -w1, w1_scalar, -g1, e_scalar]
 
@@ -2435,7 +2453,7 @@ mod test {
 
             {Fq::push_dec(w2_x)}
             {Fq::push_dec(w2_y)}
-            {Fq::push_dec("1")}
+            {Fq::push_dec(w2_z)}
             {Fr::fromaltstack()} // [w2, w2_scalar(y) | -w1, w1_scalar, -g1, e_scalar ]
 
             { Fr::fromaltstack() }
