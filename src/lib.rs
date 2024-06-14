@@ -24,6 +24,21 @@ pub mod signatures;
 pub mod u32;
 pub mod u4;
 
+use num_bigint::BigUint;
+use num_traits::pow::Pow;
+use num_traits::FromPrimitive;
+
+fn a9xu30(x: &Vec<Vec<u8>>) -> BigUint {
+    x.iter().map(|v| v.iter().enumerate().map(|(i, a)| 256_u32.pow(i as u32) * *a as u32).sum())
+        .zip(
+            (0..x.len())
+                .rev()
+                .map(|exp| BigUint::from_u64(2_u64.pow(30)).unwrap().pow(exp as u32)),
+        )
+        .map(|(a, b)| BigUint::from_u32(a).unwrap() * b)
+        .sum()
+}
+
 /// A wrapper for the stack types to print them better.
 pub struct FmtStack(Stack);
 impl fmt::Display for FmtStack {
@@ -144,6 +159,49 @@ pub fn execute_script(script: bitcoin::ScriptBuf) -> ExecuteInfo {
         stats: exec.stats().clone(),
     }
 }
+
+pub fn execute_script_get_result(script: bitcoin::ScriptBuf) -> Vec<String> {
+    let mut exec = Exec::new(
+        ExecCtx::Tapscript,
+        Options::default(),
+        TxTemplate {
+            tx: Transaction {
+                version: bitcoin::transaction::Version::TWO,
+                lock_time: bitcoin::locktime::absolute::LockTime::ZERO,
+                input: vec![],
+                output: vec![],
+            },
+            prevouts: vec![],
+            input_idx: 0,
+            taproot_annex_scriptleaf: Some((TapLeafHash::all_zeros(), None)),
+        },
+        script,
+        vec![],
+    )
+    .expect("error creating exec");
+
+    loop {
+        if exec.exec_next().is_err() {
+            break;
+        }
+    }
+    let mut v = Vec::new();
+    let stack = exec.stack().iter_str().collect::<Vec<Vec<u8>>>();
+    for element in stack.chunks(9) {
+        let mut v2 = Vec::new();
+        for e in element {
+            let mut v3 = Vec::new();
+            for f in e {
+                v3.push(*f);
+            }
+            v2.push(v3);
+        }
+        v.push(a9xu30(&v2).to_string());
+    }
+
+    return v;
+}
+
 
 // Execute a script on stack without `MAX_STACK_SIZE` limit.
 // This function is only used for script test, not for production.

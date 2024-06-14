@@ -9,6 +9,7 @@ mod test {
     use crate::bn254::fr::Fr;
     use crate::bn254::pairing::Pairing;
 
+    use crate::execute_script_get_result;
     use crate::hash::blake3::blake3_var_length;
     use crate::treepp::*;
     use ark_bn254::Bn254;
@@ -2205,11 +2206,62 @@ mod test {
         let public_inputs: PublicInputs = serde_json::from_reader(BufReader::new(std::fs::File::open("src/fflonk/circom_new/public.json").unwrap())).unwrap();
         let vk: VerificationKey = serde_json::from_reader(BufReader::new(std::fs::File::open("src/fflonk/circom_new/verification_key.json").unwrap())).unwrap();
 
+        let xi_script = script! {
+            // push C0
+            { Fq::push_dec(&vk.C0[0])}
+            { Fq::push_dec(&vk.C0[1])}
+            // push the public input
+            { Fq::push_dec(&public_inputs[0]) }
+            { Fq::push_dec(&public_inputs[1]) }
+            // push C1
+            { Fq::push_dec(&proof.polynomials.C1[0]) }
+            { Fq::push_dec(&proof.polynomials.C1[1]) }
+
+            // send C0 to altstack
+            { Fq::roll(4) } { Fq::toaltstack() }
+            { Fq::roll(4) } { Fq::toaltstack() }
+
+            // send the public input to altstack
+            { Fq::roll(3) } { Fq::toaltstack() }
+            { Fq::roll(2) } { Fq::toaltstack() }
+
+            // convert C1 into bytes
+            { G1Affine::convert_to_compressed() }
+
+            // convert the public input into bytes
+            { Fq::fromaltstack() } { Fq::convert_to_be_bytes() }
+            { Fq::fromaltstack() } { Fq::convert_to_be_bytes() }
+
+            // convert C0 into bytes
+            { Fq::fromaltstack() } { Fq::fromaltstack() }
+            { G1Affine::convert_to_compressed() }
+
+            // compute the hash
+            { blake3_var_length(128) }
+            { Fr::from_hash() }
+            { Fr::convert_to_be_bytes() }
+            { blake3_var_length(32) }
+            { Fr::from_hash() }
+            // C2
+            { Fq::push_dec(&proof.polynomials.C2[0]) }
+            { Fq::push_dec(&proof.polynomials.C2[1]) }
+
+            { Fr::roll(2) }
+            { Fr::toaltstack() }
+
+            { G1Affine::convert_to_compressed() }
+            { Fr::fromaltstack() }
+            { Fr::convert_to_be_bytes() }
+
+            { blake3_var_length(64) }
+            { Fr::from_hash() }
+        };
+
         let (c0_x, c0_y, c0_z) = (&vk.C0[0], &vk.C0[1], &vk.C0[2]);
         let (c1_x, c1_y, c1_z) = (&proof.polynomials.C1[0], &proof.polynomials.C1[1], &proof.polynomials.C1[2]);
         let (inp_1, inp_2) = (&public_inputs[0], &public_inputs[1]);
         let (xi, ql, qr, qm, qo, qc, s1, s2, s3, a, b, c, z, zw, t1w, t2w) = (
-            "12689550030062890801637923481955716373838976328283659717575442923498443587040", // "12675309311304482509247823029963782393309524866265275290730041635615278736000", // 
+            &execute_script_get_result(xi_script)[0],
             &proof.evaluations.ql,
             &proof.evaluations.qr,
             &proof.evaluations.qm,
@@ -2256,6 +2308,142 @@ mod test {
         let hash_512 = blake3_var_length(512);
         let hash_64 = blake3_var_length(64);
 
+        let projective_script = script! {
+            // compute challenge beta and check
+            {  compute_challenges_beta(&hash_128, c0_x, c0_y, c1_x, c1_y, inp_1, inp_2) }
+            // [beta]
+
+            // compute challenge gamma and check
+            { compute_challenges_gamma(&hash_32) }
+            // [beta, gamma]
+
+            // // compute alpha
+            { compute_challenges_alpha(&hash_512,
+                xi,
+                ql,
+                qr,
+                qm,
+                qo,
+                qc,
+                s1,
+                s2,
+                s3,
+                a,
+                b,
+                c,
+                z,
+                zw,
+                t1w,
+                t2w) }
+            // [beta, gamma, alpha]
+
+            //// compute challenges_y
+            { compute_challenges_y(&hash_64, w1_x, w1_y) }
+            // [beta, gamma, alpha, y]
+
+            { compute_challenges_xiseed(&hash_64, c2_x, c2_y) }
+            // [beta, gamma, alpha, y, xiseed]
+
+            {
+                compute_challenges_xin(
+                    w8_1,
+                    w8_2,
+                    w8_3,
+                    w8_4,
+                    w8_5,
+                    w8_6,
+                    w8_7,
+                    w3_1,
+                    w3_2,
+                    w4_1,
+                    w4_2,
+                    w4_3,
+                    wr,
+                    power,
+                )
+            }
+            // [beta, gamma, alpha, y, pH0w8_0, pH0w8_1, pH0w8_2, pH0w8_3, pH0w8_4, pH0w8_5, pH0w8_6, pH0w8_7,
+            // pH1w4_0, pH1w4_1, pH1w4_2, pH1w4_3, pH2w3_0, pH2w3_1, pH2w3_2, pH3w3_0, pH3w3_1, pH2w3_2, xi, zh]
+
+            { compute_inversions(w1, inv, &2_u32.pow(power).to_string()) }
+            // [beta, gamma, alpha, y, pH0w8_0, pH0w8_1, pH0w8_2, pH0w8_3, pH0w8_4, pH0w8_5, pH0w8_6, pH0w8_7,
+            // pH1w4_0, pH1w4_1, pH1w4_2, pH1w4_3, pH2w3_0, pH2w3_1, pH2w3_2, pH3w3_0, pH3w3_1, pH2w3_2, xi, zh,
+            // ZH, DenH1, DenH2, LiS0_1, LiS0_2, LiS0_3, ...]
+
+            { compute_lagranges(w1) }
+            // pH1w4_0, pH1w4_1, pH1w4_2, pH1w4_3, pH2w3_0, pH2w3_1, pH2w3_2, pH3w3_0, pH3w3_1, pH2w3_2, xi, zh,
+            // ZH, DenH1, DenH2, LiS0_1, LiS0_2, LiS0_3, LiS0_4, LiS0_5, LiS0_6, LiS0_7, LiS0_8,
+            // LiS1_1, LiS1_2, LiS1_3, LiS1_4, LiS2_1, LiS2_2, LiS2_3, LiS3_1, LiS3_2, LiS3_3, Li_1, Li_2, L[1], L[2]]
+
+            { compute_pi(inp_1, inp_2) }
+            // pH1w4_0, pH1w4_1, pH1w4_2, pH1w4_3, pH2w3_0, pH2w3_1, pH2w3_2, pH3w3_0, pH3w3_1, pH2w3_2, xi, zh,
+            // ZH, DenH1, DenH2, LiS0_1, LiS0_2, LiS0_3, LiS0_4, LiS0_5, LiS0_6, LiS0_7, LiS0_8,
+            // LiS1_1, LiS1_2, LiS1_3, LiS1_4, LiS2_1, LiS2_2, LiS2_3, LiS3_1, LiS3_2, LiS3_3, Li_1, Li_2, pi]
+
+            { compute_r0(ql, qr, qo, qm, qc, s1, s2, s3) }
+            // pH1w4_0, pH1w4_1, pH1w4_2, pH1w4_3, pH2w3_0, pH2w3_1, pH2w3_2, pH3w3_0, pH3w3_1, pH2w3_2, xi, zh,
+            // ZH, DenH1, DenH2, LiS0_1, LiS0_2, LiS0_3, LiS0_4, LiS0_5, LiS0_6, LiS0_7, LiS0_8,
+            // LiS1_1, LiS1_2, LiS1_3, LiS1_4, LiS2_1, LiS2_2, LiS2_3, LiS3_1, LiS3_2, LiS3_3, Li_1, Li_2, pi, r0]
+
+            { compute_r1(ql, qr, qm, qo, qc, a, b, c) }
+
+            { compute_r2(a, b, c, z, zw, s1, s2, s3, t1w, t2w, w1) }
+
+            { compute_fej() }
+
+            {compute_f_opt(c0_x, c0_y, c0_z, c1_x, c1_y, c1_z, c2_x, c2_y, c2_z)}
+
+
+            // save f
+            { Fq::toaltstack() }
+            { Fq::toaltstack() }
+            { Fq::toaltstack() }
+
+            // push the scalar
+            { Fr::copy(1)}
+            { Fr::toaltstack()} // [ | e_scalar]
+
+            // push g1
+            { Fq::push_dec(g1_x) }
+            { Fq::push_dec(g1_y) }
+            { Fq::push_dec(g1_z) } // [-g1 | e_scalar]
+            { G1Projective::neg() }
+            { G1Projective::toaltstack() } // [ | -g1 e_scalar]
+
+            // push the scalar
+            { Fr::toaltstack() }
+            // push G1x, G1y (3 elements)
+            { Fq::push_dec(w1_x) }
+            { Fq::push_dec(w1_y) }
+            { Fq::push_dec(w1_z) }
+            { G1Projective::neg() }
+            { G1Projective::toaltstack() } // [| -w1, w1_scalar, -g1, e_scalar]
+
+            {Fr::roll(3)}
+            {Fr::toaltstack()}
+
+            {Fq::push_dec(w2_x)}
+            {Fq::push_dec(w2_y)}
+            {Fq::push_dec(w2_z)}
+            {Fr::fromaltstack()} // [w2, w2_scalar(y) | -w1, w1_scalar, -g1, e_scalar ]
+
+            { Fr::fromaltstack() }
+            { G1Projective::fromaltstack() }
+            { Fr::fromaltstack() }
+            { G1Projective::fromaltstack() } // [w2, w2_scalar(y) -w1, w1_scalar, -g1, e_scalar ]
+
+            { G1Projective::batched_scalar_mul::<3>()} // W2 * y - (j + e)] | [ f ]
+            { G1Projective::fromaltstack() }
+            { G1Projective::add() }  // A1 = w2 * y + f - (e + j)
+
+            // clear stack
+            {G1Projective::toaltstack()}
+            {Fr::drop()}
+            {Fr::drop()}
+            {Fr::drop()}
+            {G1Projective::fromaltstack()}
+        };
+
         // ****************** prepare for pairing_verify **************************
         // exp = 6x + 2 + p - p^2 = lambda - p^3
         let p_pow3 = &BigUint::from_str_radix(Fq::MODULUS, 16).unwrap().pow(3_u32);
@@ -2268,19 +2456,12 @@ mod test {
             (p_pow3 - lambda, false)
         };
 
+        let projective_result = execute_script_get_result(projective_script);
+
         let projective = ark_bn254::G1Projective::new(
-            ark_bn254::Fq::from_str(
-                "17392493962668485422847832810450317120468695437741515358105392110777011339440",
-            )
-            .unwrap(),
-            ark_bn254::Fq::from_str(
-                "19058238150666138597730624113230593410334346892746601984762948287111488457568",
-            )
-            .unwrap(),
-            ark_bn254::Fq::from_str(
-                "12173842531532356740183192091144277363986262136460934396353007164220840048183",
-            )
-            .unwrap(),
+            ark_bn254::Fq::from_str(&projective_result[0]).unwrap(),
+            ark_bn254::Fq::from_str(&projective_result[1]).unwrap(),
+            ark_bn254::Fq::from_str(&projective_result[2]).unwrap(),
         );
         let affine = projective.into_affine();
 
