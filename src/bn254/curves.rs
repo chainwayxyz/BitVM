@@ -31,6 +31,22 @@ impl G1Projective {
         }
     }
 
+    pub fn push_dec(x: &str, y: &str, z: &str) -> Script {
+        script! {
+            { Fq::push_dec(x) }
+            { Fq::push_dec(y) }
+            { Fq::push_dec(z) }
+        }
+    }
+
+    pub fn push_vec(v: Vec<String>) -> Script {
+        script! {
+            { Fq::push_dec(&v[0]) }
+            { Fq::push_dec(&v[1]) }
+            { Fq::push_dec(&v[2]) }
+        }
+    }
+
     pub fn is_zero_keep_element(a: u32) -> Script {
         script! {
             // Check if the third coordinate(z) is zero

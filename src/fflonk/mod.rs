@@ -17,3 +17,4 @@ pub mod compute_r0;
 pub mod compute_r1;
 pub mod compute_r2;
 pub mod verifier;
+pub mod fflonk_verify_script;

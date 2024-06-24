@@ -120,6 +120,20 @@ pub fn execute_script(script: bitcoin::ScriptBuf) -> ExecuteInfo {
             break;
         }
     }
+
+    for (i, a) in exec.stack().iter_str().enumerate() {
+        if i % 9 == 8 {
+            println!(", {:?}", a);
+        }
+        else if i % 9 == 0 {
+            print!("stack[{}]: {:?}", i / 9, a);
+        }
+        else {
+            print!(", {:?}", a);
+        }
+    }
+    println!("");
+
     let res = exec.result().unwrap();
     ExecuteInfo {
         success: res.success,
@@ -165,6 +179,20 @@ pub fn execute_script_without_stack_limit(script: bitcoin::ScriptBuf) -> Execute
             break;
         }
     }
+
+    for (i, a) in exec.stack().iter_str().enumerate() {
+        if i % 9 == 8 {
+            println!(", {:?}", a);
+        }
+        else if i % 9 == 0 {
+            print!("stack[{}]: {:?}", i / 9, a);
+        }
+        else {
+            print!(", {:?}", a);
+        }
+    }
+    println!("");
+
     let res = exec.result().unwrap();
     ExecuteInfo {
         success: res.success,

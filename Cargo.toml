@@ -27,6 +27,7 @@ bitcoin-script-stack = { git = "https://github.com/FairgateLabs/rust-bitcoin-scr
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 once_cell = "1.19.0"
+ark-std = { version = "0.4.0", default-features = false, features = ["print-trace"] }
 
 [dev-dependencies]
 num-bigint = { version = "0.4.4", features = ["rand"] }
