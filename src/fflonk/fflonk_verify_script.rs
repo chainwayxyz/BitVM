@@ -63,7 +63,7 @@ pub struct Proof {
 
 pub type PublicInputs = Vec<String>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VerificationKey {
     pub protocol: String,
     pub curve: String,
@@ -125,6 +125,7 @@ pub fn push_public(public: PublicInputs) -> Script {
 }
 
 pub fn fflonk_verify_all(public: PublicInputs, vk: VerificationKey, proof: Proof) -> Script {
+    let a = vk.clone().power;
     script! {
         { push_vk(vk) }
         { push_public(public) }
@@ -234,6 +235,57 @@ pub fn fflonk_verify_all(public: PublicInputs, vk: VerificationKey, proof: Proof
         { blake3_var_length(64) }
         { Fr::from_hash() }
 
+        // copy xiseed
+        { Fr::copy(2) }
+
+        // compute xiseed^2
+        { Fr::copy(0) }
+        { Fr::square() }
+        { Fr::copy(0) }
+        { Fr::toaltstack() }
+
+        // pH0w8_0 = xiseed^3
+        { Fr::mul() }
+
+        // // pH0w8_1
+        // { Fr::copy(0) }
+        // // push constant w8_1
+        // { Fr::copy(31 + 7) }
+        // { Fr::mul() }
+
+        // pH1w4_0 = xiseed^6
+        { Fr::square() }
+
+        // pH2w3_0 = xiseed^8
+        { Fr::fromaltstack() }
+        { Fr::mul() }
+        { Fr::copy(0) }
+        { Fr::toaltstack() }
+
+        // pH3w3_0 = xiseed^8 * ω^{1/3}
+        { Fr::copy(30 + 6) }
+        { Fr::mul() }
+
+        // xi = xi_seeder^24
+        { Fr::fromaltstack() }
+        { Fr::copy(0) }
+        { Fr::square() }
+        { Fr::mul() }
+
+        // xi
+        { Fr::copy(0) }
+        { Fr::push_dec("14814634099415170872937750660683266261347419959225231219985478027287965492246") }
+        { Fr::equalverify(1, 0) }
+
+        for _ in 0..a {
+            { Fr::square() }
+        }
+
+        // zh
+        { Fr::push_one() }
+        { Fr::sub(1, 0) }
+
+        OP_TRUE
     }
 }
 
