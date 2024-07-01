@@ -271,6 +271,13 @@ impl Fq6 {
         }
     }
 
+    // a, b, c; checks if c=ab
+    pub fn mul_verify() -> Script {
+        script! {
+            { Fq6::mul(12, 6) }
+            { Fq6::equalverify() }
+        }
+    }
     // input:
     //    p.c0   (2 elements)
     //    p.c1   (2 elements)
@@ -714,6 +721,28 @@ mod test {
                 { Fq6::mul(6, 0) }
                 { fq6_push(c) }
                 { Fq6::equalverify() }
+                OP_TRUE
+            };
+            let exec_result = execute_script(script);
+            assert!(exec_result.success);
+        }
+    }
+
+    #[test]
+    fn test_bn254_fq6_mul_verify() {
+        println!("Fq6.mul_verify: {} bytes", Fq6::mul_verify().len());
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        for _ in 0..1 {
+            let a = ark_bn254::Fq6::rand(&mut prng);
+            let b = ark_bn254::Fq6::rand(&mut prng);
+            let c = a.mul(&b);
+
+            let script = script! {
+                { fq6_push(a) }
+                { fq6_push(b) }
+                { fq6_push(c) }
+                { Fq6::mul_verify() }
                 OP_TRUE
             };
             let exec_result = execute_script(script);

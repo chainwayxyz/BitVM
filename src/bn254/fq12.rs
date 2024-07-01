@@ -103,6 +103,22 @@ impl Fq12 {
         }
     }
 
+    // xa, ya, xb, yb, xa.xb, ya.yb, za, zb
+    pub fn mul_part3() -> Script {
+        script! {
+            { Fq6::add(42, 36) }
+            { Fq6::add(36, 30) }
+            { Fq6::mul(6, 0) }
+            { Fq6::copy(24) }
+            { Fq6::copy(24) }
+            { Fq12::mul_fq6_by_nonresidue() }
+            { Fq6::add(6, 0) }
+            { Fq6::add(30, 24) }
+            { Fq6::sub(12, 0) }
+            { Fq12::equalverify() }
+        }
+    }
+
     pub fn mul_cpt(mut a: u32, mut b: u32) -> Script {
         if a < b {
             (a, b) = (b, a);
@@ -555,7 +571,7 @@ impl Fq12 {
 
 #[cfg(test)]
 mod test {
-    use crate::bn254::fp254impl::Fp254Impl;
+    use crate::bn254::{fp254impl::Fp254Impl, fq6::Fq6};
     use crate::bn254::fq::Fq;
     use crate::bn254::fq12::Fq12;
     use crate::treepp::*;
@@ -576,6 +592,14 @@ mod test {
     }
 
     fn fq12_push(element: ark_bn254::Fq12) -> Script {
+        script! {
+            for elem in element.to_base_prime_field_elements() {
+                { Fq::push_u32_le(&BigUint::from(elem).to_u32_digits()) }
+            }
+        }
+    }
+
+    fn fq6_push(element: ark_bn254::Fq6) -> Script {
         script! {
             for elem in element.to_base_prime_field_elements() {
                 { Fq::push_u32_le(&BigUint::from(elem).to_u32_digits()) }
@@ -648,6 +672,50 @@ mod test {
             let exec_result = execute_script(script);
             assert!(exec_result.success);
         }
+    }
+
+    #[test]
+    fn test_bn254_fq12_mul_parts() {
+        println!("Fq12.mul_part3: {} bytes", Fq12::mul_part3().len());
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a = ark_bn254::Fq12::rand(&mut prng);
+        let b = ark_bn254::Fq12::rand(&mut prng);
+        let c = a.mul(&b);
+        let d = a.c0.mul(b.c0);
+        let e = a.c1.mul(b.c1);
+
+        let script = script! {
+            { fq6_push(a.c0) }
+            { fq6_push(b.c0) }
+            { fq6_push(d) }
+            { Fq6::mul_verify() }
+            OP_TRUE
+        };
+        let exec_result = execute_script(script);
+        assert!(exec_result.success);
+
+        let script = script! {
+            { fq6_push(a.c1) }
+            { fq6_push(b.c1) }
+            { fq6_push(e) }
+            { Fq6::mul_verify() }
+            OP_TRUE
+        };
+        let exec_result = execute_script(script);
+        assert!(exec_result.success);
+
+        let script = script! {
+            { fq12_push(a) }
+            { fq12_push(b) }
+            { fq6_push(d) }
+            { fq6_push(e) }
+            { fq12_push(c) }
+            { Fq12::mul_part3() }
+            OP_TRUE
+        };
+        let exec_result = execute_script(script);
+        assert!(exec_result.success);
     }
 
     #[test]
