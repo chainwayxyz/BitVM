@@ -9,9 +9,11 @@ pub mod treepp {
 }
 
 use core::fmt;
+use std::{fs::File, io::{BufWriter, Write}};
 
 use bitcoin::{hashes::Hash, hex::DisplayHex, Opcode, TapLeafHash, Transaction};
 use bitcoin_scriptexec::{Exec, ExecCtx, ExecError, ExecStats, Options, Stack, TxTemplate};
+use hex::ToHex;
 
 pub mod bigint;
 pub mod bn254;
@@ -120,7 +122,7 @@ pub fn execute_script(script: bitcoin::ScriptBuf) -> ExecuteInfo {
             break;
         }
     }
-    
+
     for (i, a) in exec.stack().iter_str().enumerate() {
         if i % 9 == 8 {
             println!(", {:?}", a);
@@ -145,6 +147,37 @@ pub fn execute_script(script: bitcoin::ScriptBuf) -> ExecuteInfo {
         stats: exec.stats().clone(),
     }
 }
+
+pub fn write_script(filename: &str, script: bitcoin::ScriptBuf) {
+    let mut f = BufWriter::new(File::create(filename).expect("error"));
+    for a in script.instructions() {
+        let b = a.unwrap();
+        match b.opcode() {
+            Some(op) => {
+                // println!("instruction: {:?} [{:?}]", b, op);
+                let s = op.to_string();
+                if s.starts_with("OP_PUSHNUM") {
+                    let c = s.split("_").last().unwrap();
+                    f.write(c.as_bytes()).expect("error");
+                }
+                else {
+                    f.write(s.as_bytes()).expect("error");
+                }
+                
+                f.write("\n".as_bytes()).expect("error");
+            },
+            None => {
+                let c = b.push_bytes().unwrap();
+                let d: String = c.encode_hex();
+                // println!("instruction: {:?} [{:?}] ({:?})", b, c, d);
+                f.write("0x".as_bytes()).expect("error");
+                f.write(d.as_bytes()).expect("error");
+                // f.write(">".as_bytes()).expect("error");
+                f.write("\n".as_bytes()).expect("error");
+            },
+        }
+    }
+} 
 
 // Execute a script on stack without `MAX_STACK_SIZE` limit.
 // This function is only used for script test, not for production.
