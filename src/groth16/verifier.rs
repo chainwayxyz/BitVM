@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::bn254::ell_coeffs::G2Prepared;
 use crate::bn254::fp254impl::Fp254Impl;
 use crate::bn254::fq::Fq;
@@ -8,15 +10,16 @@ use crate::bn254::utils::fq12_push;
 use crate::groth16::constants::{LAMBDA, P_POW3};
 use crate::groth16::offchain_checker::compute_c_wi;
 use crate::treepp::{pushable, script, Script};
-use ark_bn254::{Bn254, G1Projective};
+use ark_bn254::{Bn254, Fq2, FqConfig, FrConfig, G1Projective};
 use ark_ec::bn::G1Prepared;
 use ark_ec::pairing::Pairing as ark_Pairing;
 use ark_ec::short_weierstrass::{Projective, SWCurveConfig};
 use ark_ec::{CurveGroup, VariableBaseMSM};
-use ark_ff::Field;
+use ark_ff::{BigInteger256, Field, MontBackend};
 use ark_groth16::{prepare_verifying_key, Proof, VerifyingKey};
 use num_bigint::BigUint;
 use num_traits::One;
+use serde_json::Value;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Verifier;
@@ -186,4 +189,146 @@ fn constants() -> Script {
         { Fq::push_u32_le(&BigUint::from(ark_bn254::g2::Config::COEFF_B.c0).to_u32_digits()) }
         { Fq::push_u32_le(&BigUint::from(ark_bn254::g2::Config::COEFF_B.c1).to_u32_digits()) }
     }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::BufReader;
+    use ark_bn254::{Bn254, FqConfig, FrConfig};
+    use ark_crypto_primitives::snark::SNARK;
+    use ark_ff::MontBackend;
+    use ark_groth16::{prepare_verifying_key, Groth16, Proof, VerifyingKey};
+    use ark_std::{end_timer, start_timer};
+    use serde_json::Value;
+
+    use crate::{execute_script_without_stack_limit, groth16::verifier::{fq_from_str, fr_from_str, json_to_g1, json_to_g1_vec, json_to_g2, Verifier}};
+    type E = Bn254;
+
+    #[test]
+    fn test_groth16_verifier() {
+        let proof_json: Value = serde_json::from_reader(BufReader::new(std::fs::File::open("src/groth16/work_dir/proof.json").unwrap())).unwrap();
+        let vk_json: Value = serde_json::from_reader(BufReader::new(std::fs::File::open("src/groth16/work_dir/vk.json").unwrap())).unwrap();
+        let public_inputs_json: Value = serde_json::from_reader(BufReader::new(std::fs::File::open("src/groth16/work_dir/public.json").unwrap())).unwrap();
+        let pi_a = json_to_g1(&proof_json, "pi_a");
+        // println!("{:#?}", pi_a);
+        let pi_b = json_to_g2(&proof_json, "pi_b");
+        // println!("{:#?}", pi_b);
+        let pi_c = json_to_g1(&proof_json, "pi_c");
+        // println!("{:#?}", pi_c);
+        let proof: Proof<E> = Proof {
+            a: pi_a,
+            b: pi_b,
+            c: pi_c,
+        };
+        println!("PROOF: {:#?}", proof);
+        let vk: VerifyingKey<E> = VerifyingKey {
+            alpha_g1: json_to_g1(&vk_json, "vk_alpha_1"),
+            beta_g2: json_to_g2(&vk_json, "vk_beta_2"),
+            gamma_g2: json_to_g2(&vk_json, "vk_gamma_2"),
+            delta_g2: json_to_g2(&vk_json, "vk_delta_2"),
+            gamma_abc_g1: json_to_g1_vec(&vk_json, "IC"),
+        };
+        println!("VERIFYING KEY: {:#?}", vk);
+        // println!("public_inputs_json: {:#?}", public_inputs_json.as_array().unwrap());
+        let public_inputs: Vec<ark_ff::Fp<MontBackend<FrConfig, 4>, 4>> = public_inputs_json
+            .as_array()
+            .unwrap()
+            .into_iter()
+            .map(|i| fr_from_str(&i.as_str().unwrap()))
+            .collect();
+        println!("PUBLIC INPUTS: {:#?}", public_inputs);
+        let pvk = prepare_verifying_key::<E>(&vk);
+        assert!(Groth16::<E>::verify_with_processed_vk(&pvk, &public_inputs, &proof).unwrap());
+        let start = start_timer!(|| "collect_script");
+        let script = Verifier::verify_proof(&public_inputs, &proof, &vk);
+        end_timer!(start);
+    
+        println!("groth16::test_verify_proof = {} bytes", script.len());
+    
+        let start = start_timer!(|| "execute_script");
+        let exec_result = execute_script_without_stack_limit(script);
+        end_timer!(start);
+    
+        assert!(exec_result.success);
+    }
+}
+
+fn json_to_g1(json: &Value, key: &str) -> ark_ec::short_weierstrass::Affine<ark_bn254::g1::Config> {
+    let els: Vec<String> = json
+        .get(key)
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i.as_str().unwrap().to_string())
+        .collect();
+    ark_ec::short_weierstrass::Affine::<ark_bn254::g1::Config>::from(ark_ec::short_weierstrass::Projective::<ark_bn254::g1::Config>::new(
+        fq_from_str(&els[0]),
+        fq_from_str(&els[1]),
+        fq_from_str(&els[2]),
+    ))
+}
+
+fn json_to_g2(json: &Value, key: &str) -> ark_ec::short_weierstrass::Affine<ark_bn254::g2::Config> {
+    let els: Vec<Vec<String>> = json
+        .get(key)
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| {
+            i.as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_str().unwrap().to_string())
+                .collect::<Vec<String>>()
+        })
+        .collect();
+
+    let x = Fq2::new(fq_from_str(&els[0][0]), fq_from_str(&els[0][1]));
+    let y = Fq2::new(fq_from_str(&els[1][0]), fq_from_str(&els[1][1]));
+    let z = Fq2::new(fq_from_str(&els[2][0]), fq_from_str(&els[2][1]));
+    ark_ec::short_weierstrass::Affine::<ark_bn254::g2::Config>::from(ark_ec::short_weierstrass::Projective::<ark_bn254::g2::Config>::new(x, y, z))
+}
+
+fn fq_from_str(s: &str) -> ark_ff::Fp<MontBackend<FqConfig, 4>, 4> {
+    BigInteger256::try_from(BigUint::from_str(s).unwrap())
+        .unwrap()
+        .into()
+}
+
+fn fr_from_str(s: &str) -> ark_ff::Fp<MontBackend<FrConfig, 4>, 4> {
+    println!("S: {:#?}", s);
+    BigInteger256::try_from(BigUint::from_str(s).unwrap())
+        .unwrap()
+        .into()
+}
+
+fn json_to_g1_vec(json: &Value, key: &str) -> Vec<ark_ec::short_weierstrass::Affine<ark_bn254::g1::Config>> {
+    println!("JSON: {:#?}", json);
+    println!("KEY: {:#?}",key);
+    let els: Vec<Vec<String>> = json
+        .get(key)
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| {
+            i.as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_str().unwrap().to_string())
+                .collect::<Vec<String>>()
+        })
+        .collect();
+    println!("ELS: {:#?}", els);
+    els.iter()
+        .map(|coords| {
+            ark_ec::short_weierstrass::Affine::<ark_bn254::g1::Config>::from(ark_ec::short_weierstrass::Projective::<ark_bn254::g1::Config>::new(
+                fq_from_str(&coords[0]),
+                fq_from_str(&coords[1]),
+                fq_from_str(&coords[2]),
+            ))
+        })
+        .collect()
 }
