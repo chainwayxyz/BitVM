@@ -102,7 +102,7 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
                         // roll the 2 * s
                         { Self::roll(2) }
                         { Self::toaltstack() }
-                        
+
                         // roll the v
                         { Self::roll(3) }
                         { Self::toaltstack() }
@@ -117,7 +117,7 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
 
                         // remove the unused s
                         { Self::drop() }
-                        
+
                         // remove the unused u
                         { Self::drop() }
 
@@ -136,7 +136,7 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
                             // start stack: u, r, v, s, 2 * s, 2 * r, u/2, v/2 | k
 
                             { Self::toaltstack() }
-                            
+
                             // remove the unused u/2
                             { Self::drop() }
                             { Self::toaltstack() }
@@ -202,7 +202,7 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
                                 // final stack: (u/2 - v/2), r + s, v, 2 * s | k
                             OP_ELSE
                                 // start stack: u, v, 2 * s, 2 * r, (v/2 - u/2), r + s | k
-                                
+
                                 // remove the unused v
                                 { Self::roll(4) }
                                 { Self::drop() }

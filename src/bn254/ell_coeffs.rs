@@ -162,7 +162,7 @@ pub fn mul_by_char(r: ark_bn254::G2Affine) -> ark_bn254::G2Affine {
 #[cfg(test)]
 mod tests {
     use ark_bn254::{Fq, Fq2};
-    
+
     use ark_ec::short_weierstrass::SWCurveConfig;
     use ark_ff::{Field, UniformRand};
     use ark_std::test_rng;
@@ -182,10 +182,7 @@ mod tests {
 
         println!("1/2 = {:?}\n\n", two_inv.to_string());
 
-        println!(
-            "COEFF_B = {}\n\n",
-            ark_bn254::g2::Config::COEFF_B
-        );
+        println!("COEFF_B = {}\n\n", ark_bn254::g2::Config::COEFF_B);
 
         println!("before double line:");
         println!("r.x = {:?}", r.x.to_string());

@@ -5,8 +5,6 @@ mod test {
     use crate::bn254::fq::Fq;
     use crate::bn254::fr::Fr;
     use crate::treepp::*;
-    
-    
 
     #[test]
     fn test_check_format() {

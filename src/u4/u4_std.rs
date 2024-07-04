@@ -130,7 +130,7 @@ impl CalculateOffset for i32 {
                 panic!("unexpected opcode: {:?}", element);
             }
         }
-        
+
         Script::new().push_opcode(element)
     }
 }

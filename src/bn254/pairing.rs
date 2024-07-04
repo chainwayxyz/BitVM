@@ -592,7 +592,7 @@ impl Pairing {
     pub fn quad_miller_loop_with_c_wi(constants: &Vec<G2Prepared>) -> Script {
         let num_constant = constants.len();
         assert_eq!(num_constant, 3);
-        
+
         let mut constant_iters = constants
             .iter()
             .map(|item| item.ell_coeffs.iter())
@@ -721,7 +721,7 @@ impl Pairing {
             // [beta_12, beta_13, beta_22, P1, P2, P3, P4, Q4, wi, T4, f,]
             { Fq12::mul(12, 0) }
             // [beta_12, beta_13, beta_22, P1, P2, P3, P4, Q4, wi, T4, f]
-            
+
             //////////////////////////////////////// scale f
             // 4. f = f * wi
             { Fq12::roll(12 + 6) }
