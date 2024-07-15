@@ -24,6 +24,7 @@ use ark_ec::bn::{G1Prepared, BnConfig};
 use ark_ec::short_weierstrass::{Projective, SWCurveConfig};
 use ark_ec::{CurveGroup, VariableBaseMSM, Group, AffineRepr};
 use ark_ff::Field;
+use ark_ff::PrimeField;
 
 use num_bigint::BigUint;
 use num_traits::{Num, One};
@@ -34,7 +35,7 @@ use serde_json::Value;
 use std::str::FromStr;
 use std::io::BufReader;
 use std::collections::HashMap;
-use core::ops::Mul;
+use core::ops::{Mul, Div, Rem};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
@@ -1241,63 +1242,104 @@ fn test_groth16_split() {
         f = fx;
     }
 
-    // let quad_miller_s5 = script! {
-    //     /////////////////////////////////////// 5. one-time frobenius map on fixed and non-fixed lines
-    //     // fixed part, P1, P2, P3
-    //     // 5.1 update f (frobenius map): f = f * add_line_eval([p])
-    //     for j in 0..num_constant {
-    //         { Fq2::copy((28 - j * 2) as u32) }
-    //         { Pairing::ell_by_constant(constant_iters[j].next().unwrap()) }
-    //     }
-    //     // [beta_12, beta_13, beta_22, P1, P2, P3, P4, Q4, T4, f]
+    let beta_12x = BigUint::from_str("21575463638280843010398324269430826099269044274347216827212613867836435027261").unwrap();
+    let beta_12y = BigUint::from_str("10307601595873709700152284273816112264069230130616436755625194854815875713954").unwrap();
+    let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems(&[ark_bn254::Fq::from(beta_12x.clone()), ark_bn254::Fq::from(beta_12y.clone())]).unwrap();
 
-    //     // 5.2 non-fixed part, P4
-    //     // copy P4
-    //     { Fq2::copy(22) }
-    //     // [beta_12, beta_13, beta_22, P1, P2, P3, P4, Q4, T4, f, P4]
-    //     { Fq6::roll(14) }
-    //     // [beta_12, beta_13, beta_22, P1, P2, P3, P4, Q4, f, P4, T4]
+    let beta_13x = BigUint::from_str("2821565182194536844548159561693502659359617185244120367078079554186484126554").unwrap();
+    let beta_13y = BigUint::from_str("3505843767911556378687030309984248845540243509899259641013678093033130930403").unwrap();
+    let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems(&[ark_bn254::Fq::from(beta_13x.clone()), ark_bn254::Fq::from(beta_13y.clone())]).unwrap();
+    
+    let mut q4x = q4.x;
+    q4x.conjugate_in_place();
+    q4x = q4x * beta_12;
 
-    //     // 5.2.1 Qx.conjugate * beta^{2 * (p - 1) / 6}
-    //     { Fq2::copy(/* offset_Q*/(6 + 2 + 12) as u32 + 2) }
-    //     // [beta_12, beta_13, beta_22, P1, P2, P3, P4, Q4, f, P4, T4, Qx]
-    //     { Fq::neg(0) }
-    //     // [beta_12, beta_13, beta_22, P1(32), P2, P3, P4, Q4(22), f(10), P4(8), T4, Qx']
-    //     { Fq2::roll(/* offset_beta_12 */38_u32) }
-    //     // [beta_13, beta_22, P1, P2, P3, P4, Q4, f, P4, T4, Qx', beta_12]
-    //     { Fq2::mul(2, 0) }
-    //     // [beta_13, beta_22, P1, P2, P3, P4, Q4, f, P4, T4, Qx' * beta_12]
-    //     // [beta_13, beta_22, P1, P2, P3, P4, Q4(22), f, P4, T4, Qx]
+    let mut q4y = q4.y;
+    q4y.conjugate_in_place();
+    q4y = q4y * beta_13;
 
-    //     // 5.2.2 Qy.conjugate * beta^{3 * (p - 1) / 6}
-    //     { Fq2::copy(/* offset_Q*/(6 + 2 + 12) as u32 + 2) }
-    //     { Fq::neg(0) }
-    //     // [beta_13(38), beta_22, P1, P2, P3, P4(28), Q4(24), f(12), P4(10), T4(4), Qx, Qy']
-    //     { Fq2::roll(/* offset_beta_13 */38_u32) }
-    //     // [beta_22, P1, P2, P3, P4, Q4, f, P4, T4, Qx, Qy', beta_13]
-    //     { Fq2::mul(2, 0) }
-    //     // [beta_22, P1, P2, P3, P4, Q4, f, P4, T4, Qx, Qy' * beta_13]
-    //     // [beta_22, P1, P2, P3, P4, Q4, f, P4, T4, Qx, Qy]
+    let quad_miller_s5_2 = script! {
+        { Fq::neg(0) }
 
-    //     // add line with T and phi(Q)
-    //     { Pairing::add_line_with_flag(true) }
-    //     // [beta_22, P1, P2, P3, P4, Q4, f, P4, T4, (,,)]
-    //     { Fq6::roll(6) }
-    //     // [beta_22, P1, P2, P3, P4, Q4, f, P4, (,,), T4]
-    //     { Fq6::toaltstack() }
-    //     // [beta_22, P1, P2, P3, P4, Q4, f, P4, (,,) | T4]
+        // beta_12
+        { Fq::push_dec("21575463638280843010398324269430826099269044274347216827212613867836435027261") }
+        { Fq::push_dec("10307601595873709700152284273816112264069230130616436755625194854815875713954") }
 
-    //     // line evaluation and update f
-    //     { Fq2::roll(6) }
-    //     // [beta_22, P1, P2, P3, P4, Q4, f, (,,), P4 | T4]
-    //     { Pairing::ell() }
-    //     // [beta_22, P1, P2, P3, P4, Q4, f | T4]
-    //     { Fq6::fromaltstack() }
-    //     { Fq12::roll(6) }
-    //     // [beta_22, P1, P2, P3, P4, Q4, T4, f]
-    // };
+        { Fq2::mul(2, 0) }
 
-    // println!("quad_miller_s5: {:?}", quad_miller_s5.len()); // 28m
+        { Fq2::equalverify() }
+
+        { Fq::neg(0) }
+
+        // // beta_13
+        { Fq::push_dec("2821565182194536844548159561693502659359617185244120367078079554186484126554") }
+        { Fq::push_dec("3505843767911556378687030309984248845540243509899259641013678093033130930403") }
+
+        { Fq2::mul(2, 0) }
+
+        { Fq2::equalverify() }
+
+        OP_TRUE
+    };
+    scripts_and_inputs.push((quad_miller_s5_2, vec![ScriptInput::InputFq2(q4y), ScriptInput::InputFq2(q4.y), ScriptInput::InputFq2(q4x), ScriptInput::InputFq2(q4.x)]));
+
+    let mut t4 = t4_vec[ark_bn254::Config::ATE_LOOP_COUNT.len() - 1];
+    let mut t4x = t4.clone();
+
+    let theta = t4x.y - &(q4y * &t4x.z);
+    let lambda = t4x.x - &(q4x * &t4x.z);
+    let c = theta.square();
+    let d = lambda.square();
+    let e = lambda * &d;
+    let ff = t4x.z * &c;
+    let g = t4x.x * &d;
+    let h = e + &ff - &g.double();
+    t4x.x = lambda * &h;
+    t4x.y = theta * &(g - &h) - &(e * &t4x.y);
+    t4x.z *= &e;
+    let j = theta * &q4x - &(lambda * &q4y);
+    
+    let coeffs = (lambda, -theta, j);
+
+    let quad_miller_s5_3 = script! {
+        // [T4x, c0, c1, c2, P4, T4, Q4]
+        { Pairing::add_line_with_flag(true) }
+        // [T4x, c0, c1, c2, P4, T4x, c0, c1, c2]
+        // compare coeffs
+        { Fq2::roll(14) }
+        { Fq2::equalverify() }
+        { Fq2::roll(12) }
+        { Fq2::equalverify() }
+        { Fq2::roll(10) }
+        { Fq2::equalverify() }
+        // [T4x, P4, T4x]
+        // compare T4
+        { Fq6::toaltstack() }
+        { Fq2::drop() }
+        { Fq6::fromaltstack() }
+        { Fq6::equalverify() }
+        OP_TRUE
+    };
+    scripts_and_inputs.push((quad_miller_s5_3, vec![ScriptInput::InputG2P(t4x), ScriptInput::InputFq2(coeffs.0), ScriptInput::InputFq2(coeffs.1), ScriptInput::InputFq2(coeffs.2), ScriptInput::InputG1A(p4), ScriptInput::InputG2P(t4), ScriptInput::InputFq2(q4x), ScriptInput::InputFq2(q4y)]));
+    t4 = t4x;
+
+    let mut fx = f.clone();
+
+    let mut c0new = coeffs.0;
+    c0new.mul_assign_by_fp(&p4.y);
+
+    let mut c1new = coeffs.1;
+    c1new.mul_assign_by_fp(&p4.x);
+
+    fx.mul_by_034(&c0new, &c1new, &coeffs.2);
+
+    let quad_miller_s5_4 = script! {
+        { Pairing::ell() }
+        { Fq12::equalverify() }
+        OP_TRUE
+    };
+    scripts_and_inputs.push((quad_miller_s5_4, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f), ScriptInput::InputFq2(coeffs.0), ScriptInput::InputFq2(coeffs.1), ScriptInput::InputFq2(coeffs.2), ScriptInput::InputG1A(p4)]));
+    f = fx;
 
     // let quad_miller_s6 = script! {
     //     /////////////////////////////////////// 6. two-times frobenius map on fixed and non-fixed lines
@@ -1348,3 +1390,61 @@ fn test_groth16_split() {
         assert!(test_script_with_inputs(script.clone(), inputs.to_vec()));
     }
 }
+
+#[test]
+fn test_x() {
+    let proof = read_proof("src/groth16/data/proof.json");
+    let public = read_public("src/groth16/data/public.json");
+    let vk = read_vk("src/groth16/data/vk.json");
+
+    let mut scripts_and_inputs = Vec::new();
+
+    let q4 = proof.b;
+
+    let beta_12x = BigUint::from_str("21575463638280843010398324269430826099269044274347216827212613867836435027261").unwrap();
+    let beta_12y = BigUint::from_str("10307601595873709700152284273816112264069230130616436755625194854815875713954").unwrap();
+    let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems(&[ark_bn254::Fq::from(beta_12x.clone()), ark_bn254::Fq::from(beta_12y.clone())]).unwrap();
+
+    let beta_13x = BigUint::from_str("2821565182194536844548159561693502659359617185244120367078079554186484126554").unwrap();
+    let beta_13y = BigUint::from_str("3505843767911556378687030309984248845540243509899259641013678093033130930403").unwrap();
+    let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems(&[ark_bn254::Fq::from(beta_13x.clone()), ark_bn254::Fq::from(beta_13y.clone())]).unwrap();
+    
+    let mut q4x = q4.x;
+    q4x.conjugate_in_place();
+    q4x = q4x * beta_12;
+
+    let mut q4y = q4.y;
+    q4y.conjugate_in_place();
+    q4y = q4y * beta_13;
+
+    let quad_miller_s5_2 = script! {
+        { Fq::neg(0) }
+
+        // beta_12
+        { Fq::push_dec("21575463638280843010398324269430826099269044274347216827212613867836435027261") }
+        { Fq::push_dec("10307601595873709700152284273816112264069230130616436755625194854815875713954") }
+
+        { Fq2::mul(2, 0) }
+
+        { Fq2::equalverify() }
+
+        { Fq::neg(0) }
+
+        // // beta_13
+        { Fq::push_dec("2821565182194536844548159561693502659359617185244120367078079554186484126554") }
+        { Fq::push_dec("3505843767911556378687030309984248845540243509899259641013678093033130930403") }
+
+        { Fq2::mul(2, 0) }
+
+        { Fq2::equalverify() }
+
+        OP_TRUE
+    };
+    scripts_and_inputs.push((quad_miller_s5_2, vec![ScriptInput::InputFq2(q4y), ScriptInput::InputFq2(q4.y), ScriptInput::InputFq2(q4x), ScriptInput::InputFq2(q4.x)])); // ScriptInput::InputFq2(q4y), ScriptInput::InputFq2(q4.y), 
+
+    for (i, (script, inputs)) in scripts_and_inputs.iter().enumerate() {
+        print!("script [{}] ", i);
+        assert!(test_script_with_inputs(script.clone(), inputs.to_vec()));
+    }
+}
+
