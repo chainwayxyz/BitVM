@@ -688,8 +688,6 @@ fn test_groth16_split() {
     let num_constant = 3;
     let mut constant_iters = vec![q_prepared[0].ell_coeffs.iter(), q_prepared[1].ell_coeffs.iter(), q_prepared[2].ell_coeffs.iter()];
 
-    let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
-
     let mut t4 = q4.into_group();
     let two_inv = ark_bn254::Fq::from(2).inverse().unwrap();
 
@@ -1341,98 +1339,43 @@ fn test_groth16_split() {
     scripts_and_inputs.push((quad_miller_s5_4, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f), ScriptInput::InputFq2(coeffs.0), ScriptInput::InputFq2(coeffs.1), ScriptInput::InputFq2(coeffs.2), ScriptInput::InputG1A(p4)]));
     f = fx;
 
-    // let quad_miller_s6 = script! {
-    //     /////////////////////////////////////// 6. two-times frobenius map on fixed and non-fixed lines
-    //     // 6.1 fixed part, P1, P2, P3
-    //     for j in 0..num_constant {
-    //         { Fq2::roll((28 - j * 2) as u32) }
-    //         { Pairing::ell_by_constant(constant_iters[j].next().unwrap()) }
-    //     }
-    //     // [beta_22, P4, Q4, T4, f]
+    for j in 0..num_constant {
+        let mut fx = f.clone();
+        let coeffs = constant_iters[j].next().unwrap();
 
-    //     // non-fixed part, P4
-    //     { Fq2::roll(/* offset_P */22_u32) }
-    //     // [beta_22, Q4, T4, f, P4]
-    //     { Fq6::roll(14) }
-    //     // [beta_22, Q4, f, P4, T4]
+        let mut c0new = coeffs.0;
+        c0new.mul_assign_by_fp(&p_lst[j].y);
 
-    //     // 6.2 phi(Q)^2
-    //     // Qx * beta^{2 * (p^2 - 1) / 6}
-    //     { Fq2::roll(/*offset_Q*/20 + 2) }
-    //     // [beta_22, Qy, f, P4, T4, Qx]
-    //     { Fq2::roll(/*offset_beta_22 */24_u32) }
-    //     // [Qy, f, P4, T4, Qx, beta_22]
-    //     { Fq2::mul(2, 0) }
-    //     // [Qy, f, P4, T4, Qx * beta_22]
-    //     // - Qy
-    //     { Fq2::roll(22) }
-    //     // [f, P4, T4, Qx * beta_22, Qy]
-    //     // [f, P4, T4, Qx, Qy]
+        let mut c1new = coeffs.1;
+        c1new.mul_assign_by_fp(&p_lst[j].x);
 
-    //     // 6.3 add line with T and phi(Q)^2
-    //     { Pairing::add_line_with_flag(true) }
-    //     // [f, P4, T4, (,,)]
-    //     { Fq6::roll(6) }
-    //     // [f, P4, (,,), T4]
-    //     { Fq6::drop() }
-    //     // [f, P4, (,,)]
-    //     // line evaluation and update f
-    //     { Fq2::roll(6) }
-    //     // [f, (,,), P4]
-    //     { Pairing::ell() }
-    //     // [f]
-    // };
+        fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
-    // println!("quad_miller_s6: {:?}", quad_miller_s6.len()); // 28m
-
-    for (i, (script, inputs)) in scripts_and_inputs.iter().enumerate() {
-        print!("script [{}] ", i);
-        assert!(test_script_with_inputs(script.clone(), inputs.to_vec()));
+        let quad_miller_s6_1 = script! {
+            { Pairing::ell_by_constant(coeffs) }
+            { Fq12::equalverify() }
+            OP_TRUE
+        };
+        scripts_and_inputs.push((quad_miller_s6_1, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f), ScriptInput::InputG1A(p_lst[j])]));
+        f = fx;
     }
-}
 
-#[test]
-fn test_x() {
-    let proof = read_proof("src/groth16/data/proof.json");
-    let public = read_public("src/groth16/data/public.json");
-    let vk = read_vk("src/groth16/data/vk.json");
+    let beta_22x = BigUint::from_str("21888242871839275220042445260109153167277707414472061641714758635765020556616").unwrap();
+    let beta_22y = BigUint::from_str("0").unwrap();
+    let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems(&[ark_bn254::Fq::from(beta_22x.clone()), ark_bn254::Fq::from(beta_22y.clone())]).unwrap();
 
-    let mut scripts_and_inputs = Vec::new();
-
-    let q4 = proof.b;
-
-    let beta_12x = BigUint::from_str("21575463638280843010398324269430826099269044274347216827212613867836435027261").unwrap();
-    let beta_12y = BigUint::from_str("10307601595873709700152284273816112264069230130616436755625194854815875713954").unwrap();
-    let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems(&[ark_bn254::Fq::from(beta_12x.clone()), ark_bn254::Fq::from(beta_12y.clone())]).unwrap();
-
-    let beta_13x = BigUint::from_str("2821565182194536844548159561693502659359617185244120367078079554186484126554").unwrap();
-    let beta_13y = BigUint::from_str("3505843767911556378687030309984248845540243509899259641013678093033130930403").unwrap();
-    let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems(&[ark_bn254::Fq::from(beta_13x.clone()), ark_bn254::Fq::from(beta_13y.clone())]).unwrap();
-    
     let mut q4x = q4.x;
     q4x.conjugate_in_place();
-    q4x = q4x * beta_12;
+    q4x = q4x * beta_22;
 
-    let mut q4y = q4.y;
-    q4y.conjugate_in_place();
-    q4y = q4y * beta_13;
+    let q4y = q4.y;
 
-    let quad_miller_s5_2 = script! {
+    let quad_miller_s6_2 = script! {
         { Fq::neg(0) }
 
-        // beta_12
-        { Fq::push_dec("21575463638280843010398324269430826099269044274347216827212613867836435027261") }
-        { Fq::push_dec("10307601595873709700152284273816112264069230130616436755625194854815875713954") }
-
-        { Fq2::mul(2, 0) }
-
-        { Fq2::equalverify() }
-
-        { Fq::neg(0) }
-
-        // // beta_13
-        { Fq::push_dec("2821565182194536844548159561693502659359617185244120367078079554186484126554") }
-        { Fq::push_dec("3505843767911556378687030309984248845540243509899259641013678093033130930403") }
+        // beta_22
+        { Fq::push_dec("21888242871839275220042445260109153167277707414472061641714758635765020556616") }
+        { Fq::push_dec("0") }
 
         { Fq2::mul(2, 0) }
 
@@ -1440,11 +1383,69 @@ fn test_x() {
 
         OP_TRUE
     };
-    scripts_and_inputs.push((quad_miller_s5_2, vec![ScriptInput::InputFq2(q4y), ScriptInput::InputFq2(q4.y), ScriptInput::InputFq2(q4x), ScriptInput::InputFq2(q4.x)])); // ScriptInput::InputFq2(q4y), ScriptInput::InputFq2(q4.y), 
+    scripts_and_inputs.push((quad_miller_s6_2, vec![ScriptInput::InputFq2(q4x), ScriptInput::InputFq2(q4.x)]));
+
+    let mut t4x = t4.clone();
+
+    let theta = t4x.y - &(q4y * &t4x.z);
+    let lambda = t4x.x - &(q4x * &t4x.z);
+    let c = theta.square();
+    let d = lambda.square();
+    let e = lambda * &d;
+    let ff = t4x.z * &c;
+    let g = t4x.x * &d;
+    let h = e + &ff - &g.double();
+    t4x.x = lambda * &h;
+    t4x.y = theta * &(g - &h) - &(e * &t4x.y);
+    t4x.z *= &e;
+    let j = theta * &q4x - &(lambda * &q4y);
+    
+    let coeffs = (lambda, -theta, j);
+
+    let quad_miller_s6_3 = script! {
+        // [T4x, c0, c1, c2, P4, T4, Q4]
+        { Pairing::add_line_with_flag(true) }
+        // [T4x, c0, c1, c2, P4, T4x, c0, c1, c2]
+        // compare coeffs
+        { Fq2::roll(14) }
+        { Fq2::equalverify() }
+        { Fq2::roll(12) }
+        { Fq2::equalverify() }
+        { Fq2::roll(10) }
+        { Fq2::equalverify() }
+        // [T4x, P4, T4x]
+        // compare T4
+        { Fq6::toaltstack() }
+        { Fq2::drop() }
+        { Fq6::fromaltstack() }
+        { Fq6::equalverify() }
+        OP_TRUE
+    };
+    scripts_and_inputs.push((quad_miller_s6_3, vec![ScriptInput::InputG2P(t4x), ScriptInput::InputFq2(coeffs.0), ScriptInput::InputFq2(coeffs.1), ScriptInput::InputFq2(coeffs.2), ScriptInput::InputG1A(p4), ScriptInput::InputG2P(t4), ScriptInput::InputFq2(q4x), ScriptInput::InputFq2(q4y)]));
+    t4 = t4x;
+
+    let mut fx = f.clone();
+
+    let mut c0new = coeffs.0;
+    c0new.mul_assign_by_fp(&p4.y);
+
+    let mut c1new = coeffs.1;
+    c1new.mul_assign_by_fp(&p4.x);
+
+    fx.mul_by_034(&c0new, &c1new, &coeffs.2);
+
+    let quad_miller_s6_4 = script! {
+        { Pairing::ell() }
+        { Fq12::equalverify() }
+        OP_TRUE
+    };
+    scripts_and_inputs.push((quad_miller_s6_4, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f), ScriptInput::InputFq2(coeffs.0), ScriptInput::InputFq2(coeffs.1), ScriptInput::InputFq2(coeffs.2), ScriptInput::InputG1A(p4)]));
+    f = fx;
+
+    // assert_eq!(f, hint);
 
     for (i, (script, inputs)) in scripts_and_inputs.iter().enumerate() {
         print!("script [{}] ", i);
         assert!(test_script_with_inputs(script.clone(), inputs.to_vec()));
     }
 }
-
