@@ -62,8 +62,6 @@ impl ScriptInput {
                 { fq6_push(*fq6) }
             },
             ScriptInput::InputFq2(fq2) => script! {
-                // { Fq::push_u32_le(&BigUint::from(fq2.c0).to_u32_digits()) }
-                // { Fq::push_u32_le(&BigUint::from(fq2.c1).to_u32_digits()) }
                 { fq2_push(*fq2) }
             },
             ScriptInput::InputFq(fq) => script! {
@@ -73,27 +71,16 @@ impl ScriptInput {
                 { Fr::push_u32_le(&BigUint::from(*fr).to_u32_digits()) }
             },
             ScriptInput::InputG1P(g1p) => script! {
-                { Fq::push_u32_le(&BigUint::from(g1p.x).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g1p.y).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g1p.z).to_u32_digits()) }
+                { g1_projective_push(*g1p) }
             },
             ScriptInput::InputG1A(g1a) => script! {
-                { Fq::push_u32_le(&BigUint::from(g1a.x).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g1a.y).to_u32_digits()) }
+                { g1_affine_push(*g1a) }
             },
             ScriptInput::InputG2P(g2p) => script! {
-                { Fq::push_u32_le(&BigUint::from(g2p.x.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.x.c1).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.y.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.y.c1).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.z.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.z.c1).to_u32_digits()) }
+                { g2_projective_push(*g2p) }
             },
             ScriptInput::InputG2A(g2a) => script! {
-                { Fq::push_u32_le(&BigUint::from(g2a.x.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2a.x.c1).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2a.y.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2a.y.c1).to_u32_digits()) }
+                { g2_affine_push(*g2a) }
             },
         }
     }
@@ -158,6 +145,26 @@ pub fn g1_affine_push(point: ark_bn254::G1Affine) -> Script {
     script! {
         { Fq::push_u32_le(&BigUint::from(point.x).to_u32_digits()) }
         { Fq::push_u32_le(&BigUint::from(point.y).to_u32_digits()) }
+    }
+}
+
+pub fn g2_projective_push(point: ark_bn254::G2Projective) -> Script {
+    script! {
+        { Fq::push_u32_le(&BigUint::from(point.x.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(point.x.c1).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(point.y.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(point.y.c1).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(point.z.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(point.z.c1).to_u32_digits()) }
+    }
+}
+
+pub fn g2_affine_push(point: ark_bn254::G2Affine) -> Script {
+    script! {
+        { Fq::push_u32_le(&BigUint::from(point.x.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(point.x.c1).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(point.y.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(point.y.c1).to_u32_digits()) }
     }
 }
 
@@ -532,6 +539,7 @@ pub fn verify(
     let p3 = vk.alpha_g1;
     let p4 = proof.a;
     let q4 = proof.b;
+    let t4 = q4.into_group();
 
     script! {
         // 1. push constants to stack
@@ -551,34 +559,22 @@ pub fn verify(
         { Fq::push_u32_le(&BigUint::from(ark_bn254::Fq::one().double().inverse().unwrap()).to_u32_digits()) }
 
         // B
-        { Fq::push_u32_le(&BigUint::from(ark_bn254::g2::Config::COEFF_B.c0).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(ark_bn254::g2::Config::COEFF_B.c1).to_u32_digits()) }
+        { fq2_push(ark_bn254::g2::Config::COEFF_B) }
 
         // 2. push params to stack
 
         // 2.1 compute p1 with msm
         { msm_script }
         // 2.2 push other pairing points
-        { Fq::push_u32_le(&BigUint::from(p2.x).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(p2.y).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(p3.x).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(p3.y).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(p4.x).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(p4.y).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(q4.x.c0).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(q4.x.c1).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(q4.y.c0).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(q4.y.c1).to_u32_digits()) }
+        { g1_affine_push(p2) }
+        { g1_affine_push(p3) }
+        { g1_affine_push(p4) }
+        { g2_affine_push(q4) }
         { fq12_push(c) }
         { fq12_push(c_inv) }
         { fq12_push(wi) }
-        // push t4: t4.x = q4.x, t4.y = q4.y, t4.z = Fq2::ONE
-        { Fq::push_u32_le(&BigUint::from(q4.x.c0).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(q4.x.c1).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(q4.y.c0).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(q4.y.c1).to_u32_digits()) }
-        { Fq::push_one() }
-        { Fq::push_zero() }
+        // push t4
+        { g2_projective_push(t4) }
         // stack: [beta_12, beta_13, beta_22, 1/2, B, P1, P2, P3, P4, Q4, c, c_inv, wi, T4]
 
         // 3. verifier pairing
@@ -586,10 +582,10 @@ pub fn verify(
         // Output stack: [final_f]
         { Pairing::quad_miller_loop_with_c_wi(&q_prepared) }
 
-        // check final_f == hint
-        { fq12_push(hint) }
-        { Fq12::equalverify() }
-        OP_TRUE
+        // // check final_f == hint
+        // { fq12_push(hint) }
+        // { Fq12::equalverify() }
+        // OP_TRUE
     }
 }
 
@@ -630,12 +626,8 @@ fn test_groth16_split() {
     let base2: ark_bn254::G1Projective = vk.gamma_abc_g1[1].into();
 
     let msm_script = script! {
-        { Fq::push_u32_le(&BigUint::from(base1.x).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(base1.y).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(base1.z).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(base2.x).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(base2.y).to_u32_digits()) }
-        { Fq::push_u32_le(&BigUint::from(base2.z).to_u32_digits()) }
+        { g1_projective_push(base1) }
+        { g1_projective_push(base2) }
         { Fr::roll(6) }
         { G1Projective::scalar_mul() }
         { G1Projective::add() }
@@ -1171,6 +1163,7 @@ fn test_groth16_split() {
     }
 
     let mut f = f_vec[ark_bn254::Config::ATE_LOOP_COUNT.len() - 1];
+
     let c_inv_p = c_inv.frobenius_map(1);
 
     let quad_miller_s3_1 = script! {
@@ -1361,21 +1354,18 @@ fn test_groth16_split() {
     }
 
     let beta_22x = BigUint::from_str("21888242871839275220042445260109153167277707414472061641714758635765020556616").unwrap();
-    let beta_22y = BigUint::from_str("0").unwrap();
+    let beta_22y = BigUint::ZERO;
     let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems(&[ark_bn254::Fq::from(beta_22x.clone()), ark_bn254::Fq::from(beta_22y.clone())]).unwrap();
 
     let mut q4x = q4.x;
-    q4x.conjugate_in_place();
     q4x = q4x * beta_22;
 
     let q4y = q4.y;
 
     let quad_miller_s6_2 = script! {
-        { Fq::neg(0) }
-
         // beta_22
         { Fq::push_dec("21888242871839275220042445260109153167277707414472061641714758635765020556616") }
-        { Fq::push_dec("0") }
+        { Fq::push_zero() }
 
         { Fq2::mul(2, 0) }
 
@@ -1442,7 +1432,11 @@ fn test_groth16_split() {
     scripts_and_inputs.push((quad_miller_s6_4, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f), ScriptInput::InputFq2(coeffs.0), ScriptInput::InputFq2(coeffs.1), ScriptInput::InputFq2(coeffs.2), ScriptInput::InputG1A(p4)]));
     f = fx;
 
-    // assert_eq!(f, hint);
+    assert_eq!(f, hint);
+
+    for i in 0..num_constant {
+        assert_eq!(constant_iters[i].next(), None);
+    }
 
     for (i, (script, inputs)) in scripts_and_inputs.iter().enumerate() {
         print!("script [{}] ", i);
