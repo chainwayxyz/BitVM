@@ -202,21 +202,16 @@ pub fn g1_projective_mul_scripts_and_inputs(g1: ark_bn254::G1Projective, scalar:
 
     assert_eq!(q, *g1_projs.last().unwrap());
 
-    let script_initial = script! {
+    let script_initial_s1 = script! {
         { Fr::decode_montgomery() }
         { Fr::convert_to_le_bits() }
 
         for i in (0..Fr::N_BITS).rev() {
             { i + 1 } OP_ROLL OP_EQUALVERIFY
         }
-
-        { G1Projective::copy(2) }
-        { G1Projective::copy(2) }
+        { G1Projective::roll(2) }
+        { G1Projective::roll(2) }
         { G1Projective::add() }
-        { G1Projective::equalverify() }
-
-        { G1Projective::roll(1) }
-        { G1Projective::double() }
         { G1Projective::equalverify() }
         OP_TRUE
     };
@@ -225,7 +220,15 @@ pub fn g1_projective_mul_scripts_and_inputs(g1: ark_bn254::G1Projective, scalar:
         inputs.push(ScriptInput::InputBit(*b));
     }
     inputs.push(ScriptInput::InputFr(a));
-    scripts_and_inputs.push((script_initial, inputs));
+    scripts_and_inputs.push((script_initial_s1, inputs));
+
+    let script_initial_s2 = script! {
+        { G1Projective::roll(1) }
+        { G1Projective::double() }
+        { G1Projective::equalverify() }
+        OP_TRUE
+    };
+    scripts_and_inputs.push((script_initial_s2, vec![ScriptInput::InputG1P(p), ScriptInput::InputG1P(two_p)]));
 
     for i in 0..(Fr::N_BITS / 2) {
         let g = g1_projs[i as usize];
@@ -276,7 +279,7 @@ pub fn g1_projective_mul_scripts_and_inputs(g1: ark_bn254::G1Projective, scalar:
 pub fn g1_projective_mul_scripts() -> Vec<Script> {
     let mut scripts = Vec::new();
 
-    let script_initial = script! {
+    let script_initial_s1 = script! {
         { Fr::decode_montgomery() }
         { Fr::convert_to_le_bits() }
 
@@ -284,17 +287,21 @@ pub fn g1_projective_mul_scripts() -> Vec<Script> {
             { i + 1 } OP_ROLL OP_EQUALVERIFY
         }
 
-        { G1Projective::copy(2) }
-        { G1Projective::copy(2) }
+        { G1Projective::roll(2) }
+        { G1Projective::roll(2) }
         { G1Projective::add() }
         { G1Projective::equalverify() }
+        OP_TRUE
+    };
+    scripts.push(script_initial_s1);
 
+    let script_initial_s2 = script! {
         { G1Projective::roll(1) }
         { G1Projective::double() }
         { G1Projective::equalverify() }
         OP_TRUE
     };
-    scripts.push(script_initial);
+    scripts.push(script_initial_s2);
 
     for i in 0..(Fr::N_BITS / 2) {
         let script_loop_1 = script! {
@@ -380,6 +387,8 @@ pub fn g1_projective_mul_inputs(g1: ark_bn254::G1Projective, scalar: ark_bn254::
     }
     inputs_bits.push(ScriptInput::InputFr(a));
     inputs.push(inputs_bits);
+
+    inputs.push(vec![ScriptInput::InputG1P(p), ScriptInput::InputG1P(two_p)]);
 
     for i in 0..(Fr::N_BITS / 2) {
         let g = g1_projs[i as usize];
@@ -498,39 +507,40 @@ pub fn fq12_mul_inputs(a: ark_bn254::Fq12, b: ark_bn254::Fq12, c: ark_bn254::Fq1
 pub fn fq12_square_scripts_and_inputs(a: ark_bn254::Fq12, a2: ark_bn254::Fq12) -> Vec<(Script, Vec<ScriptInput>)> {
     let mut scripts_and_inputs = Vec::new();
 
-    let s1 = script! {
-        // v0 = c0 + c1
-        { Fq6::copy(6) }
-        { Fq6::copy(6) }
-        { Fq6::add(6, 0) }
+    // let s1 = script! {
+    //     // v0 = c0 + c1
+    //     { Fq6::copy(6) }
+    //     { Fq6::copy(6) }
+    //     { Fq6::add(6, 0) }
 
-        // v3 = c0 + beta * c1
-        { Fq6::copy(6) }
-        { Fq12::mul_fq6_by_nonresidue() }
-        { Fq6::copy(18) }
-        { Fq6::add(0, 6) }
+    //     // v3 = c0 + beta * c1
+    //     { Fq6::copy(6) }
+    //     { Fq12::mul_fq6_by_nonresidue() }
+    //     { Fq6::copy(18) }
+    //     { Fq6::add(0, 6) }
 
-        // v2 = c0 * c1
-        { Fq6::mul(12, 18) }
+    //     // v2 = c0 * c1
+    //     { Fq6::mul(12, 18) }
 
-        // v0 = v0 * v3
-        { Fq6::mul(12, 6) }
+    //     // v0 = v0 * v3
+    //     { Fq6::mul(12, 6) }
 
-        // final c0 = v0 - (beta + 1) * v2
-        { Fq6::copy(6) }
-        { Fq12::mul_fq6_by_nonresidue() }
-        { Fq6::copy(12) }
-        { Fq6::add(6, 0) }
-        { Fq6::sub(6, 0) }
+    //     // final c0 = v0 - (beta + 1) * v2
+    //     { Fq6::copy(6) }
+    //     { Fq12::mul_fq6_by_nonresidue() }
+    //     { Fq6::copy(12) }
+    //     { Fq6::add(6, 0) }
+    //     { Fq6::sub(6, 0) }
 
-        // final c1 = 2 * v2
-        { Fq6::double(6) }
+    //     // final c1 = 2 * v2
+    //     { Fq6::double(6) }
 
-        { Fq12::equalverify() }
+    //     { Fq12::equalverify() }
 
-        OP_TRUE
-    };
-    scripts_and_inputs.push((s1, vec![ScriptInput::InputFq12(a2), ScriptInput::InputFq12(a)]));
+    //     OP_TRUE
+    // };
+    // scripts_and_inputs.push((s1, vec![ScriptInput::InputFq12(a2), ScriptInput::InputFq12(a)]));
+    scripts_and_inputs.extend(fq12_mul_scripts_and_inputs(a, a, a2));
 
     scripts_and_inputs
 }
@@ -538,39 +548,41 @@ pub fn fq12_square_scripts_and_inputs(a: ark_bn254::Fq12, a2: ark_bn254::Fq12) -
 pub fn fq12_square_scripts() -> Vec<Script> {
     let mut scripts = Vec::new();
 
-    let s1 = script! {
-        // v0 = c0 + c1
-        { Fq6::copy(6) }
-        { Fq6::copy(6) }
-        { Fq6::add(6, 0) }
+    // let s1 = script! {
+    //     // v0 = c0 + c1
+    //     { Fq6::copy(6) }
+    //     { Fq6::copy(6) }
+    //     { Fq6::add(6, 0) }
 
-        // v3 = c0 + beta * c1
-        { Fq6::copy(6) }
-        { Fq12::mul_fq6_by_nonresidue() }
-        { Fq6::copy(18) }
-        { Fq6::add(0, 6) }
+    //     // v3 = c0 + beta * c1
+    //     { Fq6::copy(6) }
+    //     { Fq12::mul_fq6_by_nonresidue() }
+    //     { Fq6::copy(18) }
+    //     { Fq6::add(0, 6) }
 
-        // v2 = c0 * c1
-        { Fq6::mul(12, 18) }
+    //     // v2 = c0 * c1
+    //     { Fq6::mul(12, 18) }
 
-        // v0 = v0 * v3
-        { Fq6::mul(12, 6) }
+    //     // v0 = v0 * v3
+    //     { Fq6::mul(12, 6) }
 
-        // final c0 = v0 - (beta + 1) * v2
-        { Fq6::copy(6) }
-        { Fq12::mul_fq6_by_nonresidue() }
-        { Fq6::copy(12) }
-        { Fq6::add(6, 0) }
-        { Fq6::sub(6, 0) }
+    //     // final c0 = v0 - (beta + 1) * v2
+    //     { Fq6::copy(6) }
+    //     { Fq12::mul_fq6_by_nonresidue() }
+    //     { Fq6::copy(12) }
+    //     { Fq6::add(6, 0) }
+    //     { Fq6::sub(6, 0) }
 
-        // final c1 = 2 * v2
-        { Fq6::double(6) }
+    //     // final c1 = 2 * v2
+    //     { Fq6::double(6) }
 
-        { Fq12::equalverify() }
+    //     { Fq12::equalverify() }
 
-        OP_TRUE
-    };
-    scripts.push(s1);
+    //     OP_TRUE
+    // };
+    // scripts.push(s1);
+
+    scripts.extend(fq12_mul_scripts());
 
     scripts
 }
@@ -578,7 +590,9 @@ pub fn fq12_square_scripts() -> Vec<Script> {
 pub fn fq12_square_inputs(a: ark_bn254::Fq12, a2: ark_bn254::Fq12) -> Vec<Vec<ScriptInput>> {
     let mut inputs = Vec::new();
 
-    inputs.push(vec![ScriptInput::InputFq12(a2), ScriptInput::InputFq12(a)]);
+    // inputs.push(vec![ScriptInput::InputFq12(a2), ScriptInput::InputFq12(a)]);
+
+    inputs.extend(fq12_mul_inputs(a, a, a2));
 
     inputs
 }
