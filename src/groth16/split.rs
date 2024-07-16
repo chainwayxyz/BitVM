@@ -1039,41 +1039,29 @@ pub fn add_line_with_flag_inputs(flag: bool, t4: ark_bn254::G2Projective, q4x: a
     inputs
 }
 
-pub fn ell_by_constant(constant: &EllCoeff) -> Script {
-    script! {
-        // [f, px, py]
-        // compute the new c0
-        // [f, px, py, py]
-        { Fq::copy(0) }
-        // [f, px, py, py * q1.x1]
-        { Fq::mul_by_constant(&constant.0.c0) }
-        // [f, px, py * q1.x1, py]
-        { Fq::roll(1) }
-        // [f, px, py * q1.x1, py * q1.x2]
-        { Fq::mul_by_constant(&constant.0.c1) }
+pub fn ell_by_constant_scripts_and_inputs(f: ark_bn254::Fq12, c0: ark_bn254::Fq2, c1: ark_bn254::Fq2, c2: ark_bn254::Fq2, p: ark_bn254::G1Affine, f2: ark_bn254::Fq12) -> Vec<(Script, Vec<ScriptInput>)> {
+    let mut scripts_and_inputs = Vec::new();
 
-        // compute the new c1
-        // [f, px, py * q1.x1, py * q1.x2, px]
-        { Fq::copy(2) }
-        // [f, px, py * q1.x1, py * q1.x2, px * q1.y1]
-        { Fq::mul_by_constant(&constant.1.c0) }
-        // [f, py * q1.x1, py * q1.x2, px * q1.y1, px]
-        { Fq::roll(3) }
-        // [f, py * q1.x1, py * q1.x2, px * q1.y1, px * q1.y2]
-        { Fq::mul_by_constant(&constant.1.c1) }
+    let constant = (c0, c1, c2);
 
-        // compute the new f
-        // [f, py * q1.x1, py * q1.x2, px * q1.y1, px * q1.y2]
-        { Fq12::mul_by_034_with_4_constant(&constant.2) }
-    }
-}
+    let mut fx = f.clone();
 
-#[test]
-fn test_ellc() {
-    let mut prng = ChaCha20Rng::seed_from_u64(0);
-    let b = ark_bn254::g2::G2Affine::rand(&mut prng);
-    let coeffs = G2Prepared::from(b);
-    let constant: &EllCoeff = &coeffs.ell_coeffs[0];
+    let mut c0new = constant.0;
+    c0new.mul_assign_by_fp(&p.y);
+
+    let mut c1new = constant.1;
+    c1new.mul_assign_by_fp(&p.x);
+
+    let (c0u, c3u, c4u) = (c0new, c1new, constant.2);
+
+    let a0 = f.c0.c0 * c0u;
+    let a1 = f.c0.c1 * c0u;
+    let a2 = f.c0.c2 * c0u;
+    let a = ark_bn254::Fq6::new(a0, a1, a2);
+    let mut b = f.c1;
+    b.mul_by_01(&c3u, &c4u);
+
+    fx.mul_by_034(&c0new, &c1new, &constant.2);
 
     let s1 = script! {
         // [f, px, py]
@@ -1096,54 +1084,209 @@ fn test_ellc() {
         { Fq::roll(3) }
         // [f, py * q1.x1, py * q1.x2, px * q1.y1, px * q1.y2]
         { Fq::mul_by_constant(&constant.1.c1) }
-    };
 
-    let constant = &constant.2;
-
-    let s2 = script! {
-        // copy p.c1, c3, c4
-        { Fq6::copy(4) }
-        { Fq2::copy(6) }
-
-        // compute b = p.c1 * (c3, c4)
-        { Fq6::mul_by_01_with_1_constant(constant) }
-
-        // copy p.c0, c0
-        { Fq6::copy(16) }
-        { Fq2::copy(14) }
+        // take p.c0, c0
+        { Fq6::roll(10) }
+        { Fq2::roll(8) }
 
         // compute a = p.c0 * c0
         { Fq6::mul_by_fp2() }
 
-        // compute beta * b
-        { Fq6::copy(6) }
-        { Fq12::mul_fq6_by_nonresidue() }
+        // take p.c1, c3, c4
+        { Fq6::roll(8) }
+        { Fq2::roll(12) }
 
-        // compute final c0 = a + beta * b
-        { Fq6::copy(6) }
-        { Fq6::add(6, 0) }
+        // compute b = p.c1 * (c3, c4)
+        { Fq6::mul_by_01_with_1_constant(&constant.2) }
+
+        { Fq6::roll(12) }
+        { Fq6::equalverify() }
+        { Fq6::equalverify() }
+        OP_TRUE
+    };
+    scripts_and_inputs.push((s1, vec![ScriptInput::InputFq6(a), ScriptInput::InputFq6(b), ScriptInput::InputFq12(f), ScriptInput::InputG1A(p)]));
+
+    let s2 = script! {
+        // [f, px, py]
+        // compute the new c0
+        // [f, px, py, py]
+        { Fq::copy(0) }
+        // [f, px, py, py * q1.x1]
+        { Fq::mul_by_constant(&constant.0.c0) }
+        // [f, px, py * q1.x1, py]
+        { Fq::roll(1) }
+        // [f, px, py * q1.x1, py * q1.x2]
+        { Fq::mul_by_constant(&constant.0.c1) }
+
+        // compute the new c1
+        // [f, px, py * q1.x1, py * q1.x2, px]
+        { Fq::copy(2) }
+        // [f, px, py * q1.x1, py * q1.x2, px * q1.y1]
+        { Fq::mul_by_constant(&constant.1.c0) }
+        // [f, py * q1.x1, py * q1.x2, px * q1.y1, px]
+        { Fq::roll(3) }
+        // [f, py * q1.x1, py * q1.x2, px * q1.y1, px * q1.y2]
+        { Fq::mul_by_constant(&constant.1.c1) }
 
         // compute e = p.c0 + p.c1
-        { Fq6::add(28, 22) }
+        { Fq6::add(10, 4) }
 
         // compute c0 + c3
-        { Fq2::add(26, 24) }
+        { Fq2::add(8, 6) }
 
         // update e = e * (c0 + c3, c4)
-        { Fq6::mul_by_01_with_1_constant(constant) }
+        { Fq6::mul_by_01_with_1_constant(&constant.2) }
 
-        // sum a and b
+        // compute c0 = a + beta * b
+        { Fq6::copy(12) }
+        { Fq6::copy(12) }
+        { Fq12::mul_fq6_by_nonresidue() }
+        { Fq6::add(6, 0) }
+
+        // compute a + b
         { Fq6::add(18, 12) }
 
         // compute final c1 = e - (a + b)
-        { Fq6::sub(6, 0) }
-    };
+        { Fq6::sub(12, 0) }
 
-    let s3 = script! {
-        
+        { Fq12::equalverify() }
+        OP_TRUE
     };
+    scripts_and_inputs.push((s2, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq6(a), ScriptInput::InputFq6(b), ScriptInput::InputFq12(f), ScriptInput::InputG1A(p)]));
 
-    println!("s1: {:?}, s2: {:?}, s3: {:?}", s1.len(), s2.len(), s3.len());
+    scripts_and_inputs
+}
+
+pub fn ell_by_constant_scripts(c0: ark_bn254::Fq2, c1: ark_bn254::Fq2, c2: ark_bn254::Fq2) -> Vec<Script> {
+    let mut scripts = Vec::new();
+
+    let constant = (c0, c1, c2);
+
+    let s1 = script! {
+        // [f, px, py]
+        // compute the new c0
+        // [f, px, py, py]
+        { Fq::copy(0) }
+        // [f, px, py, py * q1.x1]
+        { Fq::mul_by_constant(&constant.0.c0) }
+        // [f, px, py * q1.x1, py]
+        { Fq::roll(1) }
+        // [f, px, py * q1.x1, py * q1.x2]
+        { Fq::mul_by_constant(&constant.0.c1) }
+
+        // compute the new c1
+        // [f, px, py * q1.x1, py * q1.x2, px]
+        { Fq::copy(2) }
+        // [f, px, py * q1.x1, py * q1.x2, px * q1.y1]
+        { Fq::mul_by_constant(&constant.1.c0) }
+        // [f, py * q1.x1, py * q1.x2, px * q1.y1, px]
+        { Fq::roll(3) }
+        // [f, py * q1.x1, py * q1.x2, px * q1.y1, px * q1.y2]
+        { Fq::mul_by_constant(&constant.1.c1) }
+
+        // take p.c0, c0
+        { Fq6::roll(10) }
+        { Fq2::roll(8) }
+
+        // compute a = p.c0 * c0
+        { Fq6::mul_by_fp2() }
+
+        // take p.c1, c3, c4
+        { Fq6::roll(8) }
+        { Fq2::roll(12) }
+
+        // compute b = p.c1 * (c3, c4)
+        { Fq6::mul_by_01_with_1_constant(&constant.2) }
+
+        { Fq6::roll(12) }
+        { Fq6::equalverify() }
+        { Fq6::equalverify() }
+        OP_TRUE
+    };
+    scripts.push(s1);
+
+    let s2 = script! {
+        // [f, px, py]
+        // compute the new c0
+        // [f, px, py, py]
+        { Fq::copy(0) }
+        // [f, px, py, py * q1.x1]
+        { Fq::mul_by_constant(&constant.0.c0) }
+        // [f, px, py * q1.x1, py]
+        { Fq::roll(1) }
+        // [f, px, py * q1.x1, py * q1.x2]
+        { Fq::mul_by_constant(&constant.0.c1) }
+
+        // compute the new c1
+        // [f, px, py * q1.x1, py * q1.x2, px]
+        { Fq::copy(2) }
+        // [f, px, py * q1.x1, py * q1.x2, px * q1.y1]
+        { Fq::mul_by_constant(&constant.1.c0) }
+        // [f, py * q1.x1, py * q1.x2, px * q1.y1, px]
+        { Fq::roll(3) }
+        // [f, py * q1.x1, py * q1.x2, px * q1.y1, px * q1.y2]
+        { Fq::mul_by_constant(&constant.1.c1) }
+
+        // compute e = p.c0 + p.c1
+        { Fq6::add(10, 4) }
+
+        // compute c0 + c3
+        { Fq2::add(8, 6) }
+
+        // update e = e * (c0 + c3, c4)
+        { Fq6::mul_by_01_with_1_constant(&constant.2) }
+
+        // compute c0 = a + beta * b
+        { Fq6::copy(12) }
+        { Fq6::copy(12) }
+        { Fq12::mul_fq6_by_nonresidue() }
+        { Fq6::add(6, 0) }
+
+        // compute a + b
+        { Fq6::add(18, 12) }
+
+        // compute final c1 = e - (a + b)
+        { Fq6::sub(12, 0) }
+
+        { Fq12::equalverify() }
+        OP_TRUE
+    };
+    scripts.push(s2);
+
+    scripts
+}
+
+pub fn ell_by_constant_inputs(f: ark_bn254::Fq12, c0: ark_bn254::Fq2, c1: ark_bn254::Fq2, c2: ark_bn254::Fq2, p: ark_bn254::G1Affine, f2: ark_bn254::Fq12) -> Vec<Vec<ScriptInput>> {
+    let mut inputs = Vec::new();
+
+    let constant = (c0, c1, c2);
+
+    let mut fx = f.clone();
+
+    let mut c0new = constant.0;
+    c0new.mul_assign_by_fp(&p.y);
+
+    let mut c1new = constant.1;
+    c1new.mul_assign_by_fp(&p.x);
+
+    let (c0u, c3u, c4u) = (c0new, c1new, constant.2);
+
+    let a0 = f.c0.c0 * c0u;
+    let a1 = f.c0.c1 * c0u;
+    let a2 = f.c0.c2 * c0u;
+    let a = ark_bn254::Fq6::new(a0, a1, a2);
+    let mut b = f.c1;
+    b.mul_by_01(&c3u, &c4u);
+
+    fx.mul_by_034(&c0new, &c1new, &constant.2);
+
+    assert_eq!(fx, f2);
+
+    inputs.push(vec![ScriptInput::InputFq6(a), ScriptInput::InputFq6(b), ScriptInput::InputFq12(f), ScriptInput::InputG1A(p)]);
+
+    inputs.push(vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq6(a), ScriptInput::InputFq6(b), ScriptInput::InputFq12(f), ScriptInput::InputG1A(p)]);
+
+    inputs
 }
 
 pub fn ell_scripts_and_inputs(f: ark_bn254::Fq12, c0: ark_bn254::Fq2, c1: ark_bn254::Fq2, c2: ark_bn254::Fq2, p: ark_bn254::G1Affine, f2: ark_bn254::Fq12) -> Vec<(Script, Vec<ScriptInput>)> {
@@ -1531,12 +1674,7 @@ pub fn groth16_scripts(vk: VerifyingKey<ark_bn254::Bn254>) -> Vec<Script> {
         for j in 0..num_constant {
             let coeffs = constant_iters[j].next().unwrap();
 
-            let ate_loop_s3 = script! {
-                { Pairing::ell_by_constant(coeffs) }
-                { Fq12::equalverify() }
-                OP_TRUE
-            };
-            scripts.push(ate_loop_s3);
+            scripts.extend(ell_by_constant_scripts(coeffs.0, coeffs.1, coeffs.2));
         }
 
         let modified_double_line = script! {
@@ -1741,12 +1879,7 @@ pub fn groth16_scripts(vk: VerifyingKey<ark_bn254::Bn254>) -> Vec<Script> {
             for j in 0..num_constant {
                 let coeffs = constant_iters[j].next().unwrap();
     
-                let ate_loop_s5 = script! {
-                    { Pairing::ell_by_constant(coeffs) }
-                    { Fq12::equalverify() }
-                    OP_TRUE
-                };
-                scripts.push(ate_loop_s5);
+                scripts.extend(ell_by_constant_scripts(coeffs.0, coeffs.1, coeffs.2));
             }
 
             scripts.extend(add_line_with_flag_scripts(ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1));
@@ -1778,12 +1911,7 @@ pub fn groth16_scripts(vk: VerifyingKey<ark_bn254::Bn254>) -> Vec<Script> {
     for j in 0..num_constant {
         let coeffs = constant_iters[j].next().unwrap();
 
-        let quad_miller_s5_1 = script! {
-            { Pairing::ell_by_constant(coeffs) }
-            { Fq12::equalverify() }
-            OP_TRUE
-        };
-        scripts.push(quad_miller_s5_1);
+        scripts.extend(ell_by_constant_scripts(coeffs.0, coeffs.1, coeffs.2));
     }
 
     let quad_miller_s5_2 = script! {
@@ -1818,12 +1946,7 @@ pub fn groth16_scripts(vk: VerifyingKey<ark_bn254::Bn254>) -> Vec<Script> {
     for j in 0..num_constant {
         let coeffs = constant_iters[j].next().unwrap();
 
-        let quad_miller_s6_1 = script! {
-            { Pairing::ell_by_constant(coeffs) }
-            { Fq12::equalverify() }
-            OP_TRUE
-        };
-        scripts.push(quad_miller_s6_1);
+        scripts.extend(ell_by_constant_scripts(coeffs.0, coeffs.1, coeffs.2));
     }
 
     let quad_miller_s6_2 = script! {
@@ -2045,7 +2168,7 @@ pub fn groth16_inputs(proof: Proof<ark_bn254::Bn254>, public: Vec<<ark_bn254::Bn
 
             fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
-            inputs.push(vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f1), ScriptInput::InputG1A(p_lst[j])]);
+            inputs.extend(ell_by_constant_inputs(f1, coeffs.0, coeffs.1, coeffs.2, p_lst[j], fx));
             f1 = fx;
         }
 
@@ -2099,7 +2222,7 @@ pub fn groth16_inputs(proof: Proof<ark_bn254::Bn254>, public: Vec<<ark_bn254::Bn
     
                 fx.mul_by_034(&c0new, &c1new, &coeffs.2);
     
-                inputs.push(vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f1), ScriptInput::InputG1A(p_lst[j])]);
+                inputs.extend(ell_by_constant_inputs(f1, coeffs.0, coeffs.1, coeffs.2, p_lst[j], fx));
                 f1 = fx;
             }
 
@@ -2178,7 +2301,7 @@ pub fn groth16_inputs(proof: Proof<ark_bn254::Bn254>, public: Vec<<ark_bn254::Bn
 
         fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
-        inputs.push(vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f), ScriptInput::InputG1A(p_lst[j])]);
+        inputs.extend(ell_by_constant_inputs(f, coeffs.0, coeffs.1, coeffs.2, p_lst[j], fx));
         f = fx;
     }
 
@@ -2247,7 +2370,7 @@ pub fn groth16_inputs(proof: Proof<ark_bn254::Bn254>, public: Vec<<ark_bn254::Bn
 
         fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
-        inputs.push(vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f), ScriptInput::InputG1A(p_lst[j])]);
+        inputs.extend(ell_by_constant_inputs(f, coeffs.0, coeffs.1, coeffs.2, p_lst[j], fx));
         f = fx;
     }
 
@@ -2531,12 +2654,7 @@ fn test_groth16_split() {
 
             fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
-            let ate_loop_s3 = script! {
-                { Pairing::ell_by_constant(coeffs) }
-                { Fq12::equalverify() }
-                OP_TRUE
-            };
-            scripts_and_inputs.push((ate_loop_s3, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f1), ScriptInput::InputG1A(p_lst[j])]));
+            scripts_and_inputs.extend(ell_by_constant_scripts_and_inputs(f1, coeffs.0, coeffs.1, coeffs.2, p_lst[j], fx));
             f1 = fx;
         }
 
@@ -2783,12 +2901,7 @@ fn test_groth16_split() {
     
                 fx.mul_by_034(&c0new, &c1new, &coeffs.2);
     
-                let ate_loop_s5 = script! {
-                    { Pairing::ell_by_constant(coeffs) }
-                    { Fq12::equalverify() }
-                    OP_TRUE
-                };
-                scripts_and_inputs.push((ate_loop_s5, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f1), ScriptInput::InputG1A(p_lst[j])]));
+                scripts_and_inputs.extend(ell_by_constant_scripts_and_inputs(f1, coeffs.0, coeffs.1, coeffs.2, p_lst[j], fx));
                 f1 = fx;
             }
 
@@ -2877,12 +2990,7 @@ fn test_groth16_split() {
 
         fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
-        let quad_miller_s5_1 = script! {
-            { Pairing::ell_by_constant(coeffs) }
-            { Fq12::equalverify() }
-            OP_TRUE
-        };
-        scripts_and_inputs.push((quad_miller_s5_1, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f), ScriptInput::InputG1A(p_lst[j])]));
+        scripts_and_inputs.extend(ell_by_constant_scripts_and_inputs(f, coeffs.0, coeffs.1, coeffs.2, p_lst[j], fx));
         f = fx;
     }
 
@@ -2973,12 +3081,7 @@ fn test_groth16_split() {
 
         fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
-        let quad_miller_s6_1 = script! {
-            { Pairing::ell_by_constant(coeffs) }
-            { Fq12::equalverify() }
-            OP_TRUE
-        };
-        scripts_and_inputs.push((quad_miller_s6_1, vec![ScriptInput::InputFq12(fx), ScriptInput::InputFq12(f), ScriptInput::InputG1A(p_lst[j])]));
+        scripts_and_inputs.extend(ell_by_constant_scripts_and_inputs(f, coeffs.0, coeffs.1, coeffs.2, p_lst[j], fx));
         f = fx;
     }
 
