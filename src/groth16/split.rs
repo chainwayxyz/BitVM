@@ -12,31 +12,25 @@ use crate::bn254::utils::{fq12_push, fq2_push, fq6_push};
 use crate::groth16::constants::{LAMBDA, P_POW3};
 use crate::groth16::offchain_checker::compute_c_wi;
 use crate::treepp::{script, Script};
-use crate::execute_script;
-// use crate::bn254::ell_coeffs::G2Prepared;
 
 use ark_ec::pairing::Pairing as ark_Pairing;
-// use ark_ff::PrimeField;
 use ark_groth16::{prepare_verifying_key, Proof, VerifyingKey};
 use ark_std::iterable::Iterable;
 use ark_std::{end_timer, start_timer, UniformRand};
 use ark_ec::bn::{G1Prepared, BnConfig};
-use ark_ec::short_weierstrass::{Projective, SWCurveConfig};
+use ark_ec::short_weierstrass::SWCurveConfig;
 use ark_ec::{CurveGroup, VariableBaseMSM, Group, AffineRepr};
 use ark_ff::Field;
-// use ark_ff::PrimeField;
 
 use num_bigint::BigUint;
-use num_traits::{Num, One};
+use num_traits::One;
 use num_traits::Zero;
 
-// use rand::{RngCore, SeedableRng};
 use serde_json::Value;
 use std::iter::zip;
 use std::str::FromStr;
 use std::io::BufReader;
-use std::collections::HashMap;
-use core::ops::{Mul, Div, Rem};
+use core::ops::Mul;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
@@ -233,56 +227,54 @@ pub fn g1_projective_mul_scripts_and_inputs(g1: ark_bn254::G1Projective, scalar:
     inputs.push(ScriptInput::InputFr(a));
     scripts_and_inputs.push((script_initial, inputs));
 
-    let script_loop = script! {
-        OP_TOALTSTACK OP_TOALTSTACK
+    for i in 0..(Fr::N_BITS / 2) {
+        let g = g1_projs[i as usize];
+        let four_g = g.double().double();
 
-        { G1Projective::double() }
-        { G1Projective::double() }
-
-        OP_FROMALTSTACK OP_FROMALTSTACK
-        OP_IF
-            OP_IF
-                { G1Projective::copy(1) }
-            OP_ELSE
-                { G1Projective::copy(3) }
-            OP_ENDIF
+        let script_loop_1 = script! {
+            { G1Projective::double() }
+            { G1Projective::double() }
+            { G1Projective::equalverify() }
             OP_TRUE
-        OP_ELSE
+        };
+        scripts_and_inputs.push((script_loop_1.clone(), vec![ScriptInput::InputG1P(four_g), ScriptInput::InputG1P(g)]));
+
+        let script_loop_2 = script! {
             OP_IF
-                { G1Projective::copy(2) }
+                OP_IF
+                    { G1Projective::copy(1) }
+                OP_ELSE
+                    { G1Projective::copy(3) }
+                OP_ENDIF
                 OP_TRUE
             OP_ELSE
-                OP_FALSE
+                OP_IF
+                    { G1Projective::copy(2) }
+                    OP_TRUE
+                OP_ELSE
+                    OP_FALSE
+                OP_ENDIF
             OP_ENDIF
-        OP_ENDIF
-        OP_IF
-            { G1Projective::add() }
-        OP_ENDIF
-
-        { G1Projective::toaltstack() }
-        { G1Projective::drop() }
-        { G1Projective::drop() }
-        { G1Projective::drop() }
-        { G1Projective::fromaltstack() }
-        { G1Projective::equalverify() }
-        OP_TRUE
-    };
-
-    for i in 0..(Fr::N_BITS / 2) {
-        scripts_and_inputs.push((script_loop.clone(), vec![ScriptInput::InputG1P(g1_projs[i as usize + 1]), ScriptInput::InputG1P(p), ScriptInput::InputG1P(two_p), ScriptInput::InputG1P(three_p), ScriptInput::InputG1P(g1_projs[i as usize]), ScriptInput::InputBit(bits[2 * i as usize]), ScriptInput::InputBit(bits[2 * i as usize + 1])]));
+            OP_IF
+                { G1Projective::add() }
+            OP_ENDIF
+    
+            { G1Projective::toaltstack() }
+            { G1Projective::drop() }
+            { G1Projective::drop() }
+            { G1Projective::drop() }
+            { G1Projective::fromaltstack() }
+            { G1Projective::equalverify() }
+            OP_TRUE
+        };
+        scripts_and_inputs.push((script_loop_2.clone(), vec![ScriptInput::InputG1P(g1_projs[i as usize + 1]), ScriptInput::InputG1P(p), ScriptInput::InputG1P(two_p), ScriptInput::InputG1P(three_p), ScriptInput::InputG1P(four_g), ScriptInput::InputBit(bits[2 * i as usize]), ScriptInput::InputBit(bits[2 * i as usize + 1])]));
     }
 
     scripts_and_inputs
 }
 
-pub fn g1_projective_mul_scripts(g1: ark_bn254::G1Projective) -> Vec<Script> {
+pub fn g1_projective_mul_scripts() -> Vec<Script> {
     let mut scripts = Vec::new();
-
-    let p = g1;
-    let two_p = p + p;
-    let three_p = p + p + p;
-
-    let mut g1_projs = vec![ark_bn254::G1Projective::zero()];
 
     let script_initial = script! {
         { Fr::decode_montgomery() }
@@ -304,43 +296,44 @@ pub fn g1_projective_mul_scripts(g1: ark_bn254::G1Projective) -> Vec<Script> {
     };
     scripts.push(script_initial);
 
-    let script_loop = script! {
-        OP_TOALTSTACK OP_TOALTSTACK
-
-        { G1Projective::double() }
-        { G1Projective::double() }
-
-        OP_FROMALTSTACK OP_FROMALTSTACK
-        OP_IF
-            OP_IF
-                { G1Projective::copy(1) }
-            OP_ELSE
-                { G1Projective::copy(3) }
-            OP_ENDIF
+    for i in 0..(Fr::N_BITS / 2) {
+        let script_loop_1 = script! {
+            { G1Projective::double() }
+            { G1Projective::double() }
+            { G1Projective::equalverify() }
             OP_TRUE
-        OP_ELSE
+        };
+        scripts.push(script_loop_1.clone());
+
+        let script_loop_2 = script! {
             OP_IF
-                { G1Projective::copy(2) }
+                OP_IF
+                    { G1Projective::copy(1) }
+                OP_ELSE
+                    { G1Projective::copy(3) }
+                OP_ENDIF
                 OP_TRUE
             OP_ELSE
-                OP_FALSE
+                OP_IF
+                    { G1Projective::copy(2) }
+                    OP_TRUE
+                OP_ELSE
+                    OP_FALSE
+                OP_ENDIF
             OP_ENDIF
-        OP_ENDIF
-        OP_IF
-            { G1Projective::add() }
-        OP_ENDIF
-
-        { G1Projective::toaltstack() }
-        { G1Projective::drop() }
-        { G1Projective::drop() }
-        { G1Projective::drop() }
-        { G1Projective::fromaltstack() }
-        { G1Projective::equalverify() }
-        OP_TRUE
-    };
-
-    for i in 0..(Fr::N_BITS / 2) {
-        scripts.push(script_loop.clone());
+            OP_IF
+                { G1Projective::add() }
+            OP_ENDIF
+    
+            { G1Projective::toaltstack() }
+            { G1Projective::drop() }
+            { G1Projective::drop() }
+            { G1Projective::drop() }
+            { G1Projective::fromaltstack() }
+            { G1Projective::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(script_loop_2.clone());
     }
 
     scripts
@@ -389,7 +382,12 @@ pub fn g1_projective_mul_inputs(g1: ark_bn254::G1Projective, scalar: ark_bn254::
     inputs.push(inputs_bits);
 
     for i in 0..(Fr::N_BITS / 2) {
-        inputs.push(vec![ScriptInput::InputG1P(g1_projs[i as usize + 1]), ScriptInput::InputG1P(p), ScriptInput::InputG1P(two_p), ScriptInput::InputG1P(three_p), ScriptInput::InputG1P(g1_projs[i as usize]), ScriptInput::InputBit(bits[2 * i as usize]), ScriptInput::InputBit(bits[2 * i as usize + 1])]);
+        let g = g1_projs[i as usize];
+        let four_g = g.double().double();
+
+        inputs.push(vec![ScriptInput::InputG1P(four_g), ScriptInput::InputG1P(g)]);
+
+        inputs.push(vec![ScriptInput::InputG1P(g1_projs[i as usize + 1]), ScriptInput::InputG1P(p), ScriptInput::InputG1P(two_p), ScriptInput::InputG1P(three_p), ScriptInput::InputG1P(four_g), ScriptInput::InputBit(bits[2 * i as usize]), ScriptInput::InputBit(bits[2 * i as usize + 1])]);
     }
 
     inputs
@@ -1500,7 +1498,7 @@ pub fn groth16_scripts(vk: VerifyingKey<ark_bn254::Bn254>) -> Vec<Script> {
     let base1: ark_bn254::G1Projective = vk.gamma_abc_g1[0].into();
     let base2: ark_bn254::G1Projective = vk.gamma_abc_g1[1].into();
 
-    scripts.extend(g1_projective_mul_scripts(base2));
+    scripts.extend(g1_projective_mul_scripts());
 
     let msm_addition_script = script! {
         { g1_projective_push(base1) }
