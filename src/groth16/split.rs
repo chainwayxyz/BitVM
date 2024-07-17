@@ -22,6 +22,41 @@ use num_bigint::BigUint;
 use num_traits::One;
 use num_traits::Zero;
 
+fn g1p_push(g1p: ark_bn254::G1Projective) -> Script {
+    script! {
+        { Fq::push_u32_le(&BigUint::from(g1p.x).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g1p.y).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g1p.z).to_u32_digits()) }
+    }
+}
+
+fn g1a_push(g1a: ark_bn254::G1Affine) -> Script {
+    script! {
+        { Fq::push_u32_le(&BigUint::from(g1a.x).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g1a.y).to_u32_digits()) }
+    }
+}
+
+fn g2p_push(g2p: ark_bn254::G2Projective) -> Script {
+    script! {
+        { Fq::push_u32_le(&BigUint::from(g2p.x.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g2p.x.c1).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g2p.y.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g2p.y.c1).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g2p.z.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g2p.z.c1).to_u32_digits()) }
+    }
+}
+
+fn g2a_push(g2a: ark_bn254::G2Affine) -> Script {
+    script! {
+        { Fq::push_u32_le(&BigUint::from(g2a.x.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g2a.x.c1).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g2a.y.c0).to_u32_digits()) }
+        { Fq::push_u32_le(&BigUint::from(g2a.y.c1).to_u32_digits()) }
+    }
+}
+
 // script inputs can be Fq12, Fq6, Fq2, Fq, Fr, G1Projective, G1Affine, G2Projective, G2Affine, bit
 #[derive(Clone)]
 pub enum ScriptInput {
@@ -56,27 +91,16 @@ impl ScriptInput {
                 { Fr::push_u32_le(&BigUint::from(*fr).to_u32_digits()) }
             },
             ScriptInput::G1P(g1p) => script! {
-                { Fq::push_u32_le(&BigUint::from(g1p.x).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g1p.y).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g1p.z).to_u32_digits()) }
+                { g1p_push(*g1p) }
             },
             ScriptInput::G1A(g1a) => script! {
-                { Fq::push_u32_le(&BigUint::from(g1a.x).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g1a.y).to_u32_digits()) }
+                { g1a_push(*g1a) }
             },
             ScriptInput::G2P(g2p) => script! {
-                { Fq::push_u32_le(&BigUint::from(g2p.x.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.x.c1).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.y.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.y.c1).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.z.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2p.z.c1).to_u32_digits()) }
+                { g2p_push(*g2p) }
             },
             ScriptInput::G2A(g2a) => script! {
-                { Fq::push_u32_le(&BigUint::from(g2a.x.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2a.x.c1).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2a.y.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(g2a.y.c1).to_u32_digits()) }
+                { g2a_push(*g2a) }
             },
             ScriptInput::Bit(b) => script! {
                 { *b }
@@ -85,34 +109,34 @@ impl ScriptInput {
     }
 }
 
-fn g1_projective_mul_scripts() -> Vec<Script> {
+fn g1_projective_mul_scripts(g1: ark_bn254::G1Projective) -> Vec<Script> {
     let mut scripts = Vec::new();
 
-    let script_initial_s1 = script! {
+    let p = g1;
+    let two_p = p + p;
+    let three_p = p + p + p;
+
+    let script_initial = script! {
         { Fr::decode_montgomery() }
         { Fr::convert_to_le_bits() }
 
         for i in (0..Fr::N_BITS).rev() {
             { i + 1 } OP_ROLL OP_EQUALVERIFY
         }
-
-        { G1Projective::roll(2) }
-        { G1Projective::roll(2) }
-        { G1Projective::add() }
-        { G1Projective::equalverify() }
         OP_TRUE
     };
-    scripts.push(script_initial_s1);
-
-    let script_initial_s2 = script! {
-        { G1Projective::roll(1) }
-        { G1Projective::double() }
-        { G1Projective::equalverify() }
-        OP_TRUE
-    };
-    scripts.push(script_initial_s2);
+    scripts.push(script_initial);
 
     for i in 0..(Fr::N_BITS / 2) {
+        if i == 0 {
+            let script_loop_0 = script! {
+                { G1Projective::push_zero() }
+                { G1Projective::equalverify() }
+                OP_TRUE
+            };
+            scripts.push(script_loop_0);
+        }
+
         let script_loop_1 = script! {
             { G1Projective::double() }
             { G1Projective::double() }
@@ -124,14 +148,14 @@ fn g1_projective_mul_scripts() -> Vec<Script> {
         let script_loop_2 = script! {
             OP_IF
                 OP_IF
-                    { G1Projective::copy(1) }
+                    { g1p_push(three_p) }
                 OP_ELSE
-                    { G1Projective::copy(3) }
+                    { g1p_push(p) }
                 OP_ENDIF
                 OP_TRUE
             OP_ELSE
                 OP_IF
-                    { G1Projective::copy(2) }
+                    { g1p_push(two_p) }
                     OP_TRUE
                 OP_ELSE
                     OP_FALSE
@@ -141,11 +165,6 @@ fn g1_projective_mul_scripts() -> Vec<Script> {
                 { G1Projective::add() }
             OP_ENDIF
     
-            { G1Projective::toaltstack() }
-            { G1Projective::drop() }
-            { G1Projective::drop() }
-            { G1Projective::drop() }
-            { G1Projective::fromaltstack() }
             { G1Projective::equalverify() }
             OP_TRUE
         };
@@ -190,22 +209,24 @@ fn g1_projective_mul_inputs(g1: ark_bn254::G1Projective, scalar: ark_bn254::Fr, 
 
     assert_eq!(q, *g1_projs.last().unwrap());
 
-    let mut inputs_bits = vec![ScriptInput::G1P(p), ScriptInput::G1P(two_p), ScriptInput::G1P(three_p)];
+    let mut inputs_bits = vec![];
     for b in bits {
         inputs_bits.push(ScriptInput::Bit(*b));
     }
     inputs_bits.push(ScriptInput::Fr(a));
     inputs.push(inputs_bits);
 
-    inputs.push(vec![ScriptInput::G1P(p), ScriptInput::G1P(two_p)]);
-
     for i in 0..(Fr::N_BITS / 2) {
         let g = g1_projs[i as usize];
         let four_g = g.double().double();
 
+        if i == 0 {
+            inputs.push(vec![ScriptInput::G1P(g)]);
+        }
+
         inputs.push(vec![ScriptInput::G1P(four_g), ScriptInput::G1P(g)]);
 
-        inputs.push(vec![ScriptInput::G1P(g1_projs[i as usize + 1]), ScriptInput::G1P(p), ScriptInput::G1P(two_p), ScriptInput::G1P(three_p), ScriptInput::G1P(four_g), ScriptInput::Bit(bits[2 * i as usize]), ScriptInput::Bit(bits[2 * i as usize + 1])]);
+        inputs.push(vec![ScriptInput::G1P(g1_projs[i as usize + 1]), ScriptInput::G1P(four_g), ScriptInput::Bit(bits[2 * i as usize]), ScriptInput::Bit(bits[2 * i as usize + 1])]);
     }
 
     inputs
@@ -803,7 +824,7 @@ pub fn groth16_scripts(vk: VerifyingKey<ark_bn254::Bn254>) -> Vec<Script> {
     let base1: ark_bn254::G1Projective = vk.gamma_abc_g1[0].into();
     let base2: ark_bn254::G1Projective = vk.gamma_abc_g1[1].into();
 
-    scripts.extend(g1_projective_mul_scripts());
+    scripts.extend(g1_projective_mul_scripts(base2));
 
     let msm_addition_script = script! {
         { Fq::push_u32_le(&BigUint::from(base1.x).to_u32_digits()) }
