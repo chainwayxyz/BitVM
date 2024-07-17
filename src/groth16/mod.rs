@@ -6,5 +6,4 @@ pub mod offchain_checker;
 mod test;
 pub mod verifier;
 
-#[cfg(test)]
 pub mod split;
