@@ -3,6 +3,7 @@ use crate::bn254::fq::Fq;
 use crate::bn254::fq2::Fq2;
 use crate::bn254::fq6::Fq6;
 use crate::bn254::fr::Fr;
+use crate::bn254::utils::ScriptInput;
 use crate::treepp::{script, Script};
 use ark_ff::Fp12Config;
 use num_bigint::BigUint;
@@ -101,6 +102,59 @@ impl Fq12 {
             { Fq6::add(18, 12)}
             { Fq6::sub(12, 0) }
         }
+    }
+
+    // scripts and the function for calculating corresponding inputs for verifying a*b=c where a, b, c are Fq12
+    pub fn mul_verify() -> (Vec<Script>, fn(ark_bn254::Fq12, ark_bn254::Fq12, ark_bn254::Fq12) -> Vec<Vec<ScriptInput>>) {
+        let mut scripts = Vec::new();
+
+        // inputs: ax, bx, d
+        // checks d=ax*bx
+        let script1 = script! {
+            { Fq6::mul(6, 0) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(script1);
+
+        // inputs: ay, by, e 
+        // checks e=ay*by
+        let script2 = script! {
+            { Fq6::mul(6, 0) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(script2);
+
+        // inputs: a, b, d, e, c 
+        // checks cx=d+eß, cy=ax*by+ay*bx=(ax+ay)*(bx+by)-(d+e)
+        let script3 = script! {
+            { Fq6::add(42, 36) }
+            { Fq6::add(36, 30) }
+            { Fq6::mul(6, 0) }
+            { Fq6::copy(24) }
+            { Fq6::copy(24) }
+            { Fq12::mul_fq6_by_nonresidue() }
+            { Fq6::add(6, 0) }
+            { Fq6::add(30, 24) }
+            { Fq6::sub(12, 0) }
+            { Fq12::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(script3);
+
+        fn calculate_inputs(a: ark_bn254::Fq12, b: ark_bn254::Fq12, c: ark_bn254::Fq12) -> Vec<Vec<ScriptInput>> {
+            let mut inputs = Vec::new();
+
+            let d = a.c0 * b.c0;
+            inputs.push(vec![ScriptInput::Fq6(d), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(b.c0)]);
+            let e = a.c1 * b.c1;
+            inputs.push(vec![ScriptInput::Fq6(e), ScriptInput::Fq6(a.c1), ScriptInput::Fq6(b.c1)]);
+            inputs.push(vec![ScriptInput::Fq6(a.c0), ScriptInput::Fq6(a.c1), ScriptInput::Fq6(b.c0), ScriptInput::Fq6(b.c1), ScriptInput::Fq6(d), ScriptInput::Fq6(e), ScriptInput::Fq12(c)]);
+            inputs
+        }
+
+        (scripts, calculate_inputs)
     }
 
     pub fn mul_cpt(mut a: u32, mut b: u32) -> Script {

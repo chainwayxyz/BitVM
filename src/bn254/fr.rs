@@ -1,4 +1,11 @@
 use crate::bn254::fp254impl::Fp254Impl;
+use crate::bn254::curves::G1Projective;
+use crate::bn254::utils::{g1p_push, ScriptInput};
+use crate::treepp::{script, Script};
+use num_traits::Zero;
+use num_bigint::BigUint;
+use ark_ec::Group;
+use std::ops::Mul;
 
 pub struct Fr;
 
@@ -29,6 +36,132 @@ impl Fp254Impl for Fr {
         "10216f7ba065e00de81ac1e7808072c9b8114d6d7de87adb16a0a73150000001";
     type ConstantType = ark_bn254::Fr;
 
+}
+
+impl Fr {
+    // scripts and the function for calculating corresponding inputs for verifying a*P=Q where P is a constant G1, a is a scalar Fr, and Q is a G1
+    pub fn mul_by_constant_g1_verify(g1: ark_bn254::G1Projective) -> (Vec<Script>, fn(ark_bn254::G1Projective, ark_bn254::Fr, ark_bn254::G1Projective) -> Vec<Vec<ScriptInput>>) {
+        let mut scripts = Vec::new();
+
+        let p = g1;
+        let two_p = p + p;
+        let three_p = p + p + p;
+
+        let script_initial = script! {
+            { Fr::decode_montgomery() }
+            { Fr::convert_to_le_bits() }
+
+            for i in (0..Fr::N_BITS).rev() {
+                { i + 1 } OP_ROLL OP_EQUALVERIFY
+            }
+            OP_TRUE
+        };
+        scripts.push(script_initial);
+
+        for i in 0..(Fr::N_BITS / 2) {
+            if i == 0 {
+                let script_loop_0 = script! {
+                    { G1Projective::push_zero() }
+                    { G1Projective::equalverify() }
+                    OP_TRUE
+                };
+                scripts.push(script_loop_0);
+            }
+
+            let script_loop_1 = script! {
+                { G1Projective::double() }
+                { G1Projective::double() }
+                { G1Projective::equalverify() }
+                OP_TRUE
+            };
+            scripts.push(script_loop_1.clone());
+
+            let script_loop_2 = script! {
+                OP_IF
+                    OP_IF
+                        { g1p_push(three_p) }
+                    OP_ELSE
+                        { g1p_push(p) }
+                    OP_ENDIF
+                    OP_TRUE
+                OP_ELSE
+                    OP_IF
+                        { g1p_push(two_p) }
+                        OP_TRUE
+                    OP_ELSE
+                        OP_FALSE
+                    OP_ENDIF
+                OP_ENDIF
+                OP_IF
+                    { G1Projective::add() }
+                OP_ENDIF
+        
+                { G1Projective::equalverify() }
+                OP_TRUE
+            };
+            scripts.push(script_loop_2.clone());
+        }
+
+        fn calculate_inputs(g1: ark_bn254::G1Projective, scalar: ark_bn254::Fr, result: ark_bn254::G1Projective) -> Vec<Vec<ScriptInput>> {
+            let mut inputs = Vec::new();
+
+            let a = scalar;
+            let p = g1;
+            let two_p = p + p;
+            let three_p = p + p + p;
+            let q = p.mul(a);
+
+            assert_eq!(q, result);
+
+            let bits = BigUint::from(a).to_bytes_le().iter().map(|x| (0..8).map(|i| {(1 << i) & x > 0}).collect()).collect::<Vec<Vec<bool>>>().into_iter().flatten().rev().map(|x| if x {1} else {0}).collect::<Vec<usize>>();
+            let bits = bits.split_at(2).1;
+
+            let mut g1_projs = vec![ark_bn254::G1Projective::zero()];
+
+            for i in 0..(Fr::N_BITS / 2) {
+                let t = 2 * bits[2 * i as usize] + bits[2 * i as usize + 1];
+                let four_last = g1_projs.last().unwrap().double().double();
+                if t == 3 {
+                    g1_projs.push(four_last + three_p);
+                }
+                else if t == 2 {
+                    g1_projs.push(four_last + two_p);
+                }
+                else if t == 1 {
+                    g1_projs.push(four_last + p);
+                }
+                else {
+                    g1_projs.push(four_last);
+                }
+            }
+
+            assert_eq!(q, *g1_projs.last().unwrap());
+
+            let mut inputs_bits = vec![];
+            for b in bits {
+                inputs_bits.push(ScriptInput::Bit(*b));
+            }
+            inputs_bits.push(ScriptInput::Fr(a));
+            inputs.push(inputs_bits);
+
+            for i in 0..(Fr::N_BITS / 2) {
+                let g = g1_projs[i as usize];
+                let four_g = g.double().double();
+
+                if i == 0 {
+                    inputs.push(vec![ScriptInput::G1P(g)]);
+                }
+
+                inputs.push(vec![ScriptInput::G1P(four_g), ScriptInput::G1P(g)]);
+
+                inputs.push(vec![ScriptInput::G1P(g1_projs[i as usize + 1]), ScriptInput::G1P(four_g), ScriptInput::Bit(bits[2 * i as usize]), ScriptInput::Bit(bits[2 * i as usize + 1])]);
+            }
+
+            inputs
+        }
+
+        (scripts, calculate_inputs)
+    }
 }
 
 #[cfg(test)]
