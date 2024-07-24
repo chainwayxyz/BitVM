@@ -119,6 +119,12 @@ pub fn execute_script(script: treepp::Script) -> ExecuteInfo {
             break;
         }
     }
+
+    for (i, a) in exec.stack().iter_str().enumerate() {
+        println!("stack[{}]: {:?}", i, a);
+    }
+    println!("");
+    
     let res = exec.result().unwrap();
     ExecuteInfo {
         success: res.success,
