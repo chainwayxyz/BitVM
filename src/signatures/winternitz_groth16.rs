@@ -197,18 +197,24 @@ mod test {
 
     #[test]
     fn test_winternitz_fq() {
+        // verify ab + c = d
+        // ab = e, e + c = d
         let mut prng = ChaCha20Rng::seed_from_u64(0);
 
         let a_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
         let b_sk_bytes = hex_decode("b70213ef9871ba987bdb987e3b623b60982be094").unwrap();
         let c_sk_bytes = hex_decode("c0eb2ba9810975befa90db8923b19823ba097344").unwrap();
+        let d_sk_bytes = hex_decode("9b87d409bae90105656de83247896ba787862378").unwrap();
+        let e_sk_bytes = hex_decode("0eb2ba9810982ce17ac6de8390ba90723eb908f9").unwrap();
 
         let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
         let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
 
         let a_fq = ark_bn254::Fq::rand(&mut prng);
         let b_fq = ark_bn254::Fq::rand(&mut prng);
-        let c_fq = a_fq * b_fq;
+        let c_fq = ark_bn254::Fq::rand(&mut prng);
+        let d_fq = a_fq * b_fq + c_fq;
+        let e_fq = a_fq * b_fq; // intermediate step
 
         let a_biguint = BigUint::from(a_fq).mul(r.clone()).rem(p.clone());
         let a_digits = u254_to_digits(a_biguint);
@@ -219,11 +225,45 @@ mod test {
         let c_biguint = BigUint::from(c_fq).mul(r.clone()).rem(p.clone());
         let c_digits = u254_to_digits(c_biguint);
 
-        let script = script! {
-            // inputs
-            { sign_digits(c_sk_bytes.clone(), c_digits) }
+        let d_biguint = BigUint::from(d_fq).mul(r.clone()).rem(p.clone());
+        let d_digits = u254_to_digits(d_biguint);
+
+        let e_biguint = BigUint::from(e_fq).mul(r.clone()).rem(p.clone());
+        let e_digits = u254_to_digits(e_biguint);
+
+        let commit_script_inputs = script! {
             { sign_digits(a_sk_bytes.clone(), a_digits) }
             { sign_digits(b_sk_bytes.clone(), b_digits) }
+            { sign_digits(c_sk_bytes.clone(), c_digits) }
+            { sign_digits(d_sk_bytes.clone(), d_digits) }
+            { sign_digits(e_sk_bytes.clone(), e_digits) }
+        };
+
+        let commit_script = script! {
+            { commit_script_inputs }
+            { checksig_verify(e_sk_bytes.clone()) }
+            for _ in 0..64 { OP_DROP }
+            { checksig_verify(d_sk_bytes.clone()) }
+            for _ in 0..64 { OP_DROP }
+            { checksig_verify(c_sk_bytes.clone()) }
+            for _ in 0..64 { OP_DROP }
+            { checksig_verify(b_sk_bytes.clone()) }
+            for _ in 0..64 { OP_DROP }
+            { checksig_verify(a_sk_bytes.clone()) }
+            for _ in 0..64 { OP_DROP }
+            OP_TRUE
+        };
+
+        println!("commit script size: {:?}", commit_script.len());
+
+        let disprove_script1_inputs = script! {
+            { sign_digits(e_sk_bytes.clone(), e_digits) }
+            { sign_digits(a_sk_bytes.clone(), a_digits) }
+            { sign_digits(b_sk_bytes.clone(), b_digits) }
+        };
+
+        let disprove_script1 = script! {
+            { disprove_script1_inputs }
             
             // check sig b
             { checksig_verify(b_sk_bytes.clone()) }
@@ -235,8 +275,8 @@ mod test {
             { Fq::from_digits() }
             { Fq::toaltstack() }
 
-            // check sig c
-            { checksig_verify(c_sk_bytes.clone()) }
+            // check sig e
+            { checksig_verify(e_sk_bytes.clone()) }
             { Fq::from_digits() }
 
             { Fq::fromaltstack() }
@@ -244,11 +284,58 @@ mod test {
 
             { Fq::mul() }
             { Fq::equalverify(1, 0) }
+            // OP_NOT
 
             OP_TRUE
         };
 
-        let exec_result = execute_script(script);
+        let disprove_script2_inputs = script! {
+            { sign_digits(d_sk_bytes.clone(), d_digits) }
+            { sign_digits(c_sk_bytes.clone(), c_digits) }
+            { sign_digits(e_sk_bytes.clone(), e_digits) }
+        };
+
+        let disprove_script2 = script! {
+            { disprove_script2_inputs }
+            
+            // check sig e
+            { checksig_verify(e_sk_bytes.clone()) }
+            { Fq::from_digits() }
+            { Fq::toaltstack() }
+
+            // check sig c
+            { checksig_verify(c_sk_bytes.clone()) }
+            { Fq::from_digits() }
+            { Fq::toaltstack() }
+
+            // check sig d
+            { checksig_verify(d_sk_bytes.clone()) }
+            { Fq::from_digits() }
+
+            { Fq::fromaltstack() }
+            { Fq::fromaltstack() }
+
+            { Fq::add(1, 0) }
+            { Fq::equalverify(1, 0) }
+            // OP_NOT
+            
+            OP_TRUE
+        };
+
+        let s = script! {
+            { checksig_verify(e_sk_bytes.clone()) }
+            { Fq::from_digits() }
+        };
+
+        println!("check sig and from digits size: {:?}", s.len());
+
+        let exec_result = execute_script(commit_script);
+        assert!(exec_result.success);
+
+        let exec_result = execute_script(disprove_script1);
+        assert!(exec_result.success);
+
+        let exec_result = execute_script(disprove_script2);
         assert!(exec_result.success);
     }
 }
