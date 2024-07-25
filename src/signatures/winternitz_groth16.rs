@@ -135,22 +135,40 @@ pub fn digits_to_bytes() -> Script {
 #[cfg(test)]
 mod test {
     use super::{sign_digits, checksig_verify, digits_to_bytes, LOG_D, D, N0, N1, N};
+    use ark_ff::UniformRand;
     use hex::decode as hex_decode;
-    use crate::treepp::*;
+    use num_bigint::BigUint;
+    use rand_chacha::ChaCha20Rng;
+    use rand::SeedableRng;
+    use crate::{bigint::U254, bn254::{fp254impl::Fp254Impl, fq::Fq}, treepp::*};
+    use num_traits::Num;
+    use std::ops::{Mul, Rem};
+
+    fn u254_to_digits(a: BigUint) -> [u8; N0 as usize] {
+        let mut digits = [0_u8; N0 as usize];
+        for (i, byte) in a.to_bytes_le().iter().enumerate() {
+            let (x, y) = (byte % 16, byte / 16);
+            digits[2 * i] = x;
+            digits[2 * i + 1] = y;
+        }
+        digits
+    }
 
     #[test]
     fn test_winternitz() {
         println!("LOGD: {:?}, D: {:?}", LOG_D, D);
         println!("N0: {:?}, N1: {:?}, N = N0 + N1: {:?}", N0, N1, N);
 
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
         let sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
 
-        let message_digits: [u8; N0 as usize] = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 7, 7, 7, 7, 7,
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 7, 7, 7, 7, 7,
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 7, 7, 7, 7, 7,
-            1, 2, 3, 4, 
-        ];
+        let message_fq = ark_bn254::Fq::rand(&mut prng);
+        let message_biguint = BigUint::from(message_fq);
+
+        println!("message bytes: {:?}", message_biguint.to_bytes_le());
+        println!("message digits: {:?}", u254_to_digits(message_biguint.clone()));
+        let message_digits = u254_to_digits(message_biguint);
 
         let script = script! {
             { sign_digits(sk_bytes.clone(), message_digits) }
@@ -165,42 +183,69 @@ mod test {
             { sign_digits(sk_bytes.clone(), message_digits) }
             { checksig_verify(sk_bytes.clone()) }
             { digits_to_bytes() }
+            for i in 0..31 {
+                { i + 1 } OP_ROLL
+            }
+            { U254::from_bytes() }
+            { U254::push_u32_le(&BigUint::from(message_fq).to_u32_digits()) }
+            { U254::equal(1, 0) }
+        };
 
-            0x21 OP_EQUALVERIFY
-            0x43 OP_EQUALVERIFY
-            0x65 OP_EQUALVERIFY
-            0x87 OP_EQUALVERIFY
-            0xA9 OP_EQUALVERIFY
-            0xCB OP_EQUALVERIFY
-            0xED OP_EQUALVERIFY
-            0x7F OP_EQUALVERIFY
-            0x77 OP_EQUALVERIFY
-            0x77 OP_EQUALVERIFY
+        let exec_result = execute_script(script);
+        assert!(exec_result.success);
+    }
 
-            0x21 OP_EQUALVERIFY
-            0x43 OP_EQUALVERIFY
-            0x65 OP_EQUALVERIFY
-            0x87 OP_EQUALVERIFY
-            0xA9 OP_EQUALVERIFY
-            0xCB OP_EQUALVERIFY
-            0xED OP_EQUALVERIFY
-            0x7F OP_EQUALVERIFY
-            0x77 OP_EQUALVERIFY
-            0x77 OP_EQUALVERIFY
+    #[test]
+    fn test_winternitz_fq() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
 
-            0x21 OP_EQUALVERIFY
-            0x43 OP_EQUALVERIFY
-            0x65 OP_EQUALVERIFY
-            0x87 OP_EQUALVERIFY
-            0xA9 OP_EQUALVERIFY
-            0xCB OP_EQUALVERIFY
-            0xED OP_EQUALVERIFY
-            0x7F OP_EQUALVERIFY
-            0x77 OP_EQUALVERIFY
-            0x77 OP_EQUALVERIFY
+        let a_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
+        let b_sk_bytes = hex_decode("b70213ef9871ba987bdb987e3b623b60982be094").unwrap();
+        let c_sk_bytes = hex_decode("c0eb2ba9810975befa90db8923b19823ba097344").unwrap();
 
-            0x21 OP_EQUALVERIFY
-            0x43 OP_EQUAL
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+
+        let a_fq = ark_bn254::Fq::rand(&mut prng);
+        let b_fq = ark_bn254::Fq::rand(&mut prng);
+        let c_fq = a_fq * b_fq;
+
+        let a_biguint = BigUint::from(a_fq).mul(r.clone()).rem(p.clone());
+        let a_digits = u254_to_digits(a_biguint);
+
+        let b_biguint = BigUint::from(b_fq).mul(r.clone()).rem(p.clone());
+        let b_digits = u254_to_digits(b_biguint);
+
+        let c_biguint = BigUint::from(c_fq).mul(r.clone()).rem(p.clone());
+        let c_digits = u254_to_digits(c_biguint);
+
+        let script = script! {
+            // inputs
+            { sign_digits(c_sk_bytes.clone(), c_digits) }
+            { sign_digits(a_sk_bytes.clone(), a_digits) }
+            { sign_digits(b_sk_bytes.clone(), b_digits) }
+            
+            // check sig b
+            { checksig_verify(b_sk_bytes.clone()) }
+            { U254::from_digits() }
+            { U254::toaltstack() }
+
+            // check sig a
+            { checksig_verify(a_sk_bytes.clone()) }
+            { U254::from_digits() }
+            { U254::toaltstack() }
+
+            // check sig c
+            { checksig_verify(c_sk_bytes.clone()) }
+            { U254::from_digits() }
+            
+            { U254::fromaltstack() }
+            { U254::fromaltstack() }
+
+            { Fq::mul() }
+            { Fq::equalverify(1, 0) }
+
+            OP_TRUE
         };
 
         let exec_result = execute_script(script);

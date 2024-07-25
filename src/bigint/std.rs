@@ -228,6 +228,11 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
 
     pub fn from_digits() -> Script {
         script! {
+            // reverse digits
+            for i in 0..63 {
+                { i + 1 } OP_ROLL
+            }
+
             for _ in 0..56 { OP_TOALTSTACK }
             // b0, b1, b2, b3, b4, b5, b6, b7
 
