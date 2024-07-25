@@ -225,6 +225,12 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
         }
     }
 
+    pub fn from_digits() -> Script {
+        script! {
+            // .
+        }
+    }
+
     /// Zip the top two u{16N} elements
     /// input:  a0 ... a{N-1} b0 ... b{N-1}
     /// output: a0 b0 ... ... a{N-1} b{N-1}
@@ -693,6 +699,35 @@ mod test {
                 { byte }
             }
             { U254::from_bytes() }
+            { U254::equal(1, 0) }
+        };
+        let exec_result = execute_script(script);
+        assert!(exec_result.success);
+    }
+
+    #[test]
+    fn test_from_digits() {
+        println!("U254.from_digits: {} bytes", U254::from_digits().len());
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a: BigUint = prng.sample(RandomBits::new(254));
+        let mut a_digits = Vec::new();
+
+        for byte in a.to_bytes_le() {
+            let (x, y) = (byte % 16, byte / 16);
+            a_digits.push(x);
+            a_digits.push(y);
+        }
+
+        println!("a bytes: {:?}", a.to_bytes_le());
+        println!("a digits: {:?}", a_digits);
+
+        let script = script! {
+            { U254::push_u32_le(&a.to_u32_digits()) }
+            for digit in a_digits {
+                { digit }
+            }
+            { U254::from_digits() }
             { U254::equal(1, 0) }
         };
         let exec_result = execute_script(script);
