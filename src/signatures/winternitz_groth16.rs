@@ -227,20 +227,20 @@ mod test {
             
             // check sig b
             { checksig_verify(b_sk_bytes.clone()) }
-            { U254::from_digits() }
-            { U254::toaltstack() }
+            { Fq::from_digits() }
+            { Fq::toaltstack() }
 
             // check sig a
             { checksig_verify(a_sk_bytes.clone()) }
-            { U254::from_digits() }
-            { U254::toaltstack() }
+            { Fq::from_digits() }
+            { Fq::toaltstack() }
 
             // check sig c
             { checksig_verify(c_sk_bytes.clone()) }
-            { U254::from_digits() }
-            
-            { U254::fromaltstack() }
-            { U254::fromaltstack() }
+            { Fq::from_digits() }
+
+            { Fq::fromaltstack() }
+            { Fq::fromaltstack() }
 
             { Fq::mul() }
             { Fq::equalverify(1, 0) }

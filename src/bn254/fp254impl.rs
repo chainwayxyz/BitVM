@@ -92,6 +92,9 @@ pub trait Fp254Impl {
     fn convert_to_le_bits_toaltstack() -> Script { U254::convert_to_le_bits_toaltstack() }
 
     #[inline]
+    fn from_digits() -> Script { U254::from_digits() }
+
+    #[inline]
     fn push_modulus() -> Script { U254::push_hex(Self::MODULUS) }
 
     #[inline]
