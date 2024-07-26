@@ -7,6 +7,12 @@ const N0:    u32 = 64;                  // number of digits of the message
 const N1:    u32 = 4;                   // number of digits of the checksum.  N1 = ⌈log_{D+1}(D*N0)⌉ + 1
 const N:     u32 = N0 + N1 as u32;      // total number of digits to be signed
 
+// const LOG_D: u32 = 4;                   // bits per digit
+// const D:     u32 = (1 << LOG_D) - 1;    // digits are base d+1
+// const N0:    u32 = 64 * 12;             // number of digits of the message
+// const N1:    u32 = 5;                   // number of digits of the checksum.  N1 = ⌈log_{D+1}(D*N0)⌉ + 1
+// const N:     u32 = N0 + N1 as u32;      // total number of digits to be signed
+
 pub fn sign_digits(sk: Vec<u8>, message_digits: [u8; N0 as usize]) -> Script {
     let mut digits = to_digits::<{N1 as usize}>(checksum(message_digits)).to_vec();
     digits.append(&mut message_digits.to_vec());
@@ -135,12 +141,14 @@ pub fn digits_to_bytes() -> Script {
 #[cfg(test)]
 mod test {
     use super::{sign_digits, checksig_verify, digits_to_bytes, LOG_D, D, N0, N1, N};
-    use ark_ff::UniformRand;
+    use ark_ff::{Field, UniformRand};
+    use ark_std::{end_timer, start_timer};
     use hex::decode as hex_decode;
     use num_bigint::BigUint;
     use rand_chacha::ChaCha20Rng;
     use rand::SeedableRng;
-    use crate::{bigint::U254, bn254::{fp254impl::Fp254Impl, fq::Fq}, treepp::*};
+    use sha2::{Digest, Sha256};
+    use crate::{bigint::U254, bn254::{fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, utils::fq12_push}, execute_script_without_stack_limit, hash::{blake3::{blake3, blake3_var_length}, sha256::sha256}, treepp::*};
     use num_traits::Num;
     use std::ops::{Mul, Rem};
 
@@ -152,6 +160,17 @@ mod test {
             digits[2 * i + 1] = y;
         }
         digits
+    }
+
+    fn exe_script(script: Script) -> bool {
+        let size = script.len();
+        let start = start_timer!(|| "execute_script");
+        let exec_result = execute_script_without_stack_limit(script);
+        let max_stack_items = exec_result.stats.max_nb_stack_items;
+        println!("script size: {:?}", size);
+        println!("max stack items: {:?}", max_stack_items);
+        end_timer!(start);
+        return exec_result.success;
     }
 
     #[test]
@@ -329,13 +348,164 @@ mod test {
 
         println!("check sig and from digits size: {:?}", s.len());
 
-        let exec_result = execute_script(commit_script);
-        assert!(exec_result.success);
+        assert!(exe_script(commit_script));
+        assert!(exe_script(disprove_script1));
+        assert!(exe_script(disprove_script2));
+    }
 
-        let exec_result = execute_script(disprove_script1);
-        assert!(exec_result.success);
+    // #[test]
+    // fn test_winternitz_fq12() {
+    //     // verify ab + c = d
+    //     // ab = e, e + c = d
+    //     let mut prng = ChaCha20Rng::seed_from_u64(0);
 
-        let exec_result = execute_script(disprove_script2);
-        assert!(exec_result.success);
+    //     let a_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
+    //     let b_sk_bytes = hex_decode("b70213ef9871ba987bdb987e3b623b60982be094").unwrap();
+    //     let c_sk_bytes = hex_decode("c0eb2ba9810975befa90db8923b19823ba097344").unwrap();
+    //     let d_sk_bytes = hex_decode("9b87d409bae90105656de83247896ba787862378").unwrap();
+    //     let e_sk_bytes = hex_decode("0eb2ba9810982ce17ac6de8390ba90723eb908f9").unwrap();
+
+    //     let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+    //     let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+
+    //     let a_fq12 = ark_bn254::Fq12::rand(&mut prng);
+    //     let b_fq12 = ark_bn254::Fq12::rand(&mut prng);
+    //     let c_fq12 = ark_bn254::Fq12::rand(&mut prng);
+    //     let d_fq12 = a_fq12 * b_fq12 + c_fq12;
+    //     let e_fq12 = a_fq12 * b_fq12; // intermediate step
+
+    //     let mut a_digits = [0_u8; 64 * 12];
+    //     for (i, x) in a_fq12.to_base_prime_field_elements().enumerate() {
+    //         let x_digits = u254_to_digits(BigUint::from(x).mul(r.clone()).rem(p.clone()));
+    //         for j in 0..64 {
+    //             a_digits[64 * i + j] = x_digits[j];
+    //         }
+    //     }
+
+    //     let script = script! {
+    //         { sign_digits(a_sk_bytes.clone(), a_digits) }
+    //         { checksig_verify(a_sk_bytes) }
+    //         { Fq12::from_digits() }
+    //         { fq12_push(a_fq12) }
+    //         { Fq12::equalverify() }
+    //         OP_TRUE
+    //     };
+
+    //     assert!(exe_script(script));
+    // }
+
+    #[test]
+    fn test_winternitz_fq12_hash() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
+
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+
+        let a_fq12 = ark_bn254::Fq12::rand(&mut prng);
+
+        let mut a_digits = [0_u8; 64 * 12];
+        for (i, x) in a_fq12.to_base_prime_field_elements().enumerate() {
+            let x_digits = u254_to_digits(BigUint::from(x).mul(r.clone()).rem(p.clone()));
+            for j in 0..64 {
+                a_digits[64 * i + j] = x_digits[j];
+            }
+        }
+
+        let mut a_bytes = [0_u8; 32 * 12];
+        for (i, x) in a_fq12.to_base_prime_field_elements().enumerate() {
+            let x_bytes = BigUint::from(x).to_bytes_le();
+            for j in 0..32 {
+                a_bytes[32 * i + j] = x_bytes[j];
+            }
+        }
+        a_bytes.reverse();
+
+        let mut hasher_sha256 = Sha256::new();
+        hasher_sha256.update(&a_bytes);
+        let result_sha256 = hasher_sha256.finalize();
+        let mut result_sha256_digits = [0_u8; 64];
+        for (i, byte) in result_sha256.iter().enumerate() {
+            let (u, v) = (byte % 16, byte / 16);
+            result_sha256_digits[2 * i] = u;
+            result_sha256_digits[2 * i + 1] = v;
+        }
+
+        let mut hasher_blake3 = blake3::Hasher::new();
+        hasher_blake3.update(&a_bytes);
+        let result_blake3 = hasher_blake3.finalize();
+        let mut result_blake3_digits = [0_u8; 64];
+        for (i, byte) in result_blake3.as_bytes().iter().enumerate() {
+            let (u, v) = (byte % 16, byte / 16);
+            result_blake3_digits[2 * i] = u;
+            result_blake3_digits[2 * i + 1] = v;
+        }
+
+        let script_inputs_blake3 = script! {
+            { sign_digits(a_sk_bytes.clone(), result_blake3_digits) }
+            { fq12_push(a_fq12) }
+        };
+
+        let script_blake3 = script! {
+            { script_inputs_blake3.clone() }
+            for _ in 0..11 {
+                { Fq::toaltstack() }
+            }
+            { Fq::convert_to_be_bytes() }
+            for _ in 0..11 {
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes() }
+            }
+            { blake3_var_length(32 * 12) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            { checksig_verify(a_sk_bytes.clone()) }
+            { digits_to_bytes() }
+            for _ in 0..8 {
+                for _ in 0..4 {
+                    OP_FROMALTSTACK
+                }
+                4 OP_ROLL OP_EQUALVERIFY 3 OP_ROLL OP_EQUALVERIFY 2 OP_ROLL OP_EQUALVERIFY OP_EQUALVERIFY
+            }
+            OP_TRUE
+        };
+
+        assert!(exe_script(script_blake3));
+
+        let script_inputs_sha256 = script! {
+            { sign_digits(a_sk_bytes.clone(), result_sha256_digits) }
+            { fq12_push(a_fq12) }
+        };
+
+        let script_sha256 = script! {
+            { script_inputs_sha256 }
+            for _ in 0..11 {
+                { Fq::toaltstack() }
+            }
+            { Fq::convert_to_be_bytes() }
+            for _ in 0..11 {
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes() }
+            }
+            { sha256(32 * 12) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            { checksig_verify(a_sk_bytes) }
+            { digits_to_bytes() }
+            for _ in 0..32 {
+                OP_FROMALTSTACK
+            }
+            for i in (2..33).rev() {
+                { i } OP_ROLL OP_EQUALVERIFY
+            }
+            OP_EQUALVERIFY
+
+            OP_TRUE
+        };
+
+        assert!(exe_script(script_sha256));
     }
 }
