@@ -7,12 +7,6 @@ const N0:    u32 = 64;                  // number of digits of the message
 const N1:    u32 = 4;                   // number of digits of the checksum.  N1 = ⌈log_{D+1}(D*N0)⌉ + 1
 const N:     u32 = N0 + N1 as u32;      // total number of digits to be signed
 
-// const LOG_D: u32 = 4;                   // bits per digit
-// const D:     u32 = (1 << LOG_D) - 1;    // digits are base d+1
-// const N0:    u32 = 64 * 12;             // number of digits of the message
-// const N1:    u32 = 5;                   // number of digits of the checksum.  N1 = ⌈log_{D+1}(D*N0)⌉ + 1
-// const N:     u32 = N0 + N1 as u32;      // total number of digits to be signed
-
 pub fn sign_digits(sk: Vec<u8>, message_digits: [u8; N0 as usize]) -> Script {
     let mut digits = to_digits::<{N1 as usize}>(checksum(message_digits)).to_vec();
     digits.append(&mut message_digits.to_vec());
@@ -72,6 +66,50 @@ pub fn to_digits<const DIGIT_COUNT: usize>(mut number: u32) -> [u8; DIGIT_COUNT]
         digits[i] = digit as u8;
     }
     digits
+}
+
+pub fn reveal(sk: Vec<u8>) -> Script {
+    script! {
+        for digit_index in (0..N).rev() {
+            { D }
+            OP_MIN
+
+            OP_DUP
+            OP_TOALTSTACK
+            OP_TOALTSTACK
+
+            for _ in 0..D {
+                OP_DUP OP_HASH160
+            }
+
+            OP_FROMALTSTACK
+            OP_PICK
+            { digit_pk(sk.clone(), digit_index) }
+            OP_EQUALVERIFY
+
+            for _ in 0..(D + 1) / 2 {
+                OP_2DROP
+            }
+        }
+
+        OP_FROMALTSTACK OP_NEGATE
+        for _ in 1..N0 {
+            OP_FROMALTSTACK OP_SUB
+        }
+        { D * N0 }
+        OP_ADD
+
+        OP_FROMALTSTACK
+        for _ in 0..N1 - 1 {
+            for _ in 0..LOG_D {
+                OP_DUP OP_ADD
+            }
+            OP_FROMALTSTACK
+            OP_ADD
+        }
+
+        OP_EQUALVERIFY
+    }
 }
 
 pub fn checksig_verify(sk: Vec<u8>) -> Script {
@@ -148,9 +186,9 @@ mod test {
     use rand_chacha::ChaCha20Rng;
     use rand::{Rng, SeedableRng};
     use sha2::{Digest, Sha256};
-    use crate::{bigint::U254, bn254::{fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, fq6::Fq6, utils::{fq12_push, fq6_push}}, execute_script_without_stack_limit, hash::{blake3::{blake3, blake3_var_length}, sha256::sha256}, treepp::*};
+    use crate::{bigint::U254, bn254::{fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, fq6::Fq6, utils::{fq12_push, fq6_push}}, execute_script_without_stack_limit, hash::{blake3::{blake3, blake3_var_length}, sha256::sha256}, signatures::winternitz_groth16::reveal, treepp::*};
     use num_traits::Num;
-    use std::ops::{Mul, Rem};
+    use std::{iter::zip, ops::{Mul, Rem}};
 
     fn u254_to_digits(a: BigUint) -> [u8; N0 as usize] {
         let mut digits = [0_u8; N0 as usize];
@@ -171,6 +209,40 @@ mod test {
         println!("max stack items: {:?}", max_stack_items);
         end_timer!(start);
         return exec_result.success;
+    }
+
+    #[test]
+    fn test_winternitz_multiple_fq() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+        let fq_count = 6;
+        let sk_bytes = (0..fq_count).map(|_| {let sk: [u8; 32] = rand::thread_rng().gen(); sk.to_vec()}).collect::<Vec<Vec<u8>>>();
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+        let fq_list = (0..fq_count).map(|_| {ark_bn254::Fq::rand(&mut prng)}).collect::<Vec<_>>();
+        let digits_list = fq_list.iter().map(|fq| {u254_to_digits(BigUint::from(*fq).mul(r.clone()).rem(p.clone()))}).collect::<Vec<_>>();
+
+        let commit_script_inputs = script! {
+            for (sk, digits) in zip(sk_bytes.clone(), digits_list) {
+                { sign_digits(sk, digits) }
+            }
+        };
+
+        let commit_script = script! {
+            for sk in sk_bytes.iter().rev() {
+                { reveal(sk.clone()) }
+            }
+            OP_TRUE
+        };
+        let n = commit_script.len();
+        println!("commit script size ({:?} Fq): {:?}", fq_count, n);
+        println!("you can put {:?} of these in a single block, so in a single block, you can commit to {:?} Fq", 4_000_000 / n, (4_000_000 / n) * fq_count);
+
+        let commit_script_test = script! {
+            { commit_script_inputs }
+            { commit_script }
+        };
+        
+        assert!(exe_script(commit_script_test));
     }
 
     #[test]
