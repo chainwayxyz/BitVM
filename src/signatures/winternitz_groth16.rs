@@ -146,9 +146,9 @@ mod test {
     use hex::decode as hex_decode;
     use num_bigint::BigUint;
     use rand_chacha::ChaCha20Rng;
-    use rand::SeedableRng;
+    use rand::{Rng, SeedableRng};
     use sha2::{Digest, Sha256};
-    use crate::{bigint::U254, bn254::{fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, utils::fq12_push}, execute_script_without_stack_limit, hash::{blake3::{blake3, blake3_var_length}, sha256::sha256}, treepp::*};
+    use crate::{bigint::U254, bn254::{fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, fq6::Fq6, utils::{fq12_push, fq6_push}}, execute_script_without_stack_limit, hash::{blake3::{blake3, blake3_var_length}, sha256::sha256}, treepp::*};
     use num_traits::Num;
     use std::ops::{Mul, Rem};
 
@@ -216,6 +216,66 @@ mod test {
 
     #[test]
     fn test_winternitz_fq() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
+
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+
+        let a_fq = ark_bn254::Fq::rand(&mut prng);
+
+        let a_biguint = BigUint::from(a_fq).mul(r.clone()).rem(p.clone());
+        let a_digits = u254_to_digits(a_biguint);
+
+        let commit_script_inputs = script! {
+            { sign_digits(a_sk_bytes.clone(), a_digits) }
+        };
+
+        let commit_script = script! {
+            { commit_script_inputs }
+            { checksig_verify(a_sk_bytes.clone()) }
+            for _ in 0..64 { OP_DROP }
+            OP_TRUE
+        };
+
+        println!("commit script size: {:?}", commit_script.len());
+
+        assert!(exe_script(commit_script));
+    }
+
+    #[test]
+    fn test_winternitz_fq_minimal_signature() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
+
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+
+        let a_fq = ark_bn254::Fq::rand(&mut prng);
+
+        let a_biguint = BigUint::from(a_fq).mul(r.clone()).rem(p.clone());
+        let a_digits = u254_to_digits(a_biguint);
+
+        let commit_script_inputs = script! {
+            { sign_digits(a_sk_bytes.clone(), a_digits) }
+        };
+
+        let commit_script = script! {
+            { commit_script_inputs }
+            // { checksig_verify(a_sk_bytes.clone()) }
+            // for _ in 0..64 { OP_DROP }
+            // OP_TRUE
+        };
+
+        println!("commit script size: {:?}", commit_script.len());
+
+        assert!(exe_script(commit_script));
+    }
+
+    #[test]
+    fn test_winternitz_fq_op() {
         // verify ab + c = d
         // ab = e, e + c = d
         let mut prng = ChaCha20Rng::seed_from_u64(0);
@@ -507,5 +567,472 @@ mod test {
         };
 
         assert!(exe_script(script_sha256));
+    }
+
+    #[test]
+    fn test_winternitz_fq12_hash_mul() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let abc_hash_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
+
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+
+        let a_fq12 = ark_bn254::Fq12::rand(&mut prng);
+        let b_fq12 = ark_bn254::Fq12::rand(&mut prng);
+        let c_fq12 = a_fq12 * b_fq12;
+
+        // let mut a_digits = [0_u8; 64 * 12];
+        // for (i, x) in a_fq12.to_base_prime_field_elements().enumerate() {
+        //     let x_digits = u254_to_digits(BigUint::from(x).mul(r.clone()).rem(p.clone()));
+        //     for j in 0..64 {
+        //         a_digits[64 * i + j] = x_digits[j];
+        //     }
+        // }
+
+        let mut a_bytes = [0_u8; 32 * 12];
+        for (i, x) in a_fq12.to_base_prime_field_elements().enumerate() {
+            let mut x_bytes = BigUint::from(x).to_bytes_le();
+            for _ in 0..(32 - x_bytes.len()) {
+                x_bytes.push(0);
+            }
+            for j in 0..32 {
+                a_bytes[32 * i + j] = x_bytes[j];
+            }
+        }
+        a_bytes.reverse();
+
+        let mut b_bytes = [0_u8; 32 * 12];
+        for (i, x) in b_fq12.to_base_prime_field_elements().enumerate() {
+            let mut x_bytes = BigUint::from(x).to_bytes_le();
+            for _ in 0..(32 - x_bytes.len()) {
+                x_bytes.push(0);
+            }
+            for j in 0..32 {
+                b_bytes[32 * i + j] = x_bytes[j];
+            }
+        }
+        b_bytes.reverse();
+
+        let mut c_bytes = [0_u8; 32 * 12];
+        for (i, x) in c_fq12.to_base_prime_field_elements().enumerate() {
+            let mut x_bytes = BigUint::from(x).to_bytes_le();
+            for _ in 0..(32 - x_bytes.len()) {
+                x_bytes.push(0);
+            }
+            for j in 0..32 {
+                c_bytes[32 * i + j] = x_bytes[j];
+            }
+        }
+        c_bytes.reverse();
+
+        let abc_bytes: Vec<u8> = [a_bytes, b_bytes, c_bytes].concat();
+
+        let mut hasher_sha256 = Sha256::new();
+        hasher_sha256.update(&abc_bytes);
+        let result_sha256 = hasher_sha256.finalize();
+        let mut result_sha256_digits = [0_u8; 64];
+        for (i, byte) in result_sha256.iter().enumerate() {
+            let (u, v) = (byte % 16, byte / 16);
+            result_sha256_digits[2 * i] = u;
+            result_sha256_digits[2 * i + 1] = v;
+        }
+
+        let mut hasher_blake3 = blake3::Hasher::new();
+        hasher_blake3.update(&a_bytes);
+        let result_blake3 = hasher_blake3.finalize();
+        let mut a_blake3 = result_blake3.as_bytes().to_vec();
+        a_blake3.extend(b_bytes);
+
+        let mut hasher_blake3 = blake3::Hasher::new();
+        hasher_blake3.update(&a_blake3);
+        let result_blake3 = hasher_blake3.finalize();
+        let mut ab_blake3 = result_blake3.as_bytes().to_vec();
+        ab_blake3.extend(c_bytes);
+
+        let mut hasher_blake3 = blake3::Hasher::new();
+        hasher_blake3.update(&ab_blake3);
+        let result_blake3 = hasher_blake3.finalize();
+        let abc_blake3 = result_blake3.as_bytes().to_vec();
+
+        let mut abc_blake3_digits = [0_u8; 64];
+        for (i, byte) in abc_blake3.iter().enumerate() {
+            let (u, v) = (byte % 16, byte / 16);
+            abc_blake3_digits[2 * i] = u;
+            abc_blake3_digits[2 * i + 1] = v;
+        }
+
+        let script_inputs_blake3 = script! {
+            { sign_digits(abc_hash_sk_bytes.clone(), abc_blake3_digits) }
+            { fq12_push(c_fq12) }
+            { fq12_push(b_fq12) }
+            { fq12_push(a_fq12) }
+        };
+
+        let script_blake3 = script! {
+            { script_inputs_blake3.clone() }
+            for _ in 0..11 {
+                { Fq::toaltstack() }
+            }
+            { Fq::convert_to_be_bytes() }
+            for _ in 0..11 {
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes() }
+            }
+            { blake3_var_length(32 * 12) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..8 {
+                for _ in 0..4 {
+                    OP_FROMALTSTACK
+                }
+                OP_SWAP 2 OP_ROLL 3 OP_ROLL
+            }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..11 {
+                { Fq::toaltstack() }
+            }
+            { Fq::convert_to_be_bytes() }
+            for _ in 0..11 {
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes() }
+            }
+            for _ in 0..32 {
+                OP_FROMALTSTACK
+            }
+            for i in 0..31 {
+                { i + 1} OP_ROLL
+            }
+            { blake3_var_length(32 * 12 + 32) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..8 {
+                for _ in 0..4 {
+                    OP_FROMALTSTACK
+                }
+                OP_SWAP 2 OP_ROLL 3 OP_ROLL
+            }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..11 {
+                { Fq::toaltstack() }
+            }
+            { Fq::convert_to_be_bytes() }
+            for _ in 0..11 {
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes() }
+            }
+            for _ in 0..32 {
+                OP_FROMALTSTACK
+            }
+            for i in 0..31 {
+                { i + 1} OP_ROLL
+            }
+            { blake3_var_length(32 * 12 + 32) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..8 {
+                for _ in 0..4 {
+                    OP_FROMALTSTACK
+                }
+                OP_SWAP 2 OP_ROLL 3 OP_ROLL
+            }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            { checksig_verify(abc_hash_sk_bytes.clone()) }
+            { digits_to_bytes() }
+            for _ in 0..32 {
+                OP_FROMALTSTACK
+                OP_EQUALVERIFY
+            }
+            OP_TRUE
+        };
+
+        assert!(exe_script(script_blake3));
+    }
+
+    #[test]
+    fn test_winternitz_fq6_hash_mul() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let abc_hash_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
+
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+
+        let a_fq6 = ark_bn254::Fq6::rand(&mut prng);
+        let b_fq6 = ark_bn254::Fq6::rand(&mut prng);
+        let c_fq6 = a_fq6 * b_fq6;
+
+        let mut a_bytes = [0_u8; 32 * 6];
+        for (i, x) in a_fq6.to_base_prime_field_elements().enumerate() {
+            let mut x_bytes = BigUint::from(x).to_bytes_le();
+            for _ in 0..(32 - x_bytes.len()) {
+                x_bytes.push(0);
+            }
+            for j in 0..32 {
+                a_bytes[32 * i + j] = x_bytes[j];
+            }
+        }
+        a_bytes.reverse();
+
+        let mut b_bytes = [0_u8; 32 * 6];
+        for (i, x) in b_fq6.to_base_prime_field_elements().enumerate() {
+            let mut x_bytes = BigUint::from(x).to_bytes_le();
+            for _ in 0..(32 - x_bytes.len()) {
+                x_bytes.push(0);
+            }
+            for j in 0..32 {
+                b_bytes[32 * i + j] = x_bytes[j];
+            }
+        }
+        b_bytes.reverse();
+
+        let mut c_bytes = [0_u8; 32 * 6];
+        for (i, x) in c_fq6.to_base_prime_field_elements().enumerate() {
+            let mut x_bytes = BigUint::from(x).to_bytes_le();
+            for _ in 0..(32 - x_bytes.len()) {
+                x_bytes.push(0);
+            }
+            for j in 0..32 {
+                c_bytes[32 * i + j] = x_bytes[j];
+            }
+        }
+        c_bytes.reverse();
+
+        let abc_bytes: Vec<u8> = [a_bytes, b_bytes, c_bytes].concat();
+
+        let mut hasher_sha256 = Sha256::new();
+        hasher_sha256.update(&abc_bytes);
+        let result_sha256 = hasher_sha256.finalize();
+        let mut result_sha256_digits = [0_u8; 64];
+        for (i, byte) in result_sha256.iter().enumerate() {
+            let (u, v) = (byte % 16, byte / 16);
+            result_sha256_digits[2 * i] = u;
+            result_sha256_digits[2 * i + 1] = v;
+        }
+
+        let mut hasher_blake3 = blake3::Hasher::new();
+        hasher_blake3.update(&a_bytes);
+        let result_blake3 = hasher_blake3.finalize();
+        let mut a_blake3 = result_blake3.as_bytes().to_vec();
+        a_blake3.extend(b_bytes);
+
+        let mut hasher_blake3 = blake3::Hasher::new();
+        hasher_blake3.update(&a_blake3);
+        let result_blake3 = hasher_blake3.finalize();
+        let mut ab_blake3 = result_blake3.as_bytes().to_vec();
+        ab_blake3.extend(c_bytes);
+
+        let mut hasher_blake3 = blake3::Hasher::new();
+        hasher_blake3.update(&ab_blake3);
+        let result_blake3 = hasher_blake3.finalize();
+        let abc_blake3 = result_blake3.as_bytes().to_vec();
+
+        let mut abc_blake3_digits = [0_u8; 64];
+        for (i, byte) in abc_blake3.iter().enumerate() {
+            let (u, v) = (byte % 16, byte / 16);
+            abc_blake3_digits[2 * i] = u;
+            abc_blake3_digits[2 * i + 1] = v;
+        }
+
+        let script_inputs_blake3 = script! {
+            { sign_digits(abc_hash_sk_bytes.clone(), abc_blake3_digits) }
+            { fq6_push(c_fq6) }
+            { fq6_push(b_fq6) }
+            { fq6_push(a_fq6) }
+        };
+
+        let script_blake3 = script! {
+            { script_inputs_blake3.clone() }
+            { Fq6::copy(0) }
+            { Fq6::toaltstack() }
+            { Fq6::copy(6) }
+            { Fq6::toaltstack() }
+            { Fq6::copy(12) }
+            { Fq6::toaltstack() }
+            for _ in 0..5 {
+                { Fq::toaltstack() }
+            }
+            { Fq::convert_to_be_bytes() }
+            for _ in 0..5 {
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes() }
+            }
+            { blake3_var_length(32 * 6) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..8 {
+                for _ in 0..4 {
+                    OP_FROMALTSTACK
+                }
+                OP_SWAP 2 OP_ROLL 3 OP_ROLL
+            }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..5 {
+                { Fq::toaltstack() }
+            }
+            { Fq::convert_to_be_bytes() }
+            for _ in 0..5 {
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes() }
+            }
+            for _ in 0..32 {
+                OP_FROMALTSTACK
+            }
+            for i in 0..31 {
+                { i + 1} OP_ROLL
+            }
+            { blake3_var_length(32 * 6 + 32) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..8 {
+                for _ in 0..4 {
+                    OP_FROMALTSTACK
+                }
+                OP_SWAP 2 OP_ROLL 3 OP_ROLL
+            }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..5 {
+                { Fq::toaltstack() }
+            }
+            { Fq::convert_to_be_bytes() }
+            for _ in 0..5 {
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes() }
+            }
+            for _ in 0..32 {
+                OP_FROMALTSTACK
+            }
+            for i in 0..31 {
+                { i + 1} OP_ROLL
+            }
+            { blake3_var_length(32 * 6 + 32) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 0..8 {
+                for _ in 0..4 {
+                    OP_FROMALTSTACK
+                }
+                OP_SWAP 2 OP_ROLL 3 OP_ROLL
+            }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            { checksig_verify(abc_hash_sk_bytes.clone()) }
+            { digits_to_bytes() }
+            for _ in 0..32 {
+                OP_FROMALTSTACK
+                OP_EQUALVERIFY
+            }
+            { Fq6::fromaltstack() }
+            { Fq6::fromaltstack() }
+            { Fq6::fromaltstack() }
+            { Fq6::mul(6, 0) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+
+        assert!(exe_script(script_blake3));
+    }
+
+    #[test]
+    fn test_winternitz_fq12_mul() {
+        // ab=c
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a_sk_bytes = (0..12).map(|_| {
+            let sk: [u8; 32] = rand::thread_rng().gen();
+            sk.to_vec()
+        }).collect::<Vec<Vec<u8>>>();
+        let b_sk_bytes = (0..12).map(|_| {
+            let sk: [u8; 32] = rand::thread_rng().gen();
+            sk.to_vec()
+        }).collect::<Vec<Vec<u8>>>();
+        let c_sk_bytes = (0..12).map(|_| {
+            let sk: [u8; 32] = rand::thread_rng().gen();
+            sk.to_vec()
+        }).collect::<Vec<Vec<u8>>>();
+
+        let a_fq12 = ark_bn254::Fq12::rand(&mut prng);
+        let b_fq12 = ark_bn254::Fq12::rand(&mut prng);
+        let c_fq12 = a_fq12 * b_fq12;
+
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+
+        let mut a_digits = Vec::new();
+        for fq in a_fq12.to_base_prime_field_elements() {
+            let fq_biguint = BigUint::from(fq).mul(r.clone()).rem(p.clone());
+            let fq_digits = u254_to_digits(fq_biguint);
+            a_digits.push(fq_digits);
+        }
+
+        let mut b_digits = Vec::new();
+        for fq in b_fq12.to_base_prime_field_elements() {
+            let fq_biguint = BigUint::from(fq).mul(r.clone()).rem(p.clone());
+            let fq_digits = u254_to_digits(fq_biguint);
+            b_digits.push(fq_digits);
+        }
+
+        let mut c_digits = Vec::new();
+        for fq in c_fq12.to_base_prime_field_elements() {
+            let fq_biguint = BigUint::from(fq).mul(r.clone()).rem(p.clone());
+            let fq_digits = u254_to_digits(fq_biguint);
+            c_digits.push(fq_digits);
+        }
+
+        let script_inputs = script! {
+            for (i, fq_digits) in c_digits.iter().enumerate() {
+                { sign_digits(c_sk_bytes[i].clone(), *fq_digits) }
+            }
+            for (i, fq_digits) in b_digits.iter().enumerate() {
+                { sign_digits(b_sk_bytes[i].clone(), *fq_digits) }
+            }
+            for (i, fq_digits) in a_digits.iter().enumerate() {
+                { sign_digits(a_sk_bytes[i].clone(), *fq_digits) }
+            }
+        };
+
+        let script = script! {
+            { script_inputs }
+            for i in 0..12 {
+                { checksig_verify(a_sk_bytes[11 - i].clone()) }
+                { Fq::from_digits() }
+                { Fq::toaltstack() }
+            }
+            for i in 0..12 {
+                { checksig_verify(b_sk_bytes[11 - i].clone()) }
+                { Fq::from_digits() }
+                { Fq::toaltstack() }
+            }
+            for i in 0..12 {
+                { checksig_verify(c_sk_bytes[11 - i].clone()) }
+                { Fq::from_digits() }
+                { Fq::toaltstack() }
+            }
+            { Fq12::fromaltstack() }
+            { Fq12::fromaltstack() }
+            { Fq12::fromaltstack() }
+            { Fq12::mul(12, 0) }
+            { Fq12::equalverify() }
+            OP_TRUE
+        };
+
+        assert!(exe_script(script));
     }
 }
