@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 use crate::treepp::*;
 use bitcoin::hashes::{hash160, Hash};
 
@@ -19,12 +21,65 @@ pub fn sign_digits(sk: Vec<u8>, message_digits: [u8; N0 as usize]) -> Script {
     }
 }
 
+pub fn sign_digits_compressed(sk: Vec<u8>, message_digits: [u8; N0 as usize]) -> Script {
+    let mut digits = to_digits::<{N1 as usize}>(checksum(message_digits)).to_vec();
+    digits.append(&mut message_digits.to_vec());
+    digits.reverse();
+
+    script! {
+        for i in 0..N {
+            { winternitz_signature(sk.clone(), i, digits[i as usize]) }
+        }
+        { compress_digits(digits) }
+    }
+}
+
+pub fn compress_digits(digits: Vec<u8>) -> Script {
+    let mut compressed_digits: Vec<u32> = Vec::new();
+    let compress_size: usize = 28 / LOG_D as usize;
+
+    let mut index = 0;
+    while index < digits.len() {
+        let mut val: u32 = 0;
+        for j in index..(min(index + compress_size, digits.len())) {
+            val *= (D + 1);
+            val += digits[j] as u32;
+        }
+        compressed_digits.push(val);
+        index += compress_size; 
+
+    }
+
+    script!{
+        for compressed in compressed_digits{
+            { compressed }
+        }
+    }
+
+}
+
 pub fn checksum(message_digits: [u8; N0 as usize]) -> u32 {
     let mut sum = 0;
     for digit in message_digits {
         sum += digit as u32;
     }
     D * N0 - sum
+}
+
+
+pub fn winternitz_signature(sk: Vec<u8>, digit_index: u32, digit: u8) -> Script {
+    let sk_i = sk.into_iter().chain(std::iter::once(digit_index as u8)).collect::<Vec<u8>>();
+    let mut hash = hash160::Hash::hash(&sk_i);
+
+    for _ in 0..digit {
+        hash = hash160::Hash::hash(&hash[..]);
+    }
+
+    let hash_bytes = hash.as_byte_array().to_vec();
+
+    script! {
+        { hash_bytes }
+    }
 }
 
 pub fn digit_signature(sk: Vec<u8>, digit_index: u32, digit: u8) -> Script {
@@ -37,6 +92,7 @@ pub fn digit_signature(sk: Vec<u8>, digit_index: u32, digit: u8) -> Script {
 
     let hash_bytes = hash.as_byte_array().to_vec();
 
+    println!("{:?}", hash_bytes);
     script! {
         { hash_bytes }
         { digit }
@@ -112,6 +168,198 @@ pub fn reveal(sk: Vec<u8>) -> Script {
     }
 }
 
+pub fn u20_to_digits() -> Script {
+    script! {
+        { 1<<19 }
+        OP_SWAP
+        // 2^19 A_{19...0}
+        for _ in 0..4 {
+            OP_2DUP 
+            OP_LESSTHANOREQUAL 
+            OP_IF
+                OP_OVER OP_SUB OP_8
+            OP_ELSE
+                OP_0
+            OP_ENDIF
+            OP_TOALTSTACK
+            OP_DUP OP_ADD
+
+            OP_2DUP 
+            OP_LESSTHANOREQUAL 
+            OP_IF
+                OP_OVER OP_SUB
+                OP_FROMALTSTACK OP_4 OP_ADD OP_TOALTSTACK
+            OP_ENDIF
+            OP_DUP OP_ADD
+
+            OP_2DUP 
+            OP_LESSTHANOREQUAL 
+            OP_IF
+                OP_OVER OP_SUB
+                OP_FROMALTSTACK OP_2 OP_ADD OP_TOALTSTACK
+            OP_ENDIF
+            OP_DUP OP_ADD
+
+            OP_2DUP 
+            OP_LESSTHANOREQUAL 
+            OP_IF
+                OP_OVER OP_SUB
+                OP_FROMALTSTACK OP_1ADD OP_TOALTSTACK
+            OP_ENDIF
+            OP_DUP OP_ADD
+        }
+
+        OP_2DUP 
+        OP_LESSTHANOREQUAL 
+        OP_IF
+            OP_OVER OP_SUB OP_8
+        OP_ELSE
+            OP_0
+        OP_ENDIF
+        OP_TOALTSTACK
+        OP_DUP OP_ADD
+
+        OP_2DUP 
+        OP_LESSTHANOREQUAL 
+        OP_IF
+            OP_OVER OP_SUB
+            OP_FROMALTSTACK OP_4 OP_ADD OP_TOALTSTACK
+        OP_ENDIF
+        OP_DUP OP_ADD
+
+        OP_2DUP 
+        OP_LESSTHANOREQUAL 
+        OP_IF
+            OP_OVER OP_SUB
+            OP_FROMALTSTACK OP_2 OP_ADD OP_TOALTSTACK
+        OP_ENDIF
+
+        OP_NIP
+        OP_0NOTEQUAL
+        OP_FROMALTSTACK OP_ADD OP_TOALTSTACK
+
+    }
+}
+
+
+pub fn u28_to_digits() -> Script {
+    script! {
+        { 1<<27 }
+        OP_SWAP
+        // 2^27 A_{27...0}
+        for _ in 0..6 {
+            OP_2DUP 
+            OP_LESSTHANOREQUAL 
+            OP_IF
+                OP_OVER OP_SUB OP_8
+            OP_ELSE
+                OP_0
+            OP_ENDIF
+            OP_TOALTSTACK
+            OP_DUP OP_ADD
+
+            OP_2DUP 
+            OP_LESSTHANOREQUAL 
+            OP_IF
+                OP_OVER OP_SUB
+                OP_FROMALTSTACK OP_4 OP_ADD OP_TOALTSTACK
+            OP_ENDIF
+            OP_DUP OP_ADD
+
+            OP_2DUP 
+            OP_LESSTHANOREQUAL 
+            OP_IF
+                OP_OVER OP_SUB
+                OP_FROMALTSTACK OP_2 OP_ADD OP_TOALTSTACK
+            OP_ENDIF
+            OP_DUP OP_ADD
+
+            OP_2DUP 
+            OP_LESSTHANOREQUAL 
+            OP_IF
+                OP_OVER OP_SUB
+                OP_FROMALTSTACK OP_1ADD OP_TOALTSTACK
+            OP_ENDIF
+            OP_DUP OP_ADD
+        }
+
+        OP_2DUP 
+        OP_LESSTHANOREQUAL 
+        OP_IF
+            OP_OVER OP_SUB OP_8
+        OP_ELSE
+            OP_0
+        OP_ENDIF
+        OP_TOALTSTACK
+        OP_DUP OP_ADD
+
+        OP_2DUP 
+        OP_LESSTHANOREQUAL 
+        OP_IF
+            OP_OVER OP_SUB
+            OP_FROMALTSTACK OP_4 OP_ADD OP_TOALTSTACK
+        OP_ENDIF
+        OP_DUP OP_ADD
+
+        OP_2DUP 
+        OP_LESSTHANOREQUAL 
+        OP_IF
+            OP_OVER OP_SUB
+            OP_FROMALTSTACK OP_2 OP_ADD OP_TOALTSTACK
+        OP_ENDIF
+
+        OP_NIP
+        OP_0NOTEQUAL
+        OP_FROMALTSTACK OP_ADD OP_TOALTSTACK
+
+    }
+}
+
+pub fn checksig_verify_compressed(sk: Vec<u8>) -> Script {
+    script! {
+        for digit_index in (0..N).rev() {
+            { D }
+            OP_MIN
+
+            OP_DUP
+            OP_TOALTSTACK
+            OP_TOALTSTACK
+
+            for _ in 0..D {
+                OP_DUP OP_HASH160
+            }
+
+            OP_FROMALTSTACK
+            OP_PICK
+            { digit_pk(sk.clone(), digit_index) }
+            OP_EQUALVERIFY
+
+            for _ in 0..(D + 1) / 2 {
+                OP_2DROP
+            }
+        }
+
+        OP_FROMALTSTACK OP_DUP OP_NEGATE
+        for _ in 1..N0 {
+            OP_FROMALTSTACK OP_TUCK OP_SUB
+        }
+        { D * N0 }
+        OP_ADD
+
+        OP_FROMALTSTACK
+        for _ in 0..N1 - 1 {
+            for _ in 0..LOG_D {
+                OP_DUP OP_ADD
+            }
+            OP_FROMALTSTACK
+            OP_ADD
+        }
+
+        OP_EQUALVERIFY
+    }
+}
+
+
 pub fn checksig_verify(sk: Vec<u8>) -> Script {
     script! {
         for digit_index in (0..N).rev() {
@@ -156,6 +404,32 @@ pub fn checksig_verify(sk: Vec<u8>) -> Script {
     }
 }
 
+pub fn checksig_verify_digit(sk: Vec<u8>, digit_index: u32) -> Script {
+    script! {
+        { D }
+        OP_MIN
+
+        OP_DUP
+        OP_TOALTSTACK
+        OP_TOALTSTACK
+
+        for _ in 0..D {
+            OP_DUP OP_HASH160
+        }
+
+        OP_FROMALTSTACK
+        OP_PICK
+        { digit_pk(sk.clone(), digit_index) }
+        OP_EQUALVERIFY
+
+        for _ in 0..(D + 1) / 2 {
+            OP_2DROP
+        }
+
+        OP_FROMALTSTACK
+    }
+}
+
 pub fn digits_to_bytes() -> Script {
     script! {
         for i in 0..N0 / 2 {
@@ -178,7 +452,7 @@ pub fn digits_to_bytes() -> Script {
 
 #[cfg(test)]
 mod test {
-    use super::{sign_digits, checksig_verify, digits_to_bytes, LOG_D, D, N0, N1, N};
+    use super::{u20_to_digits, u28_to_digits, sign_digits, checksig_verify, digits_to_bytes, LOG_D, D, N0, N1, N};
     use ark_ff::{Field, UniformRand};
     use ark_std::{end_timer, start_timer};
     use hex::decode as hex_decode;
@@ -186,7 +460,7 @@ mod test {
     use rand_chacha::ChaCha20Rng;
     use rand::{Rng, SeedableRng};
     use sha2::{Digest, Sha256};
-    use crate::{bigint::U254, bn254::{fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, fq6::Fq6, utils::{fq12_push, fq6_push}}, execute_script_without_stack_limit, hash::{blake3::{blake3, blake3_var_length}, sha256::sha256}, signatures::winternitz_groth16::reveal, treepp::*};
+    use crate::{bigint::{std::OP_16MUL, U254}, bn254::{fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, fq6::Fq6, utils::{fq12_push, fq6_push}}, execute_script_without_stack_limit, hash::{blake3::{blake3, blake3_var_length}, sha256::sha256}, signatures::winternitz_groth16::{checksig_verify_digit, reveal, sign_digits_compressed}, treepp::*};
     use num_traits::Num;
     use std::{iter::zip, ops::{Mul, Rem}};
 
@@ -209,6 +483,86 @@ mod test {
         println!("max stack items: {:?}", max_stack_items);
         end_timer!(start);
         return exec_result.success;
+    }
+
+    #[test]
+    fn test_winternitz_multiple_compressed_fq() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+        let fq_count = 12;
+        let sk_bytes = (0..fq_count).map(|_| {let sk: [u8; 32] = rand::thread_rng().gen(); sk.to_vec()}).collect::<Vec<Vec<u8>>>();
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+        let fq_list = (0..fq_count).map(|_| {ark_bn254::Fq::rand(&mut prng)}).collect::<Vec<_>>();
+        let digits_list = fq_list.iter().map(|fq| {u254_to_digits(BigUint::from(*fq).mul(r.clone()).rem(p.clone()))}).collect::<Vec<_>>();
+
+        let commit_script_inputs = script! {
+            for (sk, digits) in zip(sk_bytes.clone(), digits_list) {
+                { sign_digits_compressed(sk, digits) }
+            }
+        };
+
+        let commit_script = script! {
+            for sk in sk_bytes.iter().rev() {
+                { u20_to_digits() }
+                for i in 0..5 {
+                    { 9 + i }  OP_ROLL
+                    OP_FROMALTSTACK
+                    { checksig_verify_digit(sk.clone(), 67 - i) }
+                }
+
+
+                for i in 0..9 {
+                    { 5 + i * 7 } OP_ROLL
+                    { u28_to_digits() }
+                    for j in 0..7 {
+                        { 5 + i * 6 + 8 + j }  OP_ROLL
+                        OP_FROMALTSTACK
+                        { checksig_verify_digit(sk.clone(), 62 - 7*i - j) }
+                    }
+                }
+
+                for _ in 0..4 {
+                    { 67 } OP_ROLL
+                }
+
+
+                for _ in 0..3 {
+                    OP_16MUL
+                    OP_ADD
+                }
+
+                for i in 0..64 {
+                    { i + 1 } OP_PICK 
+                    OP_ADD
+                }         
+
+                { D * N0 }
+                OP_EQUALVERIFY   
+                
+                for i in 0..63 {
+                    {i + 1} OP_ROLL
+                }
+
+                { Fq::from_digits() }
+                { Fq::toaltstack() }
+            }
+        };
+        let n = commit_script.len();
+        println!("commit script size ({:?} Fq): {:?}", fq_count, n);
+        println!("you can put {:?} of these in a single block, so in a single block, you can commit to {:?} Fq", 4_000_000 / n, (4_000_000 / n) * fq_count);
+
+        let commit_script_test = script! {
+            { commit_script_inputs }
+            { commit_script }
+            for fq in fq_list {
+                { Fq::fromaltstack() }
+                { Fq::push_u32_le(&BigUint::from(fq).to_u32_digits()) }
+                { Fq::equalverify(1, 0) }
+            }
+            OP_TRUE
+        };
+        
+        assert!(exe_script(commit_script_test));
     }
 
     #[test]
