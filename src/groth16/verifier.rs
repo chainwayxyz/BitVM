@@ -710,7 +710,7 @@ impl Verifier {
                 fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
                 // inputs.push(vec![ScriptInput::Fq12(fx), ScriptInput::Fq12(f1), ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(coeffs.1), ScriptInput::Fq2(coeffs.2), ScriptInput::G1A(p4)]);
-                inputs.extend(Pairing::ell_verify().1(f1, &coeffs, p4, fx));
+                inputs.extend(Pairing::ell_verify().1(f1, &coeffs, p4, fx).0);
                 f1 = fx;
 
                 if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1 || ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
@@ -763,7 +763,7 @@ impl Verifier {
                     fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
                     // inputs.push(vec![ScriptInput::Fq12(fx), ScriptInput::Fq12(f1), ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(coeffs.1), ScriptInput::Fq2(coeffs.2), ScriptInput::G1A(p4)]);
-                    inputs.extend(Pairing::ell_verify().1(f1, &coeffs, p4, fx));
+                    inputs.extend(Pairing::ell_verify().1(f1, &coeffs, p4, fx).0);
                     f1 = fx;
                 }
 
@@ -858,7 +858,7 @@ impl Verifier {
 
             fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
-            inputs.extend(Pairing::ell_verify().1(f, &coeffs, p4, fx));
+            inputs.extend(Pairing::ell_verify().1(f, &coeffs, p4, fx).0);
             f = fx;
 
             for j in 0..num_constant {
@@ -919,7 +919,7 @@ impl Verifier {
             fx.mul_by_034(&c0new, &c1new, &coeffs.2);
 
             // inputs.push(vec![ScriptInput::Fq12(fx), ScriptInput::Fq12(f), ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(coeffs.1), ScriptInput::Fq2(coeffs.2), ScriptInput::G1A(p4)]);
-            inputs.extend(Pairing::ell_verify().1(f, &coeffs, p4, fx));
+            inputs.extend(Pairing::ell_verify().1(f, &coeffs, p4, fx).0);
             f = fx;
 
             assert_eq!(f, hint);

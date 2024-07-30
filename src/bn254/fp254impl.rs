@@ -968,6 +968,9 @@ pub trait Fp254Impl {
         }
     }
 
+    #[inline]
+    fn from_digits() -> Script { U254::from_digits() }
+
     fn convert_to_be_bytes() -> Script {
         let build_u8_from_be_bits = |i| {
             script! {

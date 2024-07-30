@@ -9,6 +9,10 @@ use crate::bn254::utils::ScriptInput;
 use crate::treepp::*;
 use ark_ec::bn::BnConfig;
 use ark_ff::Field;
+use std::collections::HashMap;
+use std::ops::{AddAssign, SubAssign, MulAssign};
+use ark_ff::Fp6Config;
+use ark_ff::Fp12Config;
 
 pub struct Pairing;
 
@@ -623,85 +627,234 @@ impl Pairing {
     }
 
     // scripts and the function for calculating corresponding inputs for verifying 
-    pub fn ell_verify() -> (Vec<Script>, fn(ark_bn254::Fq12, &EllCoeff, ark_bn254::G1Affine, ark_bn254::Fq12) -> Vec<Vec<ScriptInput>>) {
+    pub fn ell_verify() -> (Vec<Script>, fn(ark_bn254::Fq12, &EllCoeff, ark_bn254::G1Affine, ark_bn254::Fq12) -> (Vec<Vec<ScriptInput>>, Vec<ScriptInput>)) {
         let mut scripts = Vec::new();
 
+        // inputs [new c1, coefffs.c1, p.x, new c0, coeffs.c0, p.y]
         let s1 = script! {
-            // compute the new c0
-            { Fq2::mul_by_fq(6, 0) }
+            { Fq2::mul_by_fq(1, 0) }
+            { Fq2::equalverify() }
 
-            // compute the new c1
-            { Fq2::mul_by_fq(5, 2) }
+            { Fq2::mul_by_fq(1, 0) }
+            { Fq2::equalverify() }
 
-            // roll c2
-            { Fq2::roll(4) }
-
-            // compute the new f
-            // input:
-            //   p   (12 elements)
-            //   c0  (2 elements)
-            //   c3  (2 elements)
-            //   c4  (2 elements)
-
-            // take p.c0, c0
-            { Fq6::roll(12) }
-            { Fq2::roll(10) }
-            // compute a = p.c0 * c0
-            { Fq6::mul_by_fp2() }
-            // take p.c1, c3, c4
-            { Fq6::roll(10) }
-            { Fq2::roll(14) }
-            { Fq2::roll(14) }
-            // compute b = p.c1 * (c3, c4)
-            { Fq6::mul_by_01() }
-
-            { Fq6::roll(12) }
-            { Fq6::equalverify() }
-            { Fq6::equalverify() }
             OP_TRUE
+            
         };
         scripts.push(s1);
 
+        // inputs [a.c1 = f.c0.c1 * c0, f.c0.c1, a.c0 = f.c0.c0 * c0, f.c0.c0, c0]
         let s2 = script! {
-            // compute the new c0
-            { Fq2::mul_by_fq(6, 0) }
+            { Fq2::copy(0) }
+            { Fq2::toaltstack() }
 
-            // compute the new c1
-            { Fq2::mul_by_fq(5, 2) }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
 
-            // roll c2
-            { Fq2::roll(4) }
+            { Fq2::fromaltstack() }
 
-            // compute e = p.c0 + p.c1
-            { Fq6::add(12, 6) }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
 
-            // compute c0 + c3
-            { Fq2::add(10, 8) }
-
-            // roll c4
-            { Fq2::roll(8) }
-
-            // update e = e * (c0 + c3, c4)
-            { Fq6::mul_by_01() }
-
-            // compute c0 = a + beta * b
-            { Fq6::copy(12) }
-            { Fq6::copy(12) }
-            { Fq12::mul_fq6_by_nonresidue() }
-            { Fq6::add(6, 0) }
-
-            // compute a + b
-            { Fq6::add(18, 12) }
-
-            // compute final c1 = e - (a + b)
-            { Fq6::sub(12, 0) }
-
-            { Fq12::equalverify() }
             OP_TRUE
         };
         scripts.push(s2);
 
-        fn calculate_inputs(f: ark_bn254::Fq12, constant: &EllCoeff, p: ark_bn254::G1Affine, f2: ark_bn254::Fq12) -> Vec<Vec<ScriptInput>> {
+        // inputs [c3u + c4u, c3u, c4u, a.c2 = f.c0.c2 * c0, f.c0.c2, c0]
+        let s3 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s3);
+
+        // inputs [b_b = f.c1.c1 * c4u, f.c1.c1, c4u, a_a = f.c1.c0 * c3u, f.c1.c0, c3u]
+        let s4 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s4);
+
+        // inputs [b.c0, a_a, b_b, c4u, f.c1.c1, f.c1.c2]
+        let s5 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::sub(0, 2) }
+            { Fq6::mul_fq2_by_nonresidue() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s5);
+
+        // inputs [b.c1, a_a, b_b, c3uc4u, f.c1.c0, f.c1.c1]
+        let s6 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::sub(0, 2) }
+            { Fq2::sub(0, 2) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s6);
+
+        // inputs [b.c2, a_a, b_b, c3u, f.c1.c0, f.c1.c2]
+        let s7 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::add(0, 2) }
+            { Fq2::sub(0, 2) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s7);
+
+        // inputs [e.c1, f.c0.c1, f.c1.c1, e.c0, f.c0.c0, f.c1.c0]
+        let s8 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s8);
+
+        // inputs [e.c2, f.c0.c2, f.c1.c2]
+        let s9 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s9);
+
+        // inputs [c0uc3uc4u, c4u, c0uc3u, c0u, c3u]
+        let s10 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::copy(0) }
+            { Fq2::toaltstack() }
+            { Fq2::equalverify() }
+
+            { Fq2::fromaltstack() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s10);
+
+        // inputs [b_b = e.c1 * c4u, e.c1, c4u, a_a = e.c0 * c0uc3u, e.c0, c0uc3u]
+        let s11 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s11);
+
+        // inputs [ee.c0, a_a, b_b, c4u, e.c1, e.c2]
+        let s12 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::sub(0, 2) }
+            { Fq6::mul_fq2_by_nonresidue() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s12);
+
+        // inputs [ee.c1, a_a, b_b, c0uc3uc4u, e.c0, e.c1]
+        let s13 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::sub(0, 2) }
+            { Fq2::sub(0, 2) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s13);
+
+        // inputs [ee.c2, a_a, b_b, c0uc3u, e.c0, e.c2]
+        let s14 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::add(0, 2) }
+            { Fq2::sub(0, 2) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s14);
+
+        // inputs [b_nonres, b]
+        let s15 = script! {
+            { Fq12::mul_fq6_by_nonresidue() }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s15);
+
+        // inputs [fx.c0.c1, a.c1, b_nonres.c1, fx.c0.c0, a.c0, b_nonres.c0]
+        let s16 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s16);
+
+        // inputs [fx.c0.c2, a.c2, b_nonres.c2]
+        let s17 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s17);
+
+        // inputs [fx.c1.c0, ee.c0, a.c0, b.c0]
+        let s18 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s18);
+
+        // inputs [fx.c1.c1, ee.c1, a.c1, b.c1]
+        let s19 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s19);
+
+        // inputs [fx.c1.c2, ee.c2, a.c2, b.c2]
+        let s20 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s20);
+
+        fn calculate_inputs(f: ark_bn254::Fq12, constant: &EllCoeff, p: ark_bn254::G1Affine, f2: ark_bn254::Fq12) -> (Vec<Vec<ScriptInput>>, Vec<ScriptInput>) {
             let mut inputs = Vec::new();
 
             let mut fx = f.clone();
@@ -713,23 +866,103 @@ impl Pairing {
             c1new.mul_assign_by_fp(&p.x);
 
             let (c0u, c3u, c4u) = (c0new, c1new, constant.2);
+            let c3uc4u = c3u + c4u;
 
             let a0 = f.c0.c0 * c0u;
             let a1 = f.c0.c1 * c0u;
             let a2 = f.c0.c2 * c0u;
             let a = ark_bn254::Fq6::new(a0, a1, a2);
+
+            let mut a_a = f.c1.c0;
+            let mut b_b = f.c1.c1;
+            a_a.mul_assign(c3u);
+            b_b.mul_assign(c4u);
+
             let mut b = f.c1;
             b.mul_by_01(&c3u, &c4u);
+
+            let e = f.c0 + f.c1;
+            let c0uc3u = c0u + c3u;
+            let mut ee = e.clone();
+            ee.mul_by_01(&c0uc3u, &c4u);
+
+            let mut e_a_a = e.c0;
+            let mut e_b_b = e.c1;
+            e_a_a.mul_assign(c0uc3u);
+            e_b_b.mul_assign(c4u);
+
+            let c0uc3uc4u = c0uc3u + c4u;
+
+            let mut b_nonres = b.clone();
+            ark_bn254::Fq12Config::mul_fp6_by_nonresidue_in_place(&mut b_nonres);
 
             fx.mul_by_034(&c0new, &c1new, &constant.2);
 
             assert_eq!(fx, f2);
 
-            inputs.push(vec![ScriptInput::Fq6(a), ScriptInput::Fq6(b), ScriptInput::Fq12(f), ScriptInput::Fq2(constant.0), ScriptInput::Fq2(constant.1), ScriptInput::Fq2(constant.2), ScriptInput::G1A(p)]);
+            let required_intermediate_elements = vec![ScriptInput::Fq2(f.c0.c0), ScriptInput::Fq2(f.c0.c1), ScriptInput::Fq2(f.c0.c2), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(f.c1.c2), ScriptInput::Fq2(constant.0), ScriptInput::Fq2(constant.1), ScriptInput::Fq2(constant.2), ScriptInput::Fq(p.x), ScriptInput::Fq(p.y), ScriptInput::Fq2(f2.c0.c0), ScriptInput::Fq2(f2.c0.c1), ScriptInput::Fq2(f2.c0.c2), ScriptInput::Fq2(f2.c1.c0), ScriptInput::Fq2(f2.c1.c1), ScriptInput::Fq2(f2.c1.c2), ScriptInput::Fq2(c0new), ScriptInput::Fq2(c1new), ScriptInput::Fq2(a0), ScriptInput::Fq2(a1), ScriptInput::Fq2(a2), ScriptInput::Fq2(c0u), ScriptInput::Fq2(c3u), ScriptInput::Fq2(c0uc3u), ScriptInput::Fq2(c3uc4u), ScriptInput::Fq2(c0uc3uc4u), ScriptInput::Fq2(a_a), ScriptInput::Fq2(b_b), ScriptInput::Fq2(b.c0), ScriptInput::Fq2(b.c1), ScriptInput::Fq2(b.c2), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(e.c1), ScriptInput::Fq2(e.c2), ScriptInput::Fq2(ee.c0), ScriptInput::Fq2(ee.c1), ScriptInput::Fq2(ee.c2), ScriptInput::Fq2(b_nonres.c0), ScriptInput::Fq2(b_nonres.c1), ScriptInput::Fq2(b_nonres.c2)];
 
-            inputs.push(vec![ScriptInput::Fq12(f2), ScriptInput::Fq6(a), ScriptInput::Fq6(b), ScriptInput::Fq12(f), ScriptInput::Fq2(constant.0), ScriptInput::Fq2(constant.1), ScriptInput::Fq2(constant.2), ScriptInput::G1A(p)]);
+            // s1
+            inputs.push(vec![ScriptInput::Fq2(c1new), ScriptInput::Fq2(constant.1), ScriptInput::Fq(p.x), ScriptInput::Fq2(c0new), ScriptInput::Fq2(constant.0), ScriptInput::Fq(p.y)]);
 
-            inputs
+            // s2
+            inputs.push(vec![ScriptInput::Fq2(a1), ScriptInput::Fq2(f.c0.c1), ScriptInput::Fq2(a0), ScriptInput::Fq2(f.c0.c0), ScriptInput::Fq2(c0u)]);
+
+            // s3
+            inputs.push(vec![ScriptInput::Fq2(c3uc4u), ScriptInput::Fq2(c4u), ScriptInput::Fq2(c3u), ScriptInput::Fq2(a2), ScriptInput::Fq2(f.c0.c2), ScriptInput::Fq2(c0u)]);
+
+            // s4
+            inputs.push(vec![ScriptInput::Fq2(b_b), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(c4u), ScriptInput::Fq2(a_a), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(c3u)]);
+
+            // s5
+            inputs.push(vec![ScriptInput::Fq2(b.c0), ScriptInput::Fq2(a_a), ScriptInput::Fq2(b_b), ScriptInput::Fq2(c4u), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(f.c1.c2)]);
+
+            // s6
+            inputs.push(vec![ScriptInput::Fq2(b.c1), ScriptInput::Fq2(a_a), ScriptInput::Fq2(b_b), ScriptInput::Fq2(c3uc4u), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(f.c1.c1)]);
+
+            // s7
+            inputs.push(vec![ScriptInput::Fq2(b.c2), ScriptInput::Fq2(a_a), ScriptInput::Fq2(b_b), ScriptInput::Fq2(c3u), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(f.c1.c2)]);
+
+            // s8
+            inputs.push(vec![ScriptInput::Fq2(e.c1), ScriptInput::Fq2(f.c0.c1), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(f.c0.c0), ScriptInput::Fq2(f.c1.c0)]);
+
+            // s9
+            inputs.push(vec![ScriptInput::Fq2(e.c2), ScriptInput::Fq2(f.c0.c2), ScriptInput::Fq2(f.c1.c2)]);
+
+            // s10
+            inputs.push(vec![ScriptInput::Fq2(c0uc3uc4u), ScriptInput::Fq2(c4u), ScriptInput::Fq2(c0uc3u), ScriptInput::Fq2(c0u), ScriptInput::Fq2(c3u)]);
+
+            // s11
+            inputs.push(vec![ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(e.c1), ScriptInput::Fq2(c4u), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(c0uc3u)]);
+
+            // s12
+            inputs.push(vec![ScriptInput::Fq2(ee.c0), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(c4u), ScriptInput::Fq2(e.c1), ScriptInput::Fq2(e.c2)]);
+
+            // s13
+            inputs.push(vec![ScriptInput::Fq2(ee.c1), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(c0uc3uc4u), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(e.c1)]);
+
+            // s14
+            inputs.push(vec![ScriptInput::Fq2(ee.c2), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(c0uc3u), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(e.c2)]);
+
+            // s15
+            inputs.push(vec![ScriptInput::Fq2(b_nonres.c0), ScriptInput::Fq2(b_nonres.c1), ScriptInput::Fq2(b_nonres.c2), ScriptInput::Fq2(b.c0), ScriptInput::Fq2(b.c1), ScriptInput::Fq2(b.c2)]);
+
+            // s16
+            inputs.push(vec![ScriptInput::Fq2(fx.c0.c1), ScriptInput::Fq2(a.c1), ScriptInput::Fq2(b_nonres.c1), ScriptInput::Fq2(fx.c0.c0), ScriptInput::Fq2(a.c0), ScriptInput::Fq2(b_nonres.c0)]);
+
+            // s17
+            inputs.push(vec![ScriptInput::Fq2(fx.c0.c2), ScriptInput::Fq2(a.c2), ScriptInput::Fq2(b_nonres.c2)]);
+
+            // s18
+            inputs.push(vec![ScriptInput::Fq2(fx.c1.c0), ScriptInput::Fq2(ee.c0), ScriptInput::Fq2(a.c0), ScriptInput::Fq2(b.c0)]);
+
+            // s19
+            inputs.push(vec![ScriptInput::Fq2(fx.c1.c1), ScriptInput::Fq2(ee.c1), ScriptInput::Fq2(a.c1), ScriptInput::Fq2(b.c1)]);
+
+            // s20
+            inputs.push(vec![ScriptInput::Fq2(fx.c1.c2), ScriptInput::Fq2(ee.c2), ScriptInput::Fq2(a.c2), ScriptInput::Fq2(b.c2)]);
+
+            (inputs, required_intermediate_elements)
         }
 
         (scripts, calculate_inputs)
@@ -1317,7 +1550,7 @@ mod test {
     use crate::bn254::fq12::Fq12;
     use crate::bn254::fq2::Fq2;
     use crate::bn254::pairing::Pairing;
-    use crate::bn254::utils::{fq12_push, fq2_push};
+    use crate::bn254::utils::{fq12_push, fq2_push, ScriptInput};
     use crate::{execute_script_without_stack_limit, treepp::*};
     use ark_bn254::g2::G2Affine;
     use ark_bn254::Bn254;
@@ -1327,13 +1560,61 @@ mod test {
     use ark_ec::AffineRepr;
 
     use ark_ff::Field;
-    use ark_std::{test_rng, UniformRand};
+    use ark_std::{end_timer, start_timer, test_rng, UniformRand};
     use num_bigint::BigUint;
     use num_traits::Num;
     use num_traits::One;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaCha20Rng;
+    use std::iter::zip;
     use std::str::FromStr;
+
+    fn test_script_with_inputs(script: Script, inputs: Vec<ScriptInput>) -> (bool, usize, usize) {
+        let script_test = script! {
+            for input in inputs {
+                { input.push() }
+            }
+            { script }
+        };
+        let size = script_test.len();
+        let start = start_timer!(|| "execute_script");
+        let exec_result = execute_script_without_stack_limit(script_test);
+        let max_stack_items = exec_result.stats.max_nb_stack_items;
+        end_timer!(start);
+        (exec_result.success, size, max_stack_items)
+    }
+
+    #[test]
+    fn test_ell_verify() {
+        let (ell_scripts, ell_calculate_inputs) = Pairing::ell_verify();
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a = ark_bn254::Fq12::rand(&mut prng);
+        let c0 = ark_bn254::Fq2::rand(&mut prng);
+        let c1 = ark_bn254::Fq2::rand(&mut prng);
+        let c2 = ark_bn254::Fq2::rand(&mut prng);
+        let p = ark_bn254::G1Affine::rand(&mut prng);
+
+        let b = {
+            let mut c0new = c0;
+            c0new.mul_assign_by_fp(&p.y);
+
+            let mut c1new = c1;
+            c1new.mul_assign_by_fp(&p.x);
+
+            let mut b = a;
+            b.mul_by_034(&c0new, &c1new, &c2);
+            b
+        };
+
+        let (ell_script_inputs, ell_labels) = ell_calculate_inputs(a, &(c0, c1, c2), p, b);
+
+        for (script, inputs) in zip(ell_scripts, ell_script_inputs) {
+            let (success, size, max_stack_items) = test_script_with_inputs(script, inputs);
+            assert!(success);
+            println!("size: {:?}, max stack items: {:?}", size, max_stack_items);
+        }
+    }
 
     #[test]
     fn test_ell() {
