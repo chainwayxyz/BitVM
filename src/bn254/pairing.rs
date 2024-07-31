@@ -8,7 +8,9 @@ use crate::bn254::fq6::Fq6;
 use crate::bn254::utils::ScriptInput;
 use crate::treepp::*;
 use ark_ec::bn::BnConfig;
-use ark_ff::Field;
+use ark_ff::{Field, Fp12Config};
+use num_bigint::BigUint;
+use std::ops::MulAssign;
 
 pub struct Pairing;
 
@@ -183,237 +185,145 @@ impl Pairing {
     }
 
     // scripts and the function for calculating corresponding inputs for verifying 
-    pub fn add_line_with_flag_verify(flag: bool) -> (Vec<Script>, fn(bool, ark_bn254::G2Projective, ark_bn254::Fq2, ark_bn254::Fq2) -> Vec<Vec<ScriptInput>>) {
-        let mut scripts = Vec::new();
+    pub fn add_line_with_flag_verify(flag: bool, t4: ark_bn254::G2Projective, q4x: ark_bn254::Fq2, q4y: ark_bn254::Fq2) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+        let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
+        let mut t4x = t4.clone();
+        let q4ye = if flag {q4y} else {-q4y};
+        let q4xe = q4x;
+        let theta = t4.y - &(q4ye * &t4.z);
+        let lambda = t4.x - &(q4xe * &t4.z);
+        let c = theta.square();
+        let d = lambda.square();
+        let e = lambda * &d;
+        let f = t4.z * &c;
+        let g = t4.x * &d;
+        let h = e + &f - &g.double();
+        t4x.x = lambda * &h;
+        t4x.y = theta * &(g - &h) - &(e * &t4.y);
+        t4x.z = t4.z * &e;
+        let j = theta * &q4xe - &(lambda * &q4ye);
+        let e_Ty = t4.y * e;
+        let coeffs = (lambda, -theta, j);
+
+        //inputs [c, coeffs.1(-theta), Ty, Tz, Qy]
         let s1 = script! {
-            // let theta = self.y - &(q.y * &self.z);
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy
-            { Fq2::copy(6) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, Ty
-            { Fq2::copy(2) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, Ty, Qy
             if !flag {
                 { Fq2::neg(0) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, Ty, -Qy
             }
-            { Fq2::copy(8) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, Ty, Qy, Tz
             { Fq2::mul(2, 0) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, Ty, Qy * Tz
+            { Fq2::roll(2) }
             { Fq2::sub(2, 0) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, Ty - Qy * Tz
-
-            // let lambda = self.x - &(q.x * &self.z);
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta
-            { Fq2::copy(10) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, Tx
-            { Fq2::copy(6) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, Tx, Qx
-            { Fq2::copy(10) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, Tx, Qx, Tz
-            { Fq2::mul(2, 0) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, Tx, Qx * Tz
-            { Fq2::sub(2, 0) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, Tx - Qx * Tz
-
-            // let c = theta.square();
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, lambda
-            { Fq2::copy(2) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, lambda, theta
-            { Fq2::square() }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, lambda, theta^2
-
-            // let d = lambda.square();
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, lambda, c
-            { Fq2::copy(2) }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, lambda, c, lambda
-            { Fq2::square() }
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, lambda, c, lambda^2
-            // theta, lambda, c, d, Tx, Ty, Tz, Qx, Qy, theta, lambda, c, d
-            { Fq2::toaltstack() }
-            { Fq2::toaltstack() }
-            { Fq2::toaltstack() }
-            { Fq2::toaltstack() }
-            { Fq2::drop() }
-            { Fq2::drop() }
-            { Fq2::drop() }
-            { Fq2::drop() }
-            { Fq2::drop() }
-            { Fq2::fromaltstack() }
-            { Fq2::roll(8) }
-            { Fq2::equalverify() }
-            { Fq2::fromaltstack() }
-            { Fq2::roll(6) }
-            { Fq2::equalverify() }
-            { Fq2::fromaltstack() }
+            { Fq2::copy(0) }
             { Fq2::roll(4) }
             { Fq2::equalverify() }
-            { Fq2::fromaltstack() }
+            { Fq2::square() }
             { Fq2::equalverify() }
+            
             OP_TRUE
         };
         scripts.push(s1);
+        inputs.push(vec![ScriptInput::Fq2(c), ScriptInput::Fq2(coeffs.1), ScriptInput::Fq2(t4.y), ScriptInput::Fq2(t4.z), ScriptInput::Fq2(q4y)]);
 
+        //inputs [d, coeffs.0(lambda), Tx, Tz, Qx]
         let s2 = script! {
-            // let e = lambda * &d;
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tx, Ty, Tz, Qx, Qy, theta, lambda, c, d
-            { Fq2::copy(4) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tx, Ty, Tz, Qx, Qy, theta, lambda, c, d, lambda
-            { Fq2::copy(2) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tx, Ty, Tz, Qx, Qy, theta, lambda, c, d, lambda, d
             { Fq2::mul(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tx, Ty, Tz, Qx, Qy, theta, lambda, c, d, lambda * d
-
-            // let f = self.z * &c;
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tx, Ty, Tz, Qx, Qy, theta, lambda, c, d, e
-            { Fq2::copy(14) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tx, Ty, Tz, Qx, Qy, theta, lambda, c, d, e, Tz
-            { Fq2::roll(6) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tx, Ty, Tz, Qx, Qy, theta, lambda, d, e, Tz, c
-            { Fq2::mul(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tx, Ty, Tz, Qx, Qy, theta, lambda, d, e, Tz * c
-
-            // let g = self.x * &d;
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tx, Ty, Tz, Qx, Qy, theta, lambda, d, e, ff
-            { Fq2::roll(18) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, d, e, ff, Tx
-            { Fq2::roll(6) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, ff, Tx, d
-            { Fq2::mul(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, ff, Tx * d
-
-            // let h = e + &f - &g.double();
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, ff, g
+            { Fq2::sub(2, 0) }
             { Fq2::copy(0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, ff, g, g
-            { Fq2::neg(0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, ff, g, -g
-            { Fq2::double(0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, ff, g, -2g
             { Fq2::roll(4) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, -2g, ff
-            { Fq2::add(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, -2g + ff
-            { Fq2::copy(4) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, -2g + ff, e
-            { Fq2::add(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, -2g + ff + e
+            { Fq2::equalverify() }
+            { Fq2::square() }
+            { Fq2::equalverify() }
 
-            // self.x = lambda * &h;
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, h
-            { Fq2::copy(0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, h, h
-            { Fq2::copy(8) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, h, h, lambda
-            { Fq2::mul(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, h, h * lambda
-
-            // self.y = theta * &(g - &h) - &(e * &self.y);
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, h, x
-            { Fq2::copy(10) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, g, h, x, theta
-            { Fq2::roll(6) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, h, x, theta, g
-            { Fq2::roll(6) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, x, theta, g, h
-            { Fq2::sub(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, x, theta, g - h
-            { Fq2::mul(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, x, theta * (g - h)
-            { Fq2::copy(4) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Ty, Tz, Qx, Qy, theta, lambda, e, x, theta * (g - h), e
-            { Fq2::roll(18) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tz, Qx, Qy, theta, lambda, e, x, theta * (g - h), e, Ty
-            { Fq2::mul(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tz, Qx, Qy, theta, lambda, e, x, theta * (g - h), e * Ty
-            { Fq2::sub(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tz, Qx, Qy, theta, lambda, e, x, theta * (g - h) - e * Ty
-
-            // self.z *= &e;
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Tz, Qx, Qy, theta, lambda, e, x, y
-            { Fq2::roll(14) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Qx, Qy, theta, lambda, e, x, y, Tz
-            { Fq2::roll(6) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Qx, Qy, theta, lambda, x, y, Tz, e
-            { Fq2::mul(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Qx, Qy, theta, lambda, x, y, Tz * e
-
-            // let j = theta * &q.x - &(lambda * &q.y);
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Qx, Qy, theta, lambda, x, y, z
-            { Fq2::copy(8) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Qx, Qy, theta, lambda, x, y, z, theta
-            { Fq2::roll(14) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Qy, theta, lambda, x, y, z, theta, Qx
-            { Fq2::mul(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Qy, theta, lambda, x, y, z, theta * Qx
-            { Fq2::copy(8) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, Qy, theta, lambda, x, y, z, theta * Qx, lambda
-            { Fq2::roll(14) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, theta, lambda, x, y, z, theta * Qx, lambda, Qy
-            if !flag {
-                { Fq2::neg(0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, theta, lambda, x, y, z, theta * Qx, lambda, -Qy
-            }
-            { Fq2::mul(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, theta, lambda, x, y, z, theta * Qx, lambda * Qy
-            { Fq2::sub(2, 0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, theta, lambda, x, y, z, theta * Qx - lambda * Qy
-
-            // (lambda, -theta, j)
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, theta, lambda, x, y, z, j
-            { Fq2::roll(8) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, theta, x, y, z, j, lambda
-            { Fq2::roll(10) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, x, y, z, j, lambda, theta
-            { Fq2::neg(0) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, x, y, z, j, lambda, -theta
-            { Fq2::roll(4) }
-            // coeffs.0, coeffs.1, coeffs.2, Txx, Txy, Txz, x, y, z, lambda, -theta, j
-
-            { Fq2::toaltstack() }
-            { Fq2::toaltstack() }
-            { Fq2::toaltstack() }
-            { Fq6::equalverify() }
-            { Fq2::fromaltstack() }
-            { Fq2::fromaltstack() }
-            { Fq2::fromaltstack() }
-            { Fq6::equalverify() }
+            
             OP_TRUE
         };
         scripts.push(s2);
+        inputs.push(vec![ScriptInput::Fq2(d), ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(t4.x), ScriptInput::Fq2(t4.z), ScriptInput::Fq2(q4x)]);
 
-        fn calculate_inputs(flag: bool, t4: ark_bn254::G2Projective, q4x: ark_bn254::Fq2, q4y: ark_bn254::Fq2) -> Vec<Vec<ScriptInput>> {
-            let mut inputs = Vec::new();
-
-            let mut t4x = t4.clone();
-
-            let q4ye = if flag {q4y} else {-q4y};
-            let q4xe = q4x;
-
-            let theta = t4x.y - &(q4ye * &t4x.z);
-            let lambda = t4x.x - &(q4xe * &t4x.z);
-            let c = theta.square();
-            let d = lambda.square();
-            let e = lambda * &d;
-            let f = t4x.z * &c;
-            let g = t4x.x * &d;
-            let h = e + &f - &g.double();
-            t4x.x = lambda * &h;
-            t4x.y = theta * &(g - &h) - &(e * &t4x.y);
-            t4x.z *= &e;
-            let j = theta * &q4xe - &(lambda * &q4ye);
+        //inputs [f, Tz, c, e, coeffs.0, d]
+        let s3 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
             
-            let coeffs = (lambda, -theta, j);
+            OP_TRUE
+        };
+        scripts.push(s3);
+        inputs.push(vec![ScriptInput::Fq2(f), ScriptInput::Fq2(t4.z), ScriptInput::Fq2(c), ScriptInput::Fq2(e), ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(d)]);
 
-            inputs.push(vec![ScriptInput::Fq2(theta), ScriptInput::Fq2(lambda), ScriptInput::Fq2(c), ScriptInput::Fq2(d), ScriptInput::G2P(t4), ScriptInput::Fq2(q4x), ScriptInput::Fq2(q4y)]);
+        //inputs [h, e, f, g, Tx, d]
+        let s4 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::copy(0) }
+            { Fq2::roll(4) }
+            { Fq2::equalverify() }
+            { Fq2::neg(0) }
+            { Fq2::double(0) }
+            { Fq2::add(2, 0) }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            
+            OP_TRUE
+        };
+        scripts.push(s4);
+        inputs.push(vec![ScriptInput::Fq2(h), ScriptInput::Fq2(e), ScriptInput::Fq2(f), ScriptInput::Fq2(g), ScriptInput::Fq2(t4.x), ScriptInput::Fq2(d)]);
 
-            inputs.push(vec![ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(coeffs.1), ScriptInput::Fq2(coeffs.2), ScriptInput::G2P(t4x), ScriptInput::G2P(t4), ScriptInput::Fq2(q4x), ScriptInput::Fq2(q4y), ScriptInput::Fq2(theta), ScriptInput::Fq2(lambda), ScriptInput::Fq2(c), ScriptInput::Fq2(d)]);
+        //inputs [e_Ty, Ty, e, Txx, coeffs.0, h]
+        let s5 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+            
+            OP_TRUE
+        };
+        scripts.push(s5);
+        inputs.push(vec![ScriptInput::Fq2(e_Ty), ScriptInput::Fq2(t4.y), ScriptInput::Fq2(e), ScriptInput::Fq2(t4x.x), ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(h)]); 
 
-            inputs
-        }
+        //inputs [Txy, e_Ty, coeffs.1, h, g]
+        let s6 = script! {
+            { Fq2::sub(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::roll(2) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
 
-        (scripts, calculate_inputs)
+            OP_TRUE
+        };
+        scripts.push(s6);
+        inputs.push(vec![ScriptInput::Fq2(t4x.y), ScriptInput::Fq2(e_Ty), ScriptInput::Fq2(coeffs.1), ScriptInput::Fq2(h), ScriptInput::Fq2(g)]);
+
+        //inputs [coeffs.2, coeffs.0, Qy, Qx, coeffs1]
+        let s7 = script! {
+            { Fq2::neg(0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::roll(4) }
+            if !flag {
+                { Fq2::neg(0) }
+            }
+            { Fq2::roll(4) }
+            { Fq2::mul(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s7);
+        inputs.push(vec![ScriptInput::Fq2(coeffs.2), ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(q4y), ScriptInput::Fq2(q4x), ScriptInput::Fq2(coeffs.1)]);
+
+        //inputs [Txz, tz, e]
+        let s8 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s8);
+        inputs.push(vec![ScriptInput::Fq2(t4x.z), ScriptInput::Fq2(t4.z), ScriptInput::Fq2(e)]);
+
+        (scripts, inputs)
     }
 
     // script of double line for the purpose of non-fixed point in miller loop
@@ -623,116 +533,297 @@ impl Pairing {
     }
 
     // scripts and the function for calculating corresponding inputs for verifying 
-    pub fn ell_verify() -> (Vec<Script>, fn(ark_bn254::Fq12, &EllCoeff, ark_bn254::G1Affine, ark_bn254::Fq12) -> Vec<Vec<ScriptInput>>) {
-        let mut scripts = Vec::new();
+    pub fn ell_verify(f: ark_bn254::Fq12, constant: &EllCoeff, p: ark_bn254::G1Affine, f2: ark_bn254::Fq12) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+        let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
+        let mut fx = f.clone();
+
+        let mut c0new = constant.0;
+        c0new.mul_assign_by_fp(&p.y);
+
+        let mut c1new = constant.1;
+        c1new.mul_assign_by_fp(&p.x);
+
+        let (c0u, c3u, c4u) = (c0new, c1new, constant.2);
+        let c3uc4u = c3u + c4u;
+
+        let a0 = f.c0.c0 * c0u;
+        let a1 = f.c0.c1 * c0u;
+        let a2 = f.c0.c2 * c0u;
+        let a = ark_bn254::Fq6::new(a0, a1, a2);
+
+        let mut a_a = f.c1.c0;
+        let mut b_b = f.c1.c1;
+        a_a.mul_assign(c3u);
+        b_b.mul_assign(c4u);
+
+        let mut b = f.c1;
+        b.mul_by_01(&c3u, &c4u);
+
+        let e = f.c0 + f.c1;
+        let c0uc3u = c0u + c3u;
+        let mut ee = e.clone();
+        ee.mul_by_01(&c0uc3u, &c4u);
+
+        let mut e_a_a = e.c0;
+        let mut e_b_b = e.c1;
+        e_a_a.mul_assign(c0uc3u);
+        e_b_b.mul_assign(c4u);
+
+        let c0uc3uc4u = c0uc3u + c4u;
+
+        let mut b_nonres = b.clone();
+        ark_bn254::Fq12Config::mul_fp6_by_nonresidue_in_place(&mut b_nonres);
+
+        fx.mul_by_034(&c0new, &c1new, &constant.2);
+
+        assert_eq!(fx, f2);
+
+        // inputs [new c1, coefffs.c1, p.x, new c0, coeffs.c0, p.y]
         let s1 = script! {
-            // compute the new c0
-            { Fq2::mul_by_fq(6, 0) }
+            { Fq2::mul_by_fq(1, 0) }
+            { Fq2::equalverify() }
 
-            // compute the new c1
-            { Fq2::mul_by_fq(5, 2) }
+            { Fq2::mul_by_fq(1, 0) }
+            { Fq2::equalverify() }
 
-            // roll c2
-            { Fq2::roll(4) }
-
-            // compute the new f
-            // input:
-            //   p   (12 elements)
-            //   c0  (2 elements)
-            //   c3  (2 elements)
-            //   c4  (2 elements)
-
-            // take p.c0, c0
-            { Fq6::roll(12) }
-            { Fq2::roll(10) }
-            // compute a = p.c0 * c0
-            { Fq6::mul_by_fp2() }
-            // take p.c1, c3, c4
-            { Fq6::roll(10) }
-            { Fq2::roll(14) }
-            { Fq2::roll(14) }
-            // compute b = p.c1 * (c3, c4)
-            { Fq6::mul_by_01() }
-
-            { Fq6::roll(12) }
-            { Fq6::equalverify() }
-            { Fq6::equalverify() }
             OP_TRUE
+            
         };
         scripts.push(s1);
+        inputs.push(vec![ScriptInput::Fq2(c1new), ScriptInput::Fq2(constant.1), ScriptInput::Fq(p.x), ScriptInput::Fq2(c0new), ScriptInput::Fq2(constant.0), ScriptInput::Fq(p.y)]);
 
+        // inputs [a.c1 = f.c0.c1 * c0, f.c0.c1, a.c0 = f.c0.c0 * c0, f.c0.c0, c0]
         let s2 = script! {
-            // compute the new c0
-            { Fq2::mul_by_fq(6, 0) }
+            { Fq2::copy(0) }
+            { Fq2::toaltstack() }
 
-            // compute the new c1
-            { Fq2::mul_by_fq(5, 2) }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
 
-            // roll c2
-            { Fq2::roll(4) }
+            { Fq2::fromaltstack() }
 
-            // compute e = p.c0 + p.c1
-            { Fq6::add(12, 6) }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
 
-            // compute c0 + c3
-            { Fq2::add(10, 8) }
-
-            // roll c4
-            { Fq2::roll(8) }
-
-            // update e = e * (c0 + c3, c4)
-            { Fq6::mul_by_01() }
-
-            // compute c0 = a + beta * b
-            { Fq6::copy(12) }
-            { Fq6::copy(12) }
-            { Fq12::mul_fq6_by_nonresidue() }
-            { Fq6::add(6, 0) }
-
-            // compute a + b
-            { Fq6::add(18, 12) }
-
-            // compute final c1 = e - (a + b)
-            { Fq6::sub(12, 0) }
-
-            { Fq12::equalverify() }
             OP_TRUE
         };
         scripts.push(s2);
+        inputs.push(vec![ScriptInput::Fq2(a1), ScriptInput::Fq2(f.c0.c1), ScriptInput::Fq2(a0), ScriptInput::Fq2(f.c0.c0), ScriptInput::Fq2(c0u)]);
 
-        fn calculate_inputs(f: ark_bn254::Fq12, constant: &EllCoeff, p: ark_bn254::G1Affine, f2: ark_bn254::Fq12) -> Vec<Vec<ScriptInput>> {
-            let mut inputs = Vec::new();
+        // inputs [c3u + c4u, c3u, c4u, a.c2 = f.c0.c2 * c0, f.c0.c2, c0]
+        let s3 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
 
-            let mut fx = f.clone();
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
 
-            let mut c0new = constant.0;
-            c0new.mul_assign_by_fp(&p.y);
+            OP_TRUE
+        };
+        scripts.push(s3);
+        inputs.push(vec![ScriptInput::Fq2(c3uc4u), ScriptInput::Fq2(c4u), ScriptInput::Fq2(c3u), ScriptInput::Fq2(a2), ScriptInput::Fq2(f.c0.c2), ScriptInput::Fq2(c0u)]);
 
-            let mut c1new = constant.1;
-            c1new.mul_assign_by_fp(&p.x);
+        // inputs [b_b = f.c1.c1 * c4u, f.c1.c1, c4u, a_a = f.c1.c0 * c3u, f.c1.c0, c3u]
+        let s4 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
 
-            let (c0u, c3u, c4u) = (c0new, c1new, constant.2);
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
 
-            let a0 = f.c0.c0 * c0u;
-            let a1 = f.c0.c1 * c0u;
-            let a2 = f.c0.c2 * c0u;
-            let a = ark_bn254::Fq6::new(a0, a1, a2);
-            let mut b = f.c1;
-            b.mul_by_01(&c3u, &c4u);
+            OP_TRUE
+        };
+        scripts.push(s4);
+        inputs.push(vec![ScriptInput::Fq2(b_b), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(c4u), ScriptInput::Fq2(a_a), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(c3u)]);
 
-            fx.mul_by_034(&c0new, &c1new, &constant.2);
+        // inputs [b.c0, a_a, b_b, c4u, f.c1.c1, f.c1.c2]
+        let s5 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::sub(0, 2) }
+            { Fq6::mul_fq2_by_nonresidue() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s5);
+        inputs.push(vec![ScriptInput::Fq2(b.c0), ScriptInput::Fq2(a_a), ScriptInput::Fq2(b_b), ScriptInput::Fq2(c4u), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(f.c1.c2)]);
 
-            assert_eq!(fx, f2);
+        // inputs [b.c1, a_a, b_b, c3uc4u, f.c1.c0, f.c1.c1]
+        let s6 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::sub(0, 2) }
+            { Fq2::sub(0, 2) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s6);
+        inputs.push(vec![ScriptInput::Fq2(b.c1), ScriptInput::Fq2(a_a), ScriptInput::Fq2(b_b), ScriptInput::Fq2(c3uc4u), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(f.c1.c1)]);
 
-            inputs.push(vec![ScriptInput::Fq6(a), ScriptInput::Fq6(b), ScriptInput::Fq12(f), ScriptInput::Fq2(constant.0), ScriptInput::Fq2(constant.1), ScriptInput::Fq2(constant.2), ScriptInput::G1A(p)]);
+        // inputs [b.c2, a_a, b_b, c3u, f.c1.c0, f.c1.c2]
+        let s7 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::add(0, 2) }
+            { Fq2::sub(0, 2) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s7);
+        inputs.push(vec![ScriptInput::Fq2(b.c2), ScriptInput::Fq2(a_a), ScriptInput::Fq2(b_b), ScriptInput::Fq2(c3u), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(f.c1.c2)]);
 
-            inputs.push(vec![ScriptInput::Fq12(f2), ScriptInput::Fq6(a), ScriptInput::Fq6(b), ScriptInput::Fq12(f), ScriptInput::Fq2(constant.0), ScriptInput::Fq2(constant.1), ScriptInput::Fq2(constant.2), ScriptInput::G1A(p)]);
+        // inputs [e.c1, f.c0.c1, f.c1.c1, e.c0, f.c0.c0, f.c1.c0]
+        let s8 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
 
-            inputs
-        }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
 
-        (scripts, calculate_inputs)
+            OP_TRUE
+        };
+        scripts.push(s8);
+        inputs.push(vec![ScriptInput::Fq2(e.c1), ScriptInput::Fq2(f.c0.c1), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(f.c0.c0), ScriptInput::Fq2(f.c1.c0)]);
+
+        // inputs [e.c2, f.c0.c2, f.c1.c2]
+        let s9 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s9);
+        inputs.push(vec![ScriptInput::Fq2(e.c2), ScriptInput::Fq2(f.c0.c2), ScriptInput::Fq2(f.c1.c2)]);
+
+        // inputs [c0uc3uc4u, c4u, c0uc3u, c0u, c3u]
+        let s10 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::copy(0) }
+            { Fq2::toaltstack() }
+            { Fq2::equalverify() }
+
+            { Fq2::fromaltstack() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s10);
+        inputs.push(vec![ScriptInput::Fq2(c0uc3uc4u), ScriptInput::Fq2(c4u), ScriptInput::Fq2(c0uc3u), ScriptInput::Fq2(c0u), ScriptInput::Fq2(c3u)]);
+
+        // inputs [b_b = e.c1 * c4u, e.c1, c4u, a_a = e.c0 * c0uc3u, e.c0, c0uc3u]
+        let s11 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s11);
+        inputs.push(vec![ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(e.c1), ScriptInput::Fq2(c4u), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(c0uc3u)]);
+
+        // inputs [ee.c0, a_a, b_b, c4u, e.c1, e.c2]
+        let s12 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::sub(0, 2) }
+            { Fq6::mul_fq2_by_nonresidue() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s12);
+        inputs.push(vec![ScriptInput::Fq2(ee.c0), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(c4u), ScriptInput::Fq2(e.c1), ScriptInput::Fq2(e.c2)]);
+
+        // inputs [ee.c1, a_a, b_b, c0uc3uc4u, e.c0, e.c1]
+        let s13 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::sub(0, 2) }
+            { Fq2::sub(0, 2) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s13);
+        inputs.push(vec![ScriptInput::Fq2(ee.c1), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(c0uc3uc4u), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(e.c1)]);
+
+        // inputs [ee.c2, a_a, b_b, c0uc3u, e.c0, e.c2]
+        let s14 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::add(0, 2) }
+            { Fq2::sub(0, 2) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s14);
+        inputs.push(vec![ScriptInput::Fq2(ee.c2), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(c0uc3u), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(e.c2)]);
+
+        // inputs [b_nonres, b]
+        let s15 = script! {
+            { Fq12::mul_fq6_by_nonresidue() }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s15);
+        inputs.push(vec![ScriptInput::Fq2(b_nonres.c0), ScriptInput::Fq2(b_nonres.c1), ScriptInput::Fq2(b_nonres.c2), ScriptInput::Fq2(b.c0), ScriptInput::Fq2(b.c1), ScriptInput::Fq2(b.c2)]);
+
+        // inputs [fx.c0.c1, a.c1, b_nonres.c1, fx.c0.c0, a.c0, b_nonres.c0]
+        let s16 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s16);
+        inputs.push(vec![ScriptInput::Fq2(fx.c0.c1), ScriptInput::Fq2(a.c1), ScriptInput::Fq2(b_nonres.c1), ScriptInput::Fq2(fx.c0.c0), ScriptInput::Fq2(a.c0), ScriptInput::Fq2(b_nonres.c0)]);
+
+        // inputs [fx.c0.c2, a.c2, b_nonres.c2]
+        let s17 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s17);
+        inputs.push(vec![ScriptInput::Fq2(fx.c0.c2), ScriptInput::Fq2(a.c2), ScriptInput::Fq2(b_nonres.c2)]);
+        
+        // inputs [fx.c1.c0, ee.c0, a.c0, b.c0]
+        let s18 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s18);
+        inputs.push(vec![ScriptInput::Fq2(fx.c1.c0), ScriptInput::Fq2(ee.c0), ScriptInput::Fq2(a.c0), ScriptInput::Fq2(b.c0)]);
+
+        // inputs [fx.c1.c1, ee.c1, a.c1, b.c1]
+        let s19 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s19);
+        inputs.push(vec![ScriptInput::Fq2(fx.c1.c1), ScriptInput::Fq2(ee.c1), ScriptInput::Fq2(a.c1), ScriptInput::Fq2(b.c1)]);
+
+        // inputs [fx.c1.c2, ee.c2, a.c2, b.c2]
+        let s20 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s20);
+        inputs.push(vec![ScriptInput::Fq2(fx.c1.c2), ScriptInput::Fq2(ee.c2), ScriptInput::Fq2(a.c2), ScriptInput::Fq2(b.c2)]);
+
+        (scripts, inputs)
     }
 
     // input:
@@ -772,132 +863,294 @@ impl Pairing {
     }
 
     // scripts and the function for calculating corresponding inputs for verifying 
-    pub fn ell_by_constant_verify(constant: &EllCoeff) -> (Vec<Script>, fn(ark_bn254::Fq12, &EllCoeff, ark_bn254::G1Affine, ark_bn254::Fq12) -> Vec<Vec<ScriptInput>>) {
-        let mut scripts = Vec::new();
+    pub fn ell_by_constant_verify(f: ark_bn254::Fq12, constant: &EllCoeff, p: ark_bn254::G1Affine, f2: ark_bn254::Fq12) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+        let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
+        let mut fx = f.clone();
+
+        let mut c0new = constant.0;
+        c0new.mul_assign_by_fp(&p.y);
+
+        let mut c1new = constant.1;
+        c1new.mul_assign_by_fp(&p.x);
+
+        let (c0u, c3u, c4u) = (c0new, c1new, constant.2);
+
+        let a0 = f.c0.c0 * c0u;
+        let a1 = f.c0.c1 * c0u;
+        let a2 = f.c0.c2 * c0u;
+        let a = ark_bn254::Fq6::new(a0, a1, a2);
+        let mut b = f.c1;
+        b.mul_by_01(&c3u, &c4u);
+
+        let a_a = f.c1.c0 * c1new;
+        let b_b = f.c1.c1 * constant.2;
+
+        let e = f.c0 + f.c1;
+        let c0_c3 = c0u + c3u;
+        let mut ee = e.clone();
+        ee.mul_by_01(&c0_c3, &c4u);
+
+        let mut e_a_a = e.c0;
+        let mut e_b_b = e.c1;
+        e_a_a.mul_assign(c0_c3);
+        e_b_b.mul_assign(c4u);
+
+        let mut b_nonres = b.clone();
+        ark_bn254::Fq12Config::mul_fp6_by_nonresidue_in_place(&mut b_nonres);
+
+        fx.mul_by_034(&c0new, &c1new, &constant.2);
+
+        assert_eq!(fx, f2);
+
+        // inputs [p.c0.c0*newc0, p.c0.c0, newc1=p.x*q1.y, p.x, newc0=p.y*q1.x, p.y]
         let s1 = script! {
-            // [f, px, py]
-            // compute the new c0
-            // [f, px, py, py]
             { Fq::copy(0) }
-            // [f, px, py, py * q1.x1]
             { Fq::mul_by_constant(&constant.0.c0) }
-            // [f, px, py * q1.x1, py]
             { Fq::roll(1) }
-            // [f, px, py * q1.x1, py * q1.x2]
             { Fq::mul_by_constant(&constant.0.c1) }
+            { Fq2::copy(0) }
+            { Fq2::roll(4) }
+            { Fq2::equalverify() }
 
-            // compute the new c1
-            // [f, px, py * q1.x1, py * q1.x2, px]
             { Fq::copy(2) }
-            // [f, px, py * q1.x1, py * q1.x2, px * q1.y1]
             { Fq::mul_by_constant(&constant.1.c0) }
-            // [f, py * q1.x1, py * q1.x2, px * q1.y1, px]
             { Fq::roll(3) }
-            // [f, py * q1.x1, py * q1.x2, px * q1.y1, px * q1.y2]
             { Fq::mul_by_constant(&constant.1.c1) }
+            { Fq2::roll(4) }
+            { Fq2::equalverify() }
 
-            // take p.c0, c0
-            { Fq6::roll(10) }
-            { Fq2::roll(8) }
+            { Fq2::mul(2, 0)}
+            { Fq2::equalverify() }
 
-            // compute a = p.c0 * c0
-            { Fq6::mul_by_fp2() }
-
-            // take p.c1, c3, c4
-            { Fq6::roll(8) }
-            { Fq2::roll(12) }
-
-            // compute b = p.c1 * (c3, c4)
-            { Fq6::mul_by_01_with_1_constant(&constant.2) }
-
-            { Fq6::roll(12) }
-            { Fq6::equalverify() }
-            { Fq6::equalverify() }
             OP_TRUE
         };
         scripts.push(s1);
+        inputs.push(vec![ScriptInput::Fq2(a.c0), ScriptInput::Fq2(f.c0.c0), ScriptInput::Fq2(c1new), ScriptInput::Fq(p.x), ScriptInput::Fq2(c0new), ScriptInput::Fq(p.y)]);
 
+        // inputs [p.c0.c2*newc0, p.c0.c2, p.c0.c1*newc0, p.c0.c1, newc0]
         let s2 = script! {
-            // [f, px, py]
-            // compute the new c0
-            // [f, px, py, py]
-            { Fq::copy(0) }
-            // [f, px, py, py * q1.x1]
-            { Fq::mul_by_constant(&constant.0.c0) }
-            // [f, px, py * q1.x1, py]
-            { Fq::roll(1) }
-            // [f, px, py * q1.x1, py * q1.x2]
-            { Fq::mul_by_constant(&constant.0.c1) }
+            { Fq2::copy(0) }
+            { Fq2::toaltstack() }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+            
+            { Fq2::fromaltstack() }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
 
-            // compute the new c1
-            // [f, px, py * q1.x1, py * q1.x2, px]
-            { Fq::copy(2) }
-            // [f, px, py * q1.x1, py * q1.x2, px * q1.y1]
-            { Fq::mul_by_constant(&constant.1.c0) }
-            // [f, py * q1.x1, py * q1.x2, px * q1.y1, px]
-            { Fq::roll(3) }
-            // [f, py * q1.x1, py * q1.x2, px * q1.y1, px * q1.y2]
-            { Fq::mul_by_constant(&constant.1.c1) }
-
-            // compute e = p.c0 + p.c1
-            { Fq6::add(10, 4) }
-
-            // compute c0 + c3
-            { Fq2::add(8, 6) }
-
-            // update e = e * (c0 + c3, c4)
-            { Fq6::mul_by_01_with_1_constant(&constant.2) }
-
-            // compute c0 = a + beta * b
-            { Fq6::copy(12) }
-            { Fq6::copy(12) }
-            { Fq12::mul_fq6_by_nonresidue() }
-            { Fq6::add(6, 0) }
-
-            // compute a + b
-            { Fq6::add(18, 12) }
-
-            // compute final c1 = e - (a + b)
-            { Fq6::sub(12, 0) }
-
-            { Fq12::equalverify() }
             OP_TRUE
         };
         scripts.push(s2);
+        inputs.push(vec![ScriptInput::Fq2(a.c2), ScriptInput::Fq2(f.c0.c2), ScriptInput::Fq2(a.c1), ScriptInput::Fq2(f.c0.c1), ScriptInput::Fq2(c0new)]);
 
-        fn calculate_inputs(f: ark_bn254::Fq12, constant: &EllCoeff, p: ark_bn254::G1Affine, f2: ark_bn254::Fq12) -> Vec<Vec<ScriptInput>> {
-            let mut inputs = Vec::new();
+        // inputs [b_b=p.c1.c1*q2, p.c1.c1, a_a=p.c1.c0*newc1, p.c1.c0, newc1]
+        let s3 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+            
+            { Fq2::mul_by_constant(&constant.2) }
+            { Fq2::equalverify() }
 
-            let mut fx = f.clone();
+            OP_TRUE
+        };
+        scripts.push(s3);
+        inputs.push(vec![ScriptInput::Fq2(b_b), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(a_a), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(c1new)]);
 
-            let mut c0new = constant.0;
-            c0new.mul_assign_by_fp(&p.y);
+        // inputs [b0=((p.c1.c1+p.c1.c2)*q2-b_b)*non_residue+a_a, a_a, b_b, p.c1.c1, p.c1.c2]
+        let s4 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul_by_constant(&constant.2) }
+            { Fq2::roll(2) }
+            { Fq2::sub(2, 0) }
+            { Fq6::mul_fq2_by_nonresidue() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
 
-            let mut c1new = constant.1;
-            c1new.mul_assign_by_fp(&p.x);
+            OP_TRUE
+        };
+        scripts.push(s4);
+        inputs.push(vec![ScriptInput::Fq2(b.c0), ScriptInput::Fq2(a_a), ScriptInput::Fq2(b_b), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(f.c1.c2)]);
 
-            let (c0u, c3u, c4u) = (c0new, c1new, constant.2);
+        // inputs [b1=(p.c1.c0+p.c1.c1)*(newc1+q2)-a_a-b_b, b_b, a_a, newc1, p.c1.c0, p.c1.c1]
+        let s5 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::roll(2) }
+            { Fq::push_u32_le(&BigUint::from(constant.2.c0).to_u32_digits()) }
+            { Fq::push_u32_le(&BigUint::from(constant.2.c1).to_u32_digits()) }
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::roll(2) }
+            { Fq2::sub(2, 0) }
+            { Fq2::roll(2) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
 
-            let a0 = f.c0.c0 * c0u;
-            let a1 = f.c0.c1 * c0u;
-            let a2 = f.c0.c2 * c0u;
-            let a = ark_bn254::Fq6::new(a0, a1, a2);
-            let mut b = f.c1;
-            b.mul_by_01(&c3u, &c4u);
+            OP_TRUE
+        };
+        scripts.push(s5);
+        inputs.push(vec![ScriptInput::Fq2(b.c1), ScriptInput::Fq2(b_b), ScriptInput::Fq2(a_a), ScriptInput::Fq2(c1new), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(f.c1.c1)]);
 
-            fx.mul_by_034(&c0new, &c1new, &constant.2);
+        // inputs [b2=(p.c1.c0+p.c1.c2)*(newc1)-a_a+b_b, b_b, a_a, newc1, p.c1.c0, p.c1.c2]
+        let s6 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::roll(2) }
+            { Fq2::sub(2, 0) }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
 
-            assert_eq!(fx, f2);
+            OP_TRUE
+        };
+        scripts.push(s6);
+        inputs.push(vec![ScriptInput::Fq2(b.c2), ScriptInput::Fq2(b_b), ScriptInput::Fq2(a_a), ScriptInput::Fq2(c1new), ScriptInput::Fq2(f.c1.c0), ScriptInput::Fq2(f.c1.c2)]);
 
-            inputs.push(vec![ScriptInput::Fq6(a), ScriptInput::Fq6(b), ScriptInput::Fq12(f), ScriptInput::G1A(p)]);
+        // inputs [e.c1=p.c0.c1+p.c1.c1, p.c0.c1, p.c1.c1, e.c0=p.c0.c0+p.c1.c0, p.c0.c0, p.c1.c0]
+        let s7: Script = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
 
-            inputs.push(vec![ScriptInput::Fq12(fx), ScriptInput::Fq6(a), ScriptInput::Fq6(b), ScriptInput::Fq12(f), ScriptInput::G1A(p)]);
+            OP_TRUE
+        };
+        scripts.push(s7);
+        inputs.push(vec![ScriptInput::Fq2(e.c1), ScriptInput::Fq2(f.c0.c1), ScriptInput::Fq2(f.c1.c1), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(f.c0.c0), ScriptInput::Fq2(f.c1.c0)]);
 
-            inputs
-        }
+        // inputs [c0_c3=newc1+newc0, newc1, newc0, e.c2=p.c0.c2+p.c1.c2, p.c0.c2, p.c1.c2]
+        let s8: Script = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
 
-        (scripts, calculate_inputs)
+            OP_TRUE
+        };
+        scripts.push(s8);
+        inputs.push(vec![ScriptInput::Fq2(c0_c3), ScriptInput::Fq2(c1new), ScriptInput::Fq2(c0new), ScriptInput::Fq2(e.c2), ScriptInput::Fq2(f.c0.c2), ScriptInput::Fq2(f.c1.c2)]);
+
+        // inputs [e_b_b=e.c1*q2, e.c1, e_a_a=e.c0*c0_c3, e.c0, c0_c3]
+        let s9 = script! {
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+            
+            { Fq2::mul_by_constant(&constant.2) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s9);
+        inputs.push(vec![ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(e.c1), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(c0_c3)]);
+
+        // inputs [ee.c0=((e.c1+e.c2)*q2-e_b_b)*non_residue+e_a_a, e_a_a, e_b_b, e.c1, e.c2]
+        let s10 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul_by_constant(&constant.2) }
+            { Fq2::roll(2) }
+            { Fq2::sub(2, 0) }
+            { Fq6::mul_fq2_by_nonresidue() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s10);
+        inputs.push(vec![ScriptInput::Fq2(ee.c0), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(e.c1), ScriptInput::Fq2(e.c2)]);
+
+        // inputs [ee.c1=(e.c0+e.c1)*(c0_c3+q2)-e_a_a-e_b_b, e_b_b, e_a_a, c0_c3, e.c0, e.c1]
+        let s11 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::roll(2) }
+            { Fq::push_u32_le(&BigUint::from(constant.2.c0).to_u32_digits()) }
+            { Fq::push_u32_le(&BigUint::from(constant.2.c1).to_u32_digits()) }
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::roll(2) }
+            { Fq2::sub(2, 0) }
+            { Fq2::roll(2) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s11);
+        inputs.push(vec![ScriptInput::Fq2(ee.c1), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(c0_c3), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(e.c1)]);
+
+        // inputs [ee.c2=(e.c0+e.c2)*(c0_c3)-e_a_a+e_b_b, e_b_b, e_a_a, c0_c3, e.c0, e.c2]
+        let s12 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::roll(2) }
+            { Fq2::sub(2, 0) }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s12);
+        inputs.push(vec![ScriptInput::Fq2(ee.c2), ScriptInput::Fq2(e_b_b), ScriptInput::Fq2(e_a_a), ScriptInput::Fq2(c0_c3), ScriptInput::Fq2(e.c0), ScriptInput::Fq2(e.c2)]);
+
+        // inputs [b_nonres, b]
+        let s13 = script! {
+            { Fq12::mul_fq6_by_nonresidue() }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s13);
+        inputs.push(vec![ScriptInput::Fq2(b_nonres.c0), ScriptInput::Fq2(b_nonres.c1), ScriptInput::Fq2(b_nonres.c2), ScriptInput::Fq2(b.c0), ScriptInput::Fq2(b.c1), ScriptInput::Fq2(b.c2)]);
+
+        // inputs [fx.c0.c1, a.c1, b_nonres.c1, fx.c0.c0, a.c0, b_nonres.c0]
+        let s14 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s14);
+        inputs.push(vec![ScriptInput::Fq2(fx.c0.c1), ScriptInput::Fq2(a.c1), ScriptInput::Fq2(b_nonres.c1), ScriptInput::Fq2(fx.c0.c0), ScriptInput::Fq2(a.c0), ScriptInput::Fq2(b_nonres.c0)]);
+
+        // inputs [fx.c0.c2, a.c2, b_nonres.c2]
+        let s15 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s15);
+        inputs.push(vec![ScriptInput::Fq2(fx.c0.c2), ScriptInput::Fq2(a.c2), ScriptInput::Fq2(b_nonres.c2)]);
+
+        // inputs [fx.c1.c0, ee.c0, a.c0, b.c0]
+        let s16 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s16);
+        inputs.push(vec![ScriptInput::Fq2(fx.c1.c0), ScriptInput::Fq2(ee.c0), ScriptInput::Fq2(a.c0), ScriptInput::Fq2(b.c0)]);
+
+        // inputs [fx.c1.c1, ee.c1, a.c1, b.c1]
+        let s17 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s17);
+        inputs.push(vec![ScriptInput::Fq2(fx.c1.c1), ScriptInput::Fq2(ee.c1), ScriptInput::Fq2(a.c1), ScriptInput::Fq2(b.c1)]);
+
+        // inputs [fx.c1.c2, ee.c2, a.c2, b.c2]
+        let s18 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s18);
+        inputs.push(vec![ScriptInput::Fq2(fx.c1.c2), ScriptInput::Fq2(ee.c2), ScriptInput::Fq2(a.c2), ScriptInput::Fq2(b.c2)]);
+
+        (scripts, inputs)
     }
 
     // input:
