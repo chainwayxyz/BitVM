@@ -73,17 +73,17 @@ impl Fq6 {
     //   x  (2 elements)
     pub fn mul_by_fp2() -> Script {
         script! {
-            // compute p.c0 * c0
+            // compute p.c0 * x
             { Fq2::roll(6) }
             { Fq2::copy(2) }
             { Fq2::mul(2, 0) }
 
-            // compute p.c1 * c1
+            // compute p.c1 * x
             { Fq2::roll(6) }
             { Fq2::copy(4) }
             { Fq2::mul(2, 0) }
 
-            // compute p.c2 * c2
+            // compute p.c2 * x
             { Fq2::roll(6) }
             { Fq2::roll(6) }
             { Fq2::mul(2, 0) }
