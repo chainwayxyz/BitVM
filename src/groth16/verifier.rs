@@ -644,19 +644,19 @@ impl Verifier {
                 let t4_2 = t4_vec[ark_bn254::Config::ATE_LOOP_COUNT.len() - i].clone();
 
                 let fx = f1.square();
-                inputs.extend(Fq12::mul_verify().1(f1, f1, fx));
+                inputs.extend(Fq12::mul_verify().1(f1, f1, fx).0);
                 f1 = fx;
 
                 if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1 {
                     // [beta_12, beta_13, beta_22, 1/2, B, P1, P2, P3, P4, Q4, c, c_inv, wi, T4, f^2 * c_inv]
                     let fx = f1 * c_inv;
-                    inputs.extend(Fq12::mul_verify().1(f1, c_inv, fx));
+                    inputs.extend(Fq12::mul_verify().1(f1, c_inv, fx).0);
                     f1 = fx;
                 }
                 else if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
                     // [beta_12, beta_13, beta_22, 1/2, B, P1, P2, P3, P4, Q4, c, c_inv, wi, T4, f^2 * c]
                     let fx = f1 * c;
-                    inputs.extend(Fq12::mul_verify().1(f1, c, fx));
+                    inputs.extend(Fq12::mul_verify().1(f1, c, fx).0);
                     f1 = fx;
                 }
 
@@ -778,7 +778,7 @@ impl Verifier {
             inputs.push(vec![ScriptInput::Fq12(c_inv_p), ScriptInput::Fq12(c_inv)]);
 
             let fx = f * c_inv_p;
-            inputs.extend(Fq12::mul_verify().1(f, c_inv_p, fx));
+            inputs.extend(Fq12::mul_verify().1(f, c_inv_p, fx).0);
             f = fx;
 
             let c_p2 = c.frobenius_map(2);
@@ -786,11 +786,11 @@ impl Verifier {
             inputs.push(vec![ScriptInput::Fq12(c_p2), ScriptInput::Fq12(c)]);
 
             let fx = f * c_p2;
-            inputs.extend(Fq12::mul_verify().1(f, c_p2, fx));
+            inputs.extend(Fq12::mul_verify().1(f, c_p2, fx).0);
             f = fx;
 
             let fx = f * wi;
-            inputs.extend(Fq12::mul_verify().1(f, wi, fx));
+            inputs.extend(Fq12::mul_verify().1(f, wi, fx).0);
             f = fx;
 
             for j in 0..num_constant {
