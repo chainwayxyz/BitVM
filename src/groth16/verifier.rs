@@ -9,6 +9,7 @@ use crate::bn254::utils::fq12_push;
 use crate::groth16::constants::{LAMBDA, P_POW3};
 use crate::groth16::offchain_checker::compute_c_wi;
 use crate::treepp::{script, Script};
+use crate::groth16::utils::{ScriptInput, Groth16Data};
 use ark_bn254::{Bn254, G1Projective};
 use ark_ec::pairing::Pairing as ark_Pairing;
 use ark_ec::short_weierstrass::Projective;
@@ -21,6 +22,20 @@ use core::ops::Neg;
 pub struct Verifier;
 
 impl Verifier {
+    pub fn groth16_scripts_and_inputs(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public_inputs: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+        let (scripts, inputs) = (Vec::new(), Vec::new());
+        (scripts, inputs)
+    }
+
+    pub fn verify(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public_inputs: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<Script>>) {
+        let (scripts, input_signatures) = (Vec::new(), Vec::new());
+
+        let dummy = Groth16Data::new("src/groth16/data/proof.json", "src/groth16/data/public.json", "src/groth16/data/vk.json");
+        let (dummy_scripts, dummy_inputs) = Verifier::groth16_scripts_and_inputs(&dummy.vk, &dummy.proof, &dummy.public[0]);
+
+        (scripts, input_signatures)
+    }
+
     pub fn verify_proof(
         public_inputs: &Vec<<Bn254 as ark_Pairing>::ScalarField>,
         proof: &Proof<Bn254>,

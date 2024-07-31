@@ -1,4 +1,5 @@
 use crate::execute_script_without_stack_limit;
+use crate::groth16::utils::Groth16Data;
 use crate::groth16::verifier::Verifier;
 use ark_bn254::Bn254;
 use ark_crypto_primitives::snark::{CircuitSpecificSetupSNARK, SNARK};
@@ -9,6 +10,50 @@ use ark_relations::lc;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_std::{end_timer, start_timer, test_rng, UniformRand};
 use rand::{RngCore, SeedableRng};
+
+use crate::treepp::{script, Script};
+use std::iter::zip;
+
+fn test_script_with_input_signatures(script: Script, input_signatures: Vec<Script>) -> (bool, usize, usize) {
+    let script_test = script! {
+        for input_signature_script in input_signatures {
+            { input_signature_script }
+        }
+        { script }
+    };
+    let size = script_test.len();
+    let start = start_timer!(|| "execute_script");
+    let exec_result = execute_script_without_stack_limit(script_test);
+    let max_stack_items = exec_result.stats.max_nb_stack_items;
+    end_timer!(start);
+    (exec_result.success, size, max_stack_items)
+}
+
+#[test]
+fn test_groth16_scripts_and_inputs() {
+    let groth16_data = Groth16Data::new("src/groth16/data/proof.json", "src/groth16/data/public.json", "src/groth16/data/vk.json");
+
+    let (scripts, script_input_signatures) = Verifier::verify(&groth16_data.vk, &groth16_data.proof, &groth16_data.public[0]);
+    let n = scripts.len();
+
+    assert_eq!(scripts.len(), script_input_signatures.len());
+
+    let mut script_sizes = Vec::new();
+    let mut max_stack_sizes = Vec::new();
+
+    for (i, (script, input_signature)) in zip(scripts, script_input_signatures).enumerate() {
+        let (result, script_size, max_stack_size) = test_script_with_input_signatures(script.clone(), input_signature);
+        script_sizes.push(script_size);
+        max_stack_sizes.push(max_stack_size);
+        println!("script[{:?}]: size: {:?} bytes, max stack size: {:?} items", i, script_size, max_stack_size);
+        assert!(result);
+    }
+
+    println!();
+    println!("number of pieces: {:?}", n);
+    println!("max (script size): {:?} bytes", script_sizes.iter().max().unwrap());
+    println!("max (max stack size): {:?} items", max_stack_sizes.iter().max().unwrap());
+}
 
 #[derive(Copy)]
 struct DummyCircuit<F: PrimeField> {
