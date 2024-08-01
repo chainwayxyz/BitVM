@@ -8,24 +8,93 @@ use crate::bn254::fr::Fr;
 use crate::bn254::curves::G1Projective;
 use crate::bn254::msm::msm;
 use crate::bn254::pairing::Pairing;
-use crate::bn254::utils::{fq12_push, ScriptInput};
+use crate::bn254::utils::{fq12_push, u254_to_digits, ScriptInput};
 use crate::groth16::constants::{LAMBDA, P_POW3};
 use crate::groth16::offchain_checker::compute_c_wi;
+use crate::signatures::winternitz_groth16::{checksig_verify_compressed, digit_pk, sign_digits_compressed};
 use crate::treepp::{script, Script};
-use ark_ec::bn::{G1Prepared, BnConfig};
+
+use ark_bn254::Bn254;
+use ark_ec::bn::{BnConfig, G1Prepared};
 use ark_ec::pairing::Pairing as ark_Pairing;
 use ark_ec::short_weierstrass::{Projective, SWCurveConfig};
 use ark_ec::{CurveGroup, VariableBaseMSM, AffineRepr};
 use ark_ff::Field;
 use ark_groth16::{prepare_verifying_key, Proof, VerifyingKey};
 use num_bigint::BigUint;
-use num_traits::One;
+use rand::Rng;
+use std::collections::HashMap;
 use std::str::FromStr;
+use num_traits::{Num, One};
+use std::{iter::zip, ops::{Mul, Rem}};
 
+use super::utils::Groth16Data;
 #[derive(Clone, Copy, Debug)]
 pub struct Verifier;
 
 impl Verifier {
+    pub fn groth16_scripts_and_inputs(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public_inputs: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+        let (scripts, inputs) = (Vec::new(), Vec::new());
+        (scripts, inputs)
+    }
+
+    pub fn sign(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Vec<Script>>, Vec<Vec<Script>>, Vec<Vec<Vec<Vec<u8>>>>) {
+        let (mut scripts, mut script_input_signatures, mut pks) = (Vec::new(), Vec::new(), Vec::new());
+        let mut sks_map: HashMap<ark_bn254::Fq, (Vec<u8>, Vec<Vec<u8>>)> = HashMap::new();
+
+        let dummy = Groth16Data::new("src/groth16/data/proof.json", "src/groth16/data/public.json", "src/groth16/data/vk.json");
+        let (_, dummy_inputs) = Verifier::verify(&dummy.vk, &dummy.proof, &dummy.public[0]);
+
+        for input_list in dummy_inputs.clone() {
+            for input in input_list {
+                for fq_element in input.to_fq() {
+                    if !sks_map.contains_key(&fq_element) {
+                        let sk: [u8; 32] = rand::thread_rng().gen();  // TODO: Better RNG function
+                        let sk_vec = sk.to_vec();
+                        let mut digit_pks: Vec<Vec<u8>> = Vec::new();
+                        for i in 0..68 {
+                            digit_pks.push(digit_pk(sk_vec.clone(), i));
+                        }
+                        sks_map.insert(fq_element, (sk_vec.clone(), digit_pks));
+                    } 
+                }
+            }
+        }
+
+        let (main_scripts, main_inputs) = Verifier::verify(vk, proof, public);
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+        
+        for (script, input_list) in zip(main_scripts, main_inputs) {
+            let (mut signatures, mut public_keys, mut commit_scripts) = (Vec::new(), Vec::new(), Vec::new());
+            let mut fq_counter = 0;
+            for input in input_list.iter().rev() {
+                for fq_element in input.to_fq().iter().rev() {
+                    fq_counter += 1;
+                    commit_scripts.push(checksig_verify_compressed(sks_map.get(&fq_element).unwrap().clone().1));
+                }
+            }
+            for input in input_list {
+                for fq_element in input.to_fq() {
+                    signatures.push(sign_digits_compressed(sks_map.get(&fq_element).unwrap().clone().0, u254_to_digits(BigUint::from(fq_element.clone()).mul(r.clone()).rem(p.clone()))));
+                    public_keys.push(sks_map.get(&fq_element).unwrap().clone().1);
+                }
+            }
+            commit_scripts.push(script! {
+                for _ in 0..fq_counter {
+                    { Fq::fromaltstack() }
+                }
+            });
+            commit_scripts.push(script);
+
+            scripts.push(commit_scripts);
+            script_input_signatures.push(signatures);
+            pks.push(public_keys);
+        }
+
+        (scripts, script_input_signatures, pks)
+    }
+
     pub fn verify_proof(
         public_inputs: &Vec<<ark_bn254::Bn254 as ark_Pairing>::ScalarField>,
         proof: &Proof<ark_bn254::Bn254>,
@@ -146,8 +215,8 @@ impl Verifier {
         let base2_times_public = base2 * public;
 
         let (sx, ix) = Fr::mul_by_constant_g1_verify(base2, *public, base2_times_public);
-        scripts.extend(sx);
-        inputs.extend(ix);
+        // scripts.extend(sx);
+        // inputs.extend(ix);
 
         let msm_addition_script = script! {
             { Fq::push_u32_le(&BigUint::from(base1.x).to_u32_digits()) }
@@ -157,9 +226,9 @@ impl Verifier {
             { G1Projective::equalverify() }
             OP_TRUE
         };
-        scripts.push(msm_addition_script);
+        // scripts.push(msm_addition_script);
         let msm_g1 = ark_bn254::G1Projective::msm(&vk.gamma_abc_g1, &[<ark_bn254::Bn254 as ark_Pairing>::ScalarField::ONE, public.clone()]).unwrap();
-        inputs.push(vec![ScriptInput::G1P(msm_g1), ScriptInput::G1P(base2_times_public)]);
+        // inputs.push(vec![ScriptInput::G1P(msm_g1), ScriptInput::G1P(base2_times_public)]);
 
         // verify with prepared inputs
         let exp = &*P_POW3 - &*LAMBDA;
@@ -214,6 +283,7 @@ impl Verifier {
             let (sx, ix) = Fq12::mul_verify(f, f, fx);
             scripts.extend(sx);
             inputs.extend(ix);
+
             f = fx;
 
             if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1 {
@@ -737,6 +807,7 @@ impl Verifier {
 
         (scripts, inputs)
     }
+
 }
 
 // Groth16's pairing verifier

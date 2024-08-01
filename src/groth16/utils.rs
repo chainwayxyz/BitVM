@@ -2,7 +2,7 @@ use ark_ff::Field;
 use num_bigint::BigUint;
 
 use crate::{
-    bn254::{fp254impl::Fp254Impl, fq::Fq, fr::Fr},
+    bn254::{fp254impl::Fp254Impl, fq::Fq, fr::Fr, utils::u254_to_digits},
     treepp::*,
 };
 
@@ -85,16 +85,6 @@ pub fn g2a_push(element: ark_bn254::G2Affine) -> Script {
     }
 }
 
-pub fn u254_to_digits(a: BigUint) -> [u8; 64] {
-    let mut digits = [0_u8; 64];
-    for (i, byte) in a.to_bytes_le().iter().enumerate() {
-        let (x, y) = (byte % 16, byte / 16);
-        digits[2 * i] = x;
-        digits[2 * i + 1] = y;
-    }
-    digits
-}
-
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum ScriptInput {
     Fq12(ark_bn254::Fq12),
@@ -144,7 +134,7 @@ impl ScriptInput {
             }
         }
     }
-    
+
     pub fn size(&self) -> usize {
         match self {
             ScriptInput::Fq12(_fq12) => 12,
@@ -176,22 +166,6 @@ impl ScriptInput {
             ScriptInput::Bit(_b) => vec![]
         }
     }
-
-    pub fn to_fq(&self) -> Vec<ark_bn254::Fq> {
-        match self {
-            ScriptInput::Fq12(fq12) => fq12.to_base_prime_field_elements().collect(),
-            ScriptInput::Fq6(fq6) => fq6.to_base_prime_field_elements().collect(),
-            ScriptInput::Fq2(fq2) => fq2.to_base_prime_field_elements().collect(),
-            ScriptInput::Fq(fq) => vec![*fq],
-            ScriptInput::Fr(_fr) => vec![],
-            ScriptInput::G1P(g1p) => vec![g1p.x, g1p.y, g1p.z],
-            ScriptInput::G1A(g1a) => vec![g1a.x, g1a.y],
-            ScriptInput::G2P(g2p) => vec![g2p.x.c0, g2p.x.c1, g2p.y.c0, g2p.y.c1, g2p.z.c0, g2p.z.c1],
-            ScriptInput::G2A(g2a) => vec![g2a.x.c0, g2a.x.c1, g2a.y.c0, g2a.y.c1],
-            ScriptInput::Bit(_b) => vec![]
-        }
-    }
-
 }
 
 pub struct Groth16Data {

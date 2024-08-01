@@ -65,12 +65,14 @@ impl Groth16Data {
     }
 }
 
-fn test_script_with_inputs(script: Script, inputs: Vec<ScriptInput>) -> (bool, usize, usize) {
+fn test_script_with_inputs(scripts: Vec<Script>, inputs: Vec<Script>) -> (bool, usize, usize) {
     let script_test = script! {
         for input in inputs {
-            { input.push() }
+            { input }
         }
-        { script }
+        for script in scripts {
+            { script }
+        }
     };
     let size = script_test.len();
     let start = start_timer!(|| "execute_script");
@@ -84,7 +86,7 @@ fn test_script_with_inputs(script: Script, inputs: Vec<ScriptInput>) -> (bool, u
 fn test_groth16_scripts_and_inputs() {
     let groth16_data = Groth16Data::new("src/groth16/data/proof.json", "src/groth16/data/public.json", "src/groth16/data/vk.json");
 
-    let (scripts, inputs) = Verifier::verify(&groth16_data.vk, &groth16_data.proof, &groth16_data.public[0]);
+    let (scripts, inputs, _) = Verifier::sign(&groth16_data.vk, &groth16_data.proof, &groth16_data.public[0]);
     let n = scripts.len();
 
     assert_eq!(scripts.len(), inputs.len());
