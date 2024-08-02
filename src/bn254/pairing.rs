@@ -586,7 +586,7 @@ impl Pairing {
             OP_TRUE            
         };
         scripts.push(s2);
-        inputs.push(vec![ScriptInput::Fq2(g), ScriptInput::Fq2(b), ScriptInput::Fq2(ff), ScriptInput::Fq2(e.square), ScriptInput::Fq2(e), ScriptInput::Fq2(cc)]);
+        inputs.push(vec![ScriptInput::Fq2(g), ScriptInput::Fq2(b), ScriptInput::Fq2(ff), ScriptInput::Fq2(e_square), ScriptInput::Fq2(e), ScriptInput::Fq2(cc)]);
 
         // inputs [Txz, h, b, cc, Ty, Tz]
         let s3 = script! {
