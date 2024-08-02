@@ -35,7 +35,7 @@ pub struct Verifier;
 impl Verifier {
 
 
-    pub fn verify(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Vec<Script>>, Vec<Vec<Script>>, Vec<Vec<Vec<Vec<u8>>>>) {
+    pub fn verify(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<Script>>, Vec<Vec<Vec<Vec<u8>>>>) {
         let (mut scripts, mut script_input_signatures, mut pks) = (Vec::new(), Vec::new(), Vec::new());
         let mut sks_map: HashMap<ark_bn254::Fq, (Vec<u8>, Vec<Vec<u8>>)> = HashMap::new();
 
@@ -84,7 +84,13 @@ impl Verifier {
             });
             commit_scripts.push(script);
 
-            scripts.push(commit_scripts);
+            let script = script! {
+                for script in commit_scripts {
+                    { script }
+                }
+            };
+
+            scripts.push(script);
             script_input_signatures.push(signatures);
             pks.push(public_keys);
         }

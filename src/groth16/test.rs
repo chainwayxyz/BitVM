@@ -109,14 +109,12 @@ fn test_groth16_scripts_and_inputs() {
     println!("max (max stack size): {:?} items", max_stack_sizes.iter().max().unwrap());
 }
 
-fn test_script_with_input_signatures(scripts: Vec<Script>, inputs: Vec<Script>) -> (bool, usize, usize) {
+fn test_script_with_input_signatures(script: Script, inputs: Vec<Script>) -> (bool, usize, usize) {
     let script_test = script! {
         for input in inputs {
             { input }
         }
-        for script in scripts {
-            { script }
-        }
+        { script }
     };
     let size = script_test.len();
     let start = start_timer!(|| "execute_script");
