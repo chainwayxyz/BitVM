@@ -609,7 +609,7 @@ impl Pairing {
         // inputs [coeffs.2, e, b, coeffs.1, Tx]
         let s4 = script! {
             { Fq2::square() }
-            { Fq2::copy(4) }
+            { Fq2::copy(0) }
             { Fq2::double(0) }
             { Fq2::add(2, 0) }
             { Fq2::equalverify() }
