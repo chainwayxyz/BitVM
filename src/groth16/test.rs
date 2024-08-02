@@ -93,9 +93,11 @@ fn test_groth16_scripts_and_inputs() {
 
     let mut script_sizes = Vec::new();
     let mut max_stack_sizes = Vec::new();
+    let mut script_total_size: u64 = 0;
 
     for (i, (script, input)) in zip(scripts, inputs).enumerate() {
         let (result, script_size, max_stack_size) = test_script_with_inputs(script.clone(), input.to_vec());
+        script_total_size += script_size as u64;
         script_sizes.push(script_size);
         max_stack_sizes.push(max_stack_size);
         println!("script[{:?}]: size: {:?} bytes, max stack size: {:?} items", i, script_size, max_stack_size);
@@ -104,6 +106,7 @@ fn test_groth16_scripts_and_inputs() {
 
     println!();
     println!("number of pieces: {:?}", n);
+    println!("script total size: {:?}", script_total_size);
     println!("max (script size): {:?} bytes", script_sizes.iter().max().unwrap());
     println!("max (max stack size): {:?} items", max_stack_sizes.iter().max().unwrap());
 }

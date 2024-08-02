@@ -5,7 +5,7 @@ use crate::bn254::fq6::Fq6;
 use crate::bn254::fr::Fr;
 use crate::bn254::utils::ScriptInput;
 use crate::treepp::{script, Script};
-use ark_ff::Fp12Config;
+use ark_ff::{Field, Fp12Config};
 use num_bigint::BigUint;
 use num_traits::{Num, Zero};
 use std::ops::{ShrAssign, Sub};
@@ -546,6 +546,53 @@ impl Fq12 {
             { Fq6::frobenius_map(i) }
             { Fq6::mul_by_fp2_constant(&ark_bn254::Fq12Config::FROBENIUS_COEFF_FP12_C1[i % ark_bn254::Fq12Config::FROBENIUS_COEFF_FP12_C1.len()]) }
         }
+    }
+
+    // scripts and the inputs for verifying b.frobenius_map(i)=a where a, b are Fq12
+    pub fn frobenius_map_verify(i: usize, a: ark_bn254::Fq12, b: ark_bn254::Fq12) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+        let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
+        let (b0, b1) = (b.c0, b.c1);
+        let b0final = b0.frobenius_map(i);
+        let b1new = b1.frobenius_map(i);
+        let mut b1final = b1new;
+        b1final.mul_by_fp2(&ark_bn254::Fq12Config::FROBENIUS_COEFF_FP12_C1[i % ark_bn254::Fq12Config::FROBENIUS_COEFF_FP12_C1.len()]);
+
+
+        assert_eq!(a.c0, b0final);
+        assert_eq!(a.c1, b1final);
+
+        // inputs [a0, b0]
+        let s1 = script! {
+            { Fq6::frobenius_map(i) }
+            { Fq6::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s1);
+        inputs.push(vec![ScriptInput::Fq6(b0final), ScriptInput::Fq6(b0)]);
+
+        // inputs [newb1, b1]
+        let s2 = script! {
+            { Fq6::frobenius_map(i) }
+            { Fq6::equalverify() }
+            
+            OP_TRUE
+        };
+        scripts.push(s2);
+        inputs.push(vec![ScriptInput::Fq6(b1new), ScriptInput::Fq6(b1)]);
+
+        
+        // inputs [a1, newb1]
+        let s3 = script! {
+            { Fq6::mul_by_fp2_constant(&ark_bn254::Fq12Config::FROBENIUS_COEFF_FP12_C1[i % ark_bn254::Fq12Config::FROBENIUS_COEFF_FP12_C1.len()]) }
+            { Fq6::equalverify() }
+            
+            OP_TRUE
+        };
+        scripts.push(s3);
+        inputs.push(vec![ScriptInput::Fq6(b1final), ScriptInput::Fq6(b1new)]);
+
+        (scripts, inputs)
     }
 
     pub fn toaltstack() -> Script {

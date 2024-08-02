@@ -321,201 +321,6 @@ impl Verifier {
                 f = fx;
             }
 
-            let modified_double_line = script! {
-                // let mut a = self.x * &self.y;
-                // Px, Py, Tx, Ty, Tz
-                { Fq2::copy(4) }
-                // Px, Py, Tx, Ty, Tz, Tx
-                { Fq2::copy(4) }
-                // Px, Py, Tx, Ty, Tz, Tx, Ty
-                { Fq2::mul(2, 0) }
-                // Px, Py, Tx, Ty, Tz, Tx * Ty
-        
-                // a.mul_assign_by_fp(two_inv);
-                // Px, Py, Tx, Ty, Tz, a
-                { Fq::push_u32_le(&BigUint::from(ark_bn254::Fq::one().double().inverse().unwrap()).to_u32_digits()) }
-                // Px, Py, Tx, Ty, Tz, a, 1/2
-                { Fq2::mul_by_fq(1, 0) }
-                // Px, Py, Tx, Ty, Tz, a * 1/2
-        
-                // let b = self.y.square();
-                // Px, Py, Tx, Ty, Tz, a
-                { Fq2::copy(4) }
-                // Px, Py, Tx, Ty, Tz, a, Ty
-                { Fq2::square() }
-                // Px, Py, Tx, Ty, Tz, a, Ty^2
-        
-                // let c = self.z.square();
-                // Px, Py, Tx, Ty, Tz, a, b
-                { Fq2::copy(4) }
-                // Px, Py, Tx, Ty, Tz, a, b, Tz
-                { Fq2::square() }
-                // Px, Py, Tx, Ty, Tz, a, b, Tz^2
-        
-                // let e = ark_bn254::g2::Config::COEFF_B * &(c.double() + &c);
-                // Px, Py, Tx, Ty, Tz, a, b, c
-                { Fq2::copy(0) }
-                { Fq2::copy(0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, c, c
-                { Fq2::double(0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, c, 2 * c
-                { Fq2::add(2, 0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, 3 * c
-                // B
-                { Fq::push_u32_le(&BigUint::from(ark_bn254::g2::Config::COEFF_B.c0).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(ark_bn254::g2::Config::COEFF_B.c1).to_u32_digits()) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, 3 * c, B
-                { Fq2::mul(2, 0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, 3 * c * B
-        
-                // let f = e.double() + &e;
-                // Px, Py, Tx, Ty, Tz, a, b, c, e
-                { Fq2::copy(0) }
-                { Fq2::copy(0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, e, e
-                { Fq2::double(0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, e, 2 * e
-                { Fq2::add(2, 0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, 3 * e
-        
-                // let mut g = b + &f;
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, f
-                { Fq2::copy(0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, f, f
-                { Fq2::copy(8) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, f, f, b
-                { Fq2::add(2, 0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, f, f + b
-        
-                // g.mul_assign_by_fp(two_inv);
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, f, g
-                { Fq::push_u32_le(&BigUint::from(ark_bn254::Fq::one().double().inverse().unwrap()).to_u32_digits()) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, f, g, 1/2
-                { Fq2::mul_by_fq(1, 0) }
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, f, g * 1/2
-        
-                // let h = (self.y + &self.z).square() - &(b + &c);
-                // Px, Py, Tx, Ty, Tz, a, b, c, e, f, g
-                { Fq2::roll(14) }
-                // Px, Py, Tx, Tz, a, b, c, e, f, g, Ty
-                { Fq2::roll(14) }
-                // Px, Py, Tx, a, b, c, e, f, g, Ty, Tz
-                { Fq2::add(2, 0) }
-                // Px, Py, Tx, a, b, c, e, f, g, Ty + Tz
-                { Fq2::square() }
-                // Px, Py, Tx, a, b, c, e, f, g, (Ty + Tz)^2
-                { Fq2::copy(10) }
-                // Px, Py, Tx, a, b, c, e, f, g, (Ty + Tz)^2, b
-                { Fq2::roll(10) }
-                // Px, Py, Tx, a, b, e, f, g, (Ty + Tz)^2, b, c
-                { Fq2::add(2, 0) }
-                // Px, Py, Tx, a, b, e, f, g, (Ty + Tz)^2, b + c
-                { Fq2::sub(2, 0) }
-                // Px, Py, Tx, a, b, e, f, g, (Ty + Tz)^2 - (b + c)
-        
-                // let i = e - &b;
-                // Px, Py, Tx, a, b, e, f, g, h
-                { Fq2::copy(6) }
-                // Px, Py, Tx, a, b, e, f, g, h, e
-                { Fq2::copy(10) }
-                // Px, Py, Tx, a, b, e, f, g, h, e, b
-                { Fq2::sub(2, 0) }
-                // Px, Py, Tx, a, b, e, f, g, h, e - b
-        
-                // let j = self.x.square();
-                // Px, Py, Tx, a, b, e, f, g, h, i
-                { Fq2::roll(14) }
-                // Px, Py, a, b, e, f, g, h, i, Tx
-                { Fq2::square() }
-                // Px, Py, a, b, e, f, g, h, i, Tx^2
-        
-                // let e_square = e.square();
-                // Px, Py, a, b, e, f, g, h, i, j
-                { Fq2::roll(10) }
-                // Px, Py, a, b, f, g, h, i, j, e
-                { Fq2::square() }
-                // Px, Py, a, b, f, g, h, i, j, e^2
-        
-                // self.x = a * &(b - &f);
-                // Px, Py, a, b, f, g, h, i, j, e^2
-                { Fq2::roll(14) }
-                // Px, Py, b, f, g, h, i, j, e^2, a
-                { Fq2::copy(14) }
-                // Px, Py, b, f, g, h, i, j, e^2, a, b
-                { Fq2::roll(14) }
-                // Px, Py, b, g, h, i, j, e^2, a, b, f
-                { Fq2::sub(2, 0) }
-                // Px, Py, b, g, h, i, j, e^2, a, b - f
-                { Fq2::mul(2, 0) }
-                // Px, Py, b, g, h, i, j, e^2, a * (b - f)
-        
-                // self.y = g.square() - &(e_square.double() + &e_square);
-                // Px, Py, b, g, h, i, j, e^2, x
-                { Fq2::roll(10) }
-                // Px, Py, b, h, i, j, e^2, x, g
-                { Fq2::square() }
-                // Px, Py, b, h, i, j, e^2, x, g^2
-                { Fq2::roll(4) }
-                // Px, Py, b, h, i, j, x, g^2, e^2
-                { Fq2::copy(0) }
-                // Px, Py, b, h, i, j, x, g^2, e^2, e^2
-                { Fq2::double(0) }
-                // Px, Py, b, h, i, j, x, g^2, e^2, 2 * e^2
-                { Fq2::add(2, 0) }
-                // Px, Py, b, h, i, j, x, g^2, 3 * e^2
-                { Fq2::sub(2, 0) }
-                // Px, Py, b, h, i, j, x, g^2 - 3 * e^2
-        
-                // self.z = b * &h;
-                // Px, Py, b, h, i, j, x, y
-                { Fq2::roll(10) }
-                // Px, Py, h, i, j, x, y, b
-                { Fq2::roll(10) }
-                // Px, Py, i, j, x, y, b, h
-                { Fq2::copy(0) }
-                // Px, Py, i, j, x, y, b, h, h
-                { Fq2::mul(4, 2) }
-                // Px, Py, i, j, x, y, h, z
-        
-                // (-h, j.double() + &j, i)
-                // Px, Py, i, j, x, y, h, z
-                { Fq2::roll(2) }
-                // Px, Py, i, j, x, y, z, h
-                { Fq2::neg(0) }
-                // Px, Py, i, j, x, y, z, -h
-                { Fq2::roll(8) }
-                // Px, Py, i, x, y, z, -h, j
-                { Fq2::copy(0) }
-                // Px, Py, i, x, y, z, -h, j, j
-                { Fq2::double(0) }
-                // Px, Py, i, x, y, z, -h, j, 2 * j
-                { Fq2::add(2, 0) }
-                // Px, Py, i, x, y, z, -h, 3 * j
-                { Fq2::roll(10) }
-                // Px, Py, x, y, z, -h, 3 * j, i
-        
-            };
-
-            let ate_loop_s4_1 = script! {
-                // [T4x, c0, c1, c2, P4, T4]
-                { modified_double_line.clone() }
-                // [T4x, c0, c1, c2, P4, T4x, c0, c1, c2]
-                // compare coeffs
-                { Fq2::roll(14) }
-                { Fq2::equalverify() }
-                { Fq2::roll(12) }
-                { Fq2::equalverify() }
-                { Fq2::roll(10) }
-                { Fq2::equalverify() }
-                // [T4x, P4, T4x]
-                // compare T4
-                { Fq6::toaltstack() }
-                { Fq2::drop() }
-                { Fq6::fromaltstack() }
-                { Fq6::equalverify() }
-                OP_TRUE
-            };
-            scripts.push(ate_loop_s4_1);
             let mut t4x = t4.clone();
             let mut a = t4x.x * &t4x.y;
             a.mul_assign_by_fp(&two_inv);
@@ -533,7 +338,9 @@ impl Verifier {
             t4x.y = g.square() - &(e_square.double() + &e_square);
             t4x.z = b * &h;
             let coeffs = (-h, j.double() + &j, ii);
-            inputs.push(vec![ScriptInput::G2P(t4x), ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(coeffs.1), ScriptInput::Fq2(coeffs.2), ScriptInput::G1A(p4), ScriptInput::G2P(t4)]);
+            let (sx, ix) = Pairing::modified_double_line_verify(t4, t4x, coeffs);
+            scripts.extend(sx);
+            inputs.extend(ix);
             t4 = t4x;
 
             let mut fx = f.clone();
@@ -587,7 +394,7 @@ impl Verifier {
                 t4x.z *= &e;
                 let j = theta * &q4.x - &(lambda * &q4y);
                 let coeffs = (lambda, -theta, j);
-                let (sx, ix) = Pairing::add_line_with_flag_verify(ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1, t4, q4.x, q4.y);
+                let (sx, ix) = Pairing::add_line_with_flag_verify(ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1, t4, q4.x, q4.y, t4x, coeffs);
                 scripts.extend(sx);
                 inputs.extend(ix);
                 t4 = t4x;
@@ -605,14 +412,10 @@ impl Verifier {
             }
         }
 
-        let quad_miller_s3_1 = script! {
-            { Fq12::frobenius_map(1) }
-            { Fq12::equalverify() }
-            OP_TRUE
-        };
         let c_inv_p = c_inv.frobenius_map(1);
-        scripts.push(quad_miller_s3_1);
-        inputs.push(vec![ScriptInput::Fq12(c_inv_p), ScriptInput::Fq12(c_inv)]);
+        let (sx, ix) = Fq12::frobenius_map_verify(1, c_inv_p, c_inv);
+        scripts.extend(sx);
+        inputs.extend(ix);
 
         let fx = f * c_inv_p;
         let (sx, ix) = Fq12::mul_verify(f, c_inv_p, fx);
@@ -620,14 +423,10 @@ impl Verifier {
         inputs.extend(ix);
         f = fx;
 
-        let quad_miller_s3_3 = script! {
-            { Fq12::frobenius_map(2) }
-            { Fq12::equalverify() }
-            OP_TRUE
-        };
         let c_p2 = c.frobenius_map(2);
-        scripts.push(quad_miller_s3_3);
-        inputs.push(vec![ScriptInput::Fq12(c_p2), ScriptInput::Fq12(c)]);
+        let (sx, ix) = Fq12::frobenius_map_verify(2, c_p2, c);
+        scripts.extend(sx);
+        inputs.extend(ix);
 
         let fx = f * c_p2;
         let (sx, ix) = Fq12::mul_verify(f, c_p2, fx);
@@ -713,7 +512,7 @@ impl Verifier {
         t4x.z *= &e;
         let j = theta * &q4x - &(lambda * &q4y);
         let coeffs = (lambda, -theta, j);
-        let (sx, ix) = Pairing::add_line_with_flag_verify(true, t4, q4x, q4y);
+        let (sx, ix) = Pairing::add_line_with_flag_verify(true, t4, q4x, q4y, t4x, coeffs);
         scripts.extend(sx);
         inputs.extend(ix);
         t4 = t4x;
@@ -783,7 +582,7 @@ impl Verifier {
         t4x.z *= &e;
         let j = theta * &q4x - &(lambda * &q4y);
         let coeffs = (lambda, -theta, j);
-        let (sx, ix) = Pairing::add_line_with_flag_verify(true, t4, q4x, q4y);
+        let (sx, ix) = Pairing::add_line_with_flag_verify(true, t4, q4x, q4y, t4x, coeffs);
         scripts.extend(sx);
         inputs.extend(ix);
         t4 = t4x;

@@ -8,9 +8,12 @@ use crate::bn254::fq6::Fq6;
 use crate::bn254::utils::ScriptInput;
 use crate::treepp::*;
 use ark_ec::bn::BnConfig;
+use ark_ec::short_weierstrass::SWCurveConfig;
 use ark_ff::{Field, Fp12Config};
 use num_bigint::BigUint;
 use std::ops::MulAssign;
+use num_traits::One;
+
 
 pub struct Pairing;
 
@@ -185,7 +188,7 @@ impl Pairing {
     }
 
     // scripts and the function for calculating corresponding inputs for verifying 
-    pub fn add_line_with_flag_verify(flag: bool, t4: ark_bn254::G2Projective, q4x: ark_bn254::Fq2, q4y: ark_bn254::Fq2) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+    pub fn add_line_with_flag_verify(flag: bool, t4: ark_bn254::G2Projective, q4x: ark_bn254::Fq2, q4y: ark_bn254::Fq2, t4x_check: ark_bn254::G2Projective, coeffs_check: (ark_bn254::Fq2, ark_bn254::Fq2, ark_bn254::Fq2) ) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
         let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
         let mut t4x = t4.clone();
@@ -205,6 +208,9 @@ impl Pairing {
         let j = theta * &q4xe - &(lambda * &q4ye);
         let e_Ty = t4.y * e;
         let coeffs = (lambda, -theta, j);
+
+        assert_eq!(t4x, t4x_check);
+        assert_eq!(coeffs, coeffs_check);
 
         //inputs [c, coeffs.1(-theta), Ty, Tz, Qy]
         let s1 = script! {
@@ -504,6 +510,149 @@ impl Pairing {
         // 1/2, B, P1, P2, P3, P4, Q4, c, c', wi, f, Px, Py, x, y, z, -h, 3 * j, i
 
         }
+    }
+
+    pub fn modified_double_line_verify(t4: ark_bn254::G2Projective, t4x_check: ark_bn254::G2Projective, coeffs_check: (ark_bn254::Fq2, ark_bn254::Fq2, ark_bn254::Fq2)) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+        let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
+
+        let two_inv = ark_bn254::Fq::from(2).inverse().unwrap();
+        let mut t4x = t4.clone();
+        let mut a = t4x.x * &t4x.y;
+        a.mul_assign_by_fp(&two_inv);
+        let b = t4x.y.square();
+        let cc = t4x.z.square();
+        let e = ark_bn254::g2::Config::COEFF_B * &(cc.double() + &cc);
+        let ff = e.double() + &e;
+        let mut g = b + &ff;
+        g.mul_assign_by_fp(&two_inv);
+        let h = (t4x.y + &t4x.z).square() - &(b + &cc);
+        let ii = e - &b;
+        let j = t4x.x.square();
+        let e_square = e.square();
+        t4x.x = a * &(b - &ff);
+        t4x.y = g.square() - &(e_square.double() + &e_square);
+        t4x.z = b * &h;
+        let coeffs = (-h, j.double() + &j, ii);
+
+        
+        assert_eq!(t4x, t4x_check);
+        assert_eq!(coeffs, coeffs_check);
+
+        // 1104063
+
+        // inputs [cc, Tz, a, Tx, b, Ty]
+        let s1 = script! {
+            { Fq2::copy(0) }
+            { Fq2::square() }
+            { Fq2::roll(4) }
+            { Fq2::equalverify() }
+            { Fq2::mul(2, 0) }
+            { Fq::push_u32_le(&BigUint::from(ark_bn254::Fq::one().double().inverse().unwrap()).to_u32_digits()) }
+            { Fq2::mul_by_fq(1, 0) }
+            { Fq2::equalverify() }
+            { Fq2::square() }
+            { Fq2::equalverify() }
+
+            OP_TRUE            
+        };
+        scripts.push(s1);
+        inputs.push(vec![ScriptInput::Fq2(cc), ScriptInput::Fq2(t4.z), ScriptInput::Fq2(a), ScriptInput::Fq2(t4.x), ScriptInput::Fq2(b), ScriptInput::Fq2(t4.y)]);
+
+
+        // inputs [g, b, ff, e_square, e, cc]
+        let s2 = script! {
+            { Fq2::copy(0) }
+            { Fq2::double(0) }
+            { Fq2::add(2, 0) }
+            { Fq::push_u32_le(&BigUint::from(ark_bn254::g2::Config::COEFF_B.c0).to_u32_digits()) }
+            { Fq::push_u32_le(&BigUint::from(ark_bn254::g2::Config::COEFF_B.c1).to_u32_digits()) }
+            { Fq2::mul(2, 0) }
+            { Fq2::copy(0) }
+            { Fq2::roll(4) }
+            { Fq2::equalverify() }
+            { Fq2::copy(0) }
+            { Fq2::square() }
+            { Fq2::roll(4) }
+            { Fq2::equalverify() }
+            { Fq2::copy(0) }
+            { Fq2::double(0) }
+            { Fq2::add(2, 0) }
+            { Fq2::copy(0) }
+            { Fq2::roll(4) }
+            { Fq2::equalverify() }
+            { Fq2::add(2, 0) }
+            { Fq::push_u32_le(&BigUint::from(ark_bn254::Fq::one().double().inverse().unwrap()).to_u32_digits()) }
+            { Fq2::mul_by_fq(1, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE            
+        };
+        scripts.push(s2);
+        inputs.push(vec![ScriptInput::Fq2(g), ScriptInput::Fq2(b), ScriptInput::Fq2(ff), ScriptInput::Fq2(e), ScriptInput::Fq2(cc)]);
+
+        // inputs [Txz, h, b, cc, Ty, Tz]
+        let s3 = script! {
+            { Fq2::add(2, 0) }
+            { Fq2::square() }
+            { Fq2::roll(2) }
+            { Fq2::copy(4) }
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::copy(4) }
+            { Fq2::equalverify() }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE            
+        };
+        scripts.push(s3);
+        inputs.push(vec![ScriptInput::Fq2(t4x.z), ScriptInput::Fq2(h), ScriptInput::Fq2(b), ScriptInput::Fq2(cc), ScriptInput::Fq2(t4.y), ScriptInput::Fq2(t4.z)]);
+
+        // inputs [coeffs.2, e, b, coeffs.1, Tx]
+        let s4 = script! {
+            { Fq2::square() }
+            { Fq2::copy(4) }
+            { Fq2::double(0) }
+            { Fq2::add(2, 0) }
+            { Fq2::equalverify() }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE            
+        };
+        scripts.push(s4);
+        inputs.push(vec![ScriptInput::Fq2(coeffs.2), ScriptInput::Fq2(e), ScriptInput::Fq2(b), ScriptInput::Fq2(coeffs.1), ScriptInput::Fq2(t4.x)]);
+
+        // inputs [Txx, a, b, ff, coeffs.0, h]
+        let s5 = script! {
+            { Fq2::neg(0) }
+            { Fq2::equalverify() }
+            { Fq2::sub(2, 0) }
+            { Fq2::mul(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE            
+        };
+        scripts.push(s5);
+        inputs.push(vec![ScriptInput::Fq2(t4x.x), ScriptInput::Fq2(a), ScriptInput::Fq2(b), ScriptInput::Fq2(ff), ScriptInput::Fq2(coeffs.0), ScriptInput::Fq2(h)]);
+
+        // inputs [Txy, e_square, g]
+        let s6 = script! {
+            { Fq2::square() }
+            { Fq2::roll(2) }
+            { Fq2::copy(0) }
+            { Fq2::double(0) }
+            { Fq2::add(2, 0) }
+            { Fq2::sub(2, 0) }
+            { Fq2::equalverify() }
+
+            OP_TRUE            
+        };
+        scripts.push(s6);
+        inputs.push(vec![ScriptInput::Fq2(t4x.y), ScriptInput::Fq2(e_square), ScriptInput::Fq2(g)]);
+
+        (scripts, inputs)
+
     }
 
     // input:
