@@ -1,7 +1,7 @@
 use std::{cmp::min, ops::{Mul, Rem}};
 
 use crate::{bigint::std::OP_16MUL, bn254::{fp254impl::Fp254Impl, fq::Fq, utils::u254_to_digits}, treepp::*};
-use bitcoin::hashes::{hash160, Hash};
+use bitcoin::{hashes::{hash160, Hash}, opcodes::all::OP_TOALTSTACK};
 use num_bigint::BigUint;
 use num_traits::Num;
 
@@ -56,6 +56,14 @@ pub fn sign_digits_compressed(sk: Vec<u8>, message_digits: [u8; N0 as usize]) ->
             { winternitz_signature(sk.clone(), i, digits[i as usize]) }
         }
         { compress_digits(digits) }
+    }
+}
+
+pub fn sign_digits_bit(sk: Vec<u8>, bit: u8) -> Script {
+    script! {
+        { winternitz_signature(sk.clone(), 0, bit) }
+        { winternitz_signature(sk.clone(), 1, D as u8 - bit) }
+        { 16 * bit + (D as u8 - bit) }
     }
 }
 
@@ -391,6 +399,44 @@ pub fn checksig_verify_compressed(pks: Vec<Vec<u8>>) -> Script {
 
         { Fq::from_digits() }
         { Fq::toaltstack() }
+    }
+}
+
+pub fn checksig_verify_bit(pks: Vec<Vec<u8>>) -> Script {
+    script! {
+        // bit_sig, x_sig, compressed
+        { 16 }
+        OP_2DUP
+        OP_GREATERTHAN
+        OP_DUP
+        OP_TOALTSTACK
+        OP_IF
+            OP_SUB
+        OP_ELSE
+            OP_DROP
+        OP_ENDIF
+        // bit_sig, x_sig, x=D-bit | bit
+        { checksig_verify_digit(pks[1].clone()) }
+        // bit_sig, x | bit
+        OP_FROMALTSTACK
+        // bit_sig, x, bit
+        OP_ROT
+        // x, bit, bit_sig
+        OP_SWAP
+        // x, bit_sig, bit
+        { checksig_verify_digit(pks[0].clone()) }
+        // x, bit
+        OP_DUP
+        // x, bit, bit
+        OP_ROT
+        // bit, bit, x
+        OP_ADD
+        // bit, bit+x
+        { D }
+        // bit, bit+x, D
+        OP_EQUALVERIFY
+        // bit
+        OP_TOALTSTACK
     }
 }
 

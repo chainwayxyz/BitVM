@@ -87,8 +87,8 @@ impl Fr {
         };
         scripts.push(script_initial);
         let mut inputs_bits = vec![];
-        for b in bits {
-            inputs_bits.push(ScriptInput::Bit(*b));
+        for (i, b) in bits.iter().enumerate() {
+            inputs_bits.push(ScriptInput::Bit(*b, i.to_string()));
         }
         inputs_bits.push(ScriptInput::Fr(a));
         inputs.push(inputs_bits);
@@ -140,7 +140,7 @@ impl Fr {
                 OP_TRUE
             };
             scripts.push(script_loop_2.clone());
-            inputs.push(vec![ScriptInput::G1P(g1_projs[i as usize + 1]), ScriptInput::G1P(four_g), ScriptInput::Bit(bits[2 * i as usize]), ScriptInput::Bit(bits[2 * i as usize + 1])]);
+            inputs.push(vec![ScriptInput::G1P(g1_projs[i as usize + 1]), ScriptInput::G1P(four_g), ScriptInput::Bit(bits[2 * i as usize], (2 * i).to_string()), ScriptInput::Bit(bits[2 * i as usize + 1], (2 * i + 1).to_string())]);
         }
 
         (scripts, inputs)

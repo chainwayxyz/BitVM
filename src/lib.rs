@@ -218,7 +218,7 @@ pub fn execute_script_as_chunks(script: treepp::Script, target_chunk_size: usize
             input_idx: 0,
             taproot_annex_scriptleaf: Some((TapLeafHash::all_zeros(), None)),
         },
-        script.clone(),
+        script[0].clone(),
         vec![],
     )
     .expect("error creating exec");

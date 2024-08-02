@@ -106,7 +106,7 @@ pub enum ScriptInput {
     G1A(ark_bn254::G1Affine),
     G2P(ark_bn254::G2Projective),
     G2A(ark_bn254::G2Affine),
-    Bit(usize),
+    Bit(usize, String),
 }
 
 impl ScriptInput {
@@ -139,7 +139,7 @@ impl ScriptInput {
             ScriptInput::G2A(g2a) => script! {
                 { g2a_push(*g2a) }
             },
-            ScriptInput::Bit(b) => script! {
+            ScriptInput::Bit(b, _) => script! {
                 { *b }
             }
         }
@@ -156,7 +156,7 @@ impl ScriptInput {
             ScriptInput::G1A(_g1a) => 2,
             ScriptInput::G2P(_g2p) => 6,
             ScriptInput::G2A(_g2a) => 4,
-            ScriptInput::Bit(_b) => 0
+            ScriptInput::Bit(_b, _) => 0
         }
     }
 
@@ -173,7 +173,7 @@ impl ScriptInput {
             ScriptInput::G1A(g1a) => vec![u254_to_digits(BigUint::from(g1a.x).mul(r.clone()).rem(p.clone())), u254_to_digits(BigUint::from(g1a.y).mul(r.clone()).rem(p.clone()))],
             ScriptInput::G2P(g2p) => vec![u254_to_digits(BigUint::from(g2p.x.c0).mul(r.clone()).rem(p.clone())), u254_to_digits(BigUint::from(g2p.x.c1).mul(r.clone()).rem(p.clone())), u254_to_digits(BigUint::from(g2p.y.c0).mul(r.clone()).rem(p.clone())), u254_to_digits(BigUint::from(g2p.y.c1).mul(r.clone()).rem(p.clone())), u254_to_digits(BigUint::from(g2p.z.c0).mul(r.clone()).rem(p.clone())), u254_to_digits(BigUint::from(g2p.z.c1).mul(r.clone()).rem(p.clone()))],
             ScriptInput::G2A(g2a) => vec![u254_to_digits(BigUint::from(g2a.x.c0).mul(r.clone()).rem(p.clone())), u254_to_digits(BigUint::from(g2a.x.c1).mul(r.clone()).rem(p.clone())), u254_to_digits(BigUint::from(g2a.y.c0).mul(r.clone()).rem(p.clone())), u254_to_digits(BigUint::from(g2a.y.c1).mul(r.clone()).rem(p.clone()))],
-            ScriptInput::Bit(_b) => vec![]
+            ScriptInput::Bit(_b, _) => vec![]
         }
     }
 
@@ -188,10 +188,24 @@ impl ScriptInput {
             ScriptInput::G1A(g1a) => vec![g1a.x, g1a.y],
             ScriptInput::G2P(g2p) => vec![g2p.x.c0, g2p.x.c1, g2p.y.c0, g2p.y.c1, g2p.z.c0, g2p.z.c1],
             ScriptInput::G2A(g2a) => vec![g2a.x.c0, g2a.x.c1, g2a.y.c0, g2a.y.c1],
-            ScriptInput::Bit(_b) => vec![]
+            ScriptInput::Bit(_b, _) => vec![]
         }
     }
 
+    pub fn sign(&self) -> Vec<ark_bn254::Fq> {
+        match self {
+            ScriptInput::Fq12(fq12) => fq12.to_base_prime_field_elements().collect(),
+            ScriptInput::Fq6(fq6) => fq6.to_base_prime_field_elements().collect(),
+            ScriptInput::Fq2(fq2) => fq2.to_base_prime_field_elements().collect(),
+            ScriptInput::Fq(fq) => vec![*fq],
+            ScriptInput::Fr(_fr) => vec![],
+            ScriptInput::G1P(g1p) => vec![g1p.x, g1p.y, g1p.z],
+            ScriptInput::G1A(g1a) => vec![g1a.x, g1a.y],
+            ScriptInput::G2P(g2p) => vec![g2p.x.c0, g2p.x.c1, g2p.y.c0, g2p.y.c1, g2p.z.c0, g2p.z.c1],
+            ScriptInput::G2A(g2a) => vec![g2a.x.c0, g2a.x.c1, g2a.y.c0, g2a.y.c1],
+            ScriptInput::Bit(_b, _) => vec![]
+        }
+    }
 }
 
 pub struct Groth16Data {
