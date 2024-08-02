@@ -65,7 +65,51 @@ impl Groth16Data {
     }
 }
 
-fn test_script_with_inputs(scripts: Vec<Script>, inputs: Vec<Script>) -> (bool, usize, usize) {
+fn test_script_with_inputs(script: Script, inputs: Vec<ScriptInput>) -> (bool, usize, usize) {
+    let script_test = script! {
+        for input in inputs {
+            { input.push() }
+        }
+        { script }
+    };
+    let size = script_test.len();
+    let start = start_timer!(|| "execute_script");
+    let exec_result = execute_script_without_stack_limit(script_test);
+    let max_stack_items = exec_result.stats.max_nb_stack_items;
+    end_timer!(start);
+    (exec_result.success, size, max_stack_items)
+}
+
+#[test]
+fn test_groth16_scripts_and_inputs() {
+    let groth16_data = Groth16Data::new("src/groth16/data/proof.json", "src/groth16/data/public.json", "src/groth16/data/vk.json");
+
+    let (scripts, inputs) = Verifier::groth16_scripts_and_inputs(&groth16_data.vk, &groth16_data.proof, &groth16_data.public[0]);
+    let n = scripts.len();
+
+    assert_eq!(scripts.len(), inputs.len());
+
+    let mut script_sizes = Vec::new();
+    let mut max_stack_sizes = Vec::new();
+    let mut script_total_size: u64 = 0;
+
+    for (i, (script, input)) in zip(scripts, inputs).enumerate() {
+        let (result, script_size, max_stack_size) = test_script_with_inputs(script.clone(), input.to_vec());
+        script_total_size += script_size as u64;
+        script_sizes.push(script_size);
+        max_stack_sizes.push(max_stack_size);
+        println!("script[{:?}]: size: {:?} bytes, max stack size: {:?} items", i, script_size, max_stack_size);
+        assert!(result);
+    }
+
+    println!();
+    println!("number of pieces: {:?}", n);
+    println!("script total size: {:?}", script_total_size);
+    println!("max (script size): {:?} bytes", script_sizes.iter().max().unwrap());
+    println!("max (max stack size): {:?} items", max_stack_sizes.iter().max().unwrap());
+}
+
+fn test_script_with_input_signatures(scripts: Vec<Script>, inputs: Vec<Script>) -> (bool, usize, usize) {
     let script_test = script! {
         for input in inputs {
             { input }
@@ -83,10 +127,10 @@ fn test_script_with_inputs(scripts: Vec<Script>, inputs: Vec<Script>) -> (bool, 
 }
 
 #[test]
-fn test_groth16_scripts_and_inputs() {
+fn test_groth16_verifier() {
     let groth16_data = Groth16Data::new("src/groth16/data/proof.json", "src/groth16/data/public.json", "src/groth16/data/vk.json");
 
-    let (scripts, inputs, _) = Verifier::sign(&groth16_data.vk, &groth16_data.proof, &groth16_data.public[0]);
+    let (scripts, inputs, _) = Verifier::verify(&groth16_data.vk, &groth16_data.proof, &groth16_data.public[0]);
     let n = scripts.len();
 
     assert_eq!(scripts.len(), inputs.len());
@@ -96,7 +140,7 @@ fn test_groth16_scripts_and_inputs() {
     let mut script_total_size: u64 = 0;
 
     for (i, (script, input)) in zip(scripts, inputs).enumerate() {
-        let (result, script_size, max_stack_size) = test_script_with_inputs(script.clone(), input.to_vec());
+        let (result, script_size, max_stack_size) = test_script_with_input_signatures(script.clone(), input.to_vec());
         script_total_size += script_size as u64;
         script_sizes.push(script_size);
         max_stack_sizes.push(max_stack_size);
@@ -156,7 +200,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for DummyCircuit<F> {
 }
 
 #[test]
-fn test_groth16_verifier() {
+fn test_groth16_verifier2() {
     type E = Bn254;
     let k = 6;
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());

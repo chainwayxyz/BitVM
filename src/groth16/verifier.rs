@@ -33,17 +33,14 @@ use super::utils::Groth16Data;
 pub struct Verifier;
 
 impl Verifier {
-    pub fn groth16_scripts_and_inputs(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public_inputs: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
-        let (scripts, inputs) = (Vec::new(), Vec::new());
-        (scripts, inputs)
-    }
 
-    pub fn sign(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Vec<Script>>, Vec<Vec<Script>>, Vec<Vec<Vec<Vec<u8>>>>) {
+
+    pub fn verify(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Vec<Script>>, Vec<Vec<Script>>, Vec<Vec<Vec<Vec<u8>>>>) {
         let (mut scripts, mut script_input_signatures, mut pks) = (Vec::new(), Vec::new(), Vec::new());
         let mut sks_map: HashMap<ark_bn254::Fq, (Vec<u8>, Vec<Vec<u8>>)> = HashMap::new();
 
         let dummy = Groth16Data::new("src/groth16/data/proof.json", "src/groth16/data/public.json", "src/groth16/data/vk.json");
-        let (_, dummy_inputs) = Verifier::verify(&dummy.vk, &dummy.proof, &dummy.public[0]);
+        let (_, dummy_inputs) = Verifier::groth16_scripts_and_inputs(&dummy.vk, &dummy.proof, &dummy.public[0]);
 
         for input_list in dummy_inputs.clone() {
             for input in input_list {
@@ -61,7 +58,7 @@ impl Verifier {
             }
         }
 
-        let (main_scripts, main_inputs) = Verifier::verify(vk, proof, public);
+        let (main_scripts, main_inputs) = Verifier::groth16_scripts_and_inputs(vk, proof, public);
         let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
         let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
         
@@ -207,7 +204,7 @@ impl Verifier {
     }
 
     // scripts and the function for verifying a groth16 proof
-    pub fn verify(vk: &VerifyingKey<ark_bn254::Bn254>, proof: &Proof<ark_bn254::Bn254>, public: &<ark_bn254::Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+    pub fn groth16_scripts_and_inputs(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
         let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
         let base1: ark_bn254::G1Projective = vk.gamma_abc_g1[0].into();
