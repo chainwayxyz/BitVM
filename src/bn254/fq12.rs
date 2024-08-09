@@ -608,6 +608,25 @@ impl Fq12 {
             { Fq12::equalverify() }
         }
     }
+
+    pub fn from_digits() -> Script {
+        script! {
+            for _ in 0..11 {
+                { Fq::from_digits() }
+                { Fq::toaltstack() }
+            }
+
+            { Fq::from_digits() }
+
+            for _ in 0..11 {
+                { Fq::fromaltstack() }
+            }
+
+            for i in 0..11 {
+                { Fq::roll(i + 1) }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

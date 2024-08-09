@@ -132,7 +132,7 @@ pub fn execute_script(script: treepp::Script) -> ExecuteInfo {
         }
     }
     println!("");
-
+  
     let res = exec.result().unwrap();
     ExecuteInfo {
         success: res.success,

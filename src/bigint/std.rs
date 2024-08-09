@@ -6,6 +6,65 @@ use crate::bigint::BigIntImpl;
 use crate::pseudo::push_to_stack;
 use crate::treepp::*;
 
+pub fn OP_256MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+    }
+}
+
+pub fn OP_128MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD
+    }
+}
+
+pub fn OP_64MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+    }
+}
+
+pub fn OP_32MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD
+    }
+}
+
+pub fn OP_16MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+    }
+}
+
+pub fn OP_8MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD OP_DUP OP_ADD
+    }
+}
+
+pub fn OP_4MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD
+    }
+}
+
+pub fn OP_2MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD
+    }
+}
+
 impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
     pub fn push_u32_le(v: &[u32]) -> Script {
         let mut bits = vec![];
@@ -53,6 +112,244 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
             .collect::<Vec<u32>>();
 
         Self::push_u32_le(&v)
+    }
+
+    pub fn from_bytes() -> Script {
+        script! {
+            for _ in 0..28 { OP_TOALTSTACK }
+            // b0, b1, b2, b3
+
+            { 0x80 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_FROMALTSTACK
+
+            for _ in 0..4 { OP_FROMALTSTACK }
+            // c0, x, b4, b5, b6, b7
+
+            { 0x80 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB { 32 } OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_16 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_8 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_16 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_8MUL OP_ADD
+            OP_FROMALTSTACK
+
+            for _ in 0..3 { OP_FROMALTSTACK }
+            // c0, c1, x, b8, b9, b10
+
+            { 0x80 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_64MUL OP_ADD
+            OP_FROMALTSTACK
+
+            for _ in 0..4 { OP_FROMALTSTACK }
+            // c0, c1, c2, x, b11, b12, b13, b14
+
+            { 0x80 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_8 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_16 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            { OP_2MUL() } OP_ADD
+            OP_FROMALTSTACK
+
+            for _ in 0..4 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, x, b15, b16, b17, b18
+
+            { 0x80 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB { 64 } OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB { 32 } OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_16 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_16 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_8 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_2 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_FROMALTSTACK
+
+            for _ in 0..3 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, c4, x, b19, b20, b21
+
+            { 0x80 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_128MUL OP_ADD
+            OP_FROMALTSTACK
+
+            for _ in 0..4 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, c4, c5, x, b22, b23, b24, b25
+
+            { 0x80 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_16 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_8 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_16 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_4MUL OP_ADD
+            OP_FROMALTSTACK
+
+            for _ in 0..3 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, c4, c5, c6, x, b26, b27, b28
+
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+            OP_32MUL OP_ADD
+
+            for _ in 0..3 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, c4, c5, c6, c7, b29, b30, b31
+
+            OP_256MUL OP_ADD
+            OP_256MUL OP_ADD
+
+            // c0, c1, c2, c3, c4, c5, c6, c7, c8
+
+            for i in 0..8 {
+                { i + 1 } OP_ROLL
+            }
+            // c8, c7, c6, c5, c4, c3, c2, c1, c0
+        }
+    }
+
+    pub fn from_digits() -> Script {
+        script! {
+            // reverse digits
+            for i in 0..63 {
+                { i + 1 } OP_ROLL
+            }
+
+            for _ in 0..56 { OP_TOALTSTACK }
+            // b0, b1, b2, b3, b4, b5, b6, b7
+
+            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_2 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+
+            for _ in 0..8 { OP_FROMALTSTACK }
+            // c0, b7>>1, b8, b9, b10, b11, b12, b13, b14
+
+            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_8MUL OP_ADD
+
+            for _ in 0..8 { OP_FROMALTSTACK }
+            // c0, c1, b14>>2, b15, b16, b17, b18, b19, b20, b21
+
+            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_4MUL OP_ADD
+
+            for _ in 0..8 { OP_FROMALTSTACK }
+            // c0, c1, c2, b21>>3, b22, b23, b24, b25, b26, b27, b28
+
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            { OP_2MUL() } OP_ADD
+
+            for _ in 0..8 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, b29, b30, b31, b32, b33, b34, b35, b36
+
+            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_2 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+
+            for _ in 0..8 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, c4, b36>>1, b37, b38, b39, b40, b41, b42, b43
+
+            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_8MUL OP_ADD
+
+            for _ in 0..8 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, c4, c5, b43>>2, b44, b45, b46, b47, b48, b49, b50
+
+            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_4MUL OP_ADD
+
+            for _ in 0..8 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, c4, c5, c6, b50>>3, b51, b52, b53, b54, b55, b56, b57
+
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            { OP_2MUL() } OP_ADD
+
+            for _ in 0..6 { OP_FROMALTSTACK }
+            // c0, c1, c2, c3, c4, c5, c6, c7, b58, b59, b60, b61, b62, b63
+
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+            OP_16MUL OP_ADD
+
+            // c0, c1, c2, c3, c4, c5, c6, c7, c8
+
+            for i in 0..8 {
+                { i + 1 } OP_ROLL
+            }
+            // c8, c7, c6, c5, c4, c3, c2, c1, c0
+
+        }
     }
 
     /// Zip the top two u{16N} elements
@@ -242,8 +539,9 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
 #[cfg(test)]
 mod test {
     use crate::bigint::{BigIntImpl, U254};
-    use crate::treepp::execute_script;
+    use crate::treepp::*;
     use bitcoin_script::script;
+    use num_bigint::{BigUint, RandomBits};
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
@@ -505,6 +803,55 @@ mod test {
             { 0xe5c2634 } OP_EQUALVERIFY // 329037900
             { 0x30644e } OP_EQUAL // 12388
         });
+        assert!(exec_result.success);
+    }
+
+    #[test]
+    fn test_from_bytes() {
+        println!("U254.from_bytes: {} bytes", U254::from_bytes().len());
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a: BigUint = prng.sample(RandomBits::new(254));
+        println!("a bytes: {:?}", a.to_bytes_le());
+
+        let script = script! {
+            { U254::push_u32_le(&a.to_u32_digits()) }
+            for byte in a.to_bytes_le() {
+                { byte }
+            }
+            { U254::from_bytes() }
+            { U254::equal(1, 0) }
+        };
+        let exec_result = execute_script(script);
+        assert!(exec_result.success);
+    }
+
+    #[test]
+    fn test_from_digits() {
+        println!("U254.from_digits: {} bytes", U254::from_digits().len());
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a: BigUint = prng.sample(RandomBits::new(254));
+        let mut a_digits = Vec::new();
+
+        for byte in a.to_bytes_le() {
+            let (x, y) = (byte % 16, byte / 16);
+            a_digits.push(x);
+            a_digits.push(y);
+        }
+
+        println!("a bytes: {:?}", a.to_bytes_le());
+        println!("a digits: {:?}", a_digits);
+
+        let script = script! {
+            { U254::push_u32_le(&a.to_u32_digits()) }
+            for digit in a_digits {
+                { digit }
+            }
+            { U254::from_digits() }
+            { U254::equal(1, 0) }
+        };
+        let exec_result = execute_script(script);
         assert!(exec_result.success);
     }
 }
