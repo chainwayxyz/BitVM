@@ -2,7 +2,7 @@ use crate::treepp::*;
 use bitcoin::hashes::{hash160, Hash};
 
 /// Generate the public key for the i-th digit of the message
-pub fn public_key<const D: u32>(sk: Vec<u8>, digit_index: u32) -> Script {
+pub fn public_key<const D: u32>(sk: Vec<u8>, digit_index: usize) -> Vec<u8> {
     let mut secret_i = sk;
     secret_i.push(digit_index as u8);
     let mut hash = hash160::Hash::hash(&secret_i);
@@ -12,10 +12,7 @@ pub fn public_key<const D: u32>(sk: Vec<u8>, digit_index: u32) -> Script {
     }
 
     let hash_bytes = hash.as_byte_array().to_vec();
-
-    script! {
-        { hash_bytes }
-    }
+    hash_bytes
 }
 
 /// Compute the signature for a given message
@@ -36,7 +33,6 @@ pub fn sign<const D: u32, const N0: usize, const N1: usize, const N: usize>(sk: 
         info2 *= 2;
     }
 
-    println!("{:?}", checksum_digits);
     script! {
         for i in 0..N/2 {
             { digit_signature(sk.clone(), i, checksum_digits[(N-1-i) as usize]) }
@@ -87,121 +83,94 @@ pub fn digit_signature(sk: Vec<u8>, digit_index: usize, message_digit: u8) -> Sc
 }
 
 /// Winternitz Signature verification
-pub fn checksig_verify<const D: u32, const LOG_D: u32, const N0: usize, const N1: usize, const N: usize>(sk: Vec<u8>) -> Script {
+pub fn checksig_verify<const D: u32, const LOG_D: u32, const N0: usize, const N1: usize, const N: usize>(pks: Vec<Vec<u8>>) -> Script {
     script! {
         //
         // Verify the hash chain for each digit
         //
 
         // Repeat this for every of the n many digits
-        { 1 << ((N+1)/2 - 1) }
+        { 1 << ((N + 1) / 2 - 1) }
         OP_SWAP
-        for digit_index in 0..(N+1)/2 {
-
+        for digit_index in 0..(N + 1) / 2 {
             OP_2DUP
             OP_LESSTHANOREQUAL
             OP_IF
                 OP_OVER OP_SUB
                 OP_ROT
-                for _ in 0..(D+1)/2 {
+                for _ in 0..(D + 1) / 2 {
                     OP_HASH160
                 }
                 0 OP_TOALTSTACK
             OP_ELSE
                 OP_ROT
-                { (D + 1)/2 } OP_TOALTSTACK
+                { (D + 1) / 2 } OP_TOALTSTACK
             OP_ENDIF
-            { public_key::<D>(sk.clone(), (N - 1 - digit_index) as u32) }
+            { pks[N - 1 - digit_index].clone() }
 
             OP_SWAP
-
             OP_2DUP
             OP_EQUAL
 
             OP_IF
-
-                {D - (D+1)/2}
-
+                { D - (D + 1) / 2 }
                 OP_TOALTSTACK
-
             OP_ENDIF
 
-            for i in 0..D/2 {
+            for i in 0..D / 2 {
                 OP_HASH160
-
                 OP_2DUP
-
                 OP_EQUAL
-
                 OP_IF
-
-                    {D-i-1 - (D+1)/2}
-
+                    { D - i - 1 - (D + 1) / 2 }
                     OP_TOALTSTACK
-
                 OP_ENDIF
             }
-
             OP_2DROP
-
             OP_FROMALTSTACK
             OP_FROMALTSTACK
             OP_ADD
             OP_TOALTSTACK
             OP_DUP
             OP_ADD
-            
         }
-
         OP_DROP
         OP_SWAP
 
-        for digit_index in (N+1)/2..N {
-
+        for digit_index in (N + 1)/ 2..N {
             OP_2DUP
             OP_LESSTHANOREQUAL
             OP_IF
                 OP_OVER OP_SUB
                 OP_ROT
-                for _ in 0..(D+1)/2 {
+                for _ in 0..(D + 1) / 2 {
                     OP_HASH160
                 }
                 0 OP_TOALTSTACK
             OP_ELSE
                 OP_ROT
-                { (D + 1)/2 } OP_TOALTSTACK
+                { (D + 1) / 2 } OP_TOALTSTACK
             OP_ENDIF
-            { public_key::<D>(sk.clone(), (N - 1 - digit_index) as u32) }
+            { pks[N - 1 - digit_index].clone() }
 
             OP_SWAP
-
             OP_2DUP
             OP_EQUAL
 
             OP_IF
-
-                {D - (D+1)/2}
-
+                { D - (D + 1) / 2 }
                 OP_TOALTSTACK
-
             OP_ENDIF
 
             for i in 0..D/2 {
                 OP_HASH160
-
                 OP_2DUP
-
                 OP_EQUAL
-
                 OP_IF
-
-                    {D-i-1 - (D+1)/2}
-
+                    { D - i - 1 - (D + 1) / 2 }
                     OP_TOALTSTACK
-
                 OP_ENDIF
             }
-
             OP_2DROP
 
             OP_FROMALTSTACK
@@ -210,11 +179,8 @@ pub fn checksig_verify<const D: u32, const LOG_D: u32, const N0: usize, const N1
             OP_TOALTSTACK
             OP_DUP
             OP_ADD
-            
         }
-
         OP_2DROP
-
 
         // 1. Compute the checksum of the message's digits
         OP_FROMALTSTACK OP_DUP OP_NEGATE
@@ -223,7 +189,6 @@ pub fn checksig_verify<const D: u32, const LOG_D: u32, const N0: usize, const N1
         }
         { D * (N0 as u32) }
         OP_ADD
-
 
         // 2. Sum up the signed checksum's digits
         OP_FROMALTSTACK
@@ -235,7 +200,7 @@ pub fn checksig_verify<const D: u32, const LOG_D: u32, const N0: usize, const N1
             OP_ADD
         }
 
-        // // 3. Ensure both checksums are equal
+        // 3. Ensure both checksums are equal
         OP_EQUALVERIFY
 
     }
@@ -247,7 +212,7 @@ mod test {
     use crate::{bn254::fq::Fq, execute_script_without_stack_limit};
     use crate::bn254::fp254impl::Fp254Impl;
     use crate::treepp::*;
-    use crate::signatures::winternitz_compact::{sign, checksig_verify};
+    use crate::signatures::winternitz_compact::{checksig_verify, public_key, sign};
     use core::ops::Rem;
     use std::ops::Mul;
     use ark_ff::UniformRand;
@@ -288,14 +253,18 @@ mod test {
     
     #[test]
     fn test_winternitz() {
-        const LOG_D: u32   = 8;                    // Bits per digit
-        const D    : u32   = (1 << LOG_D) - 1;     // Digits are base d+1
-        const N0   : usize = 32;                   // Number of digits of the message
-        const N1   : usize = 2;                    // Number of digits of the checksum
-        const N    : usize = N0 + N1;              // Total number of digits to be signed
-        // N must be smaller than 62 for current version.
+        const LOG_D: u32   = 7;                                       // Bits per digit
+        const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
+        const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
+        const N1   : usize = 2;                                       // Number of digits of the checksum
+        const N    : usize = N0 + N1;                                 // Total number of digits to be signed
+        
+        assert!(N <= 62);                                             // N must be smaller than 62 for current version.
+        assert!(D.pow(N1 as u32) > D * (N0 as u32));
+        assert!(D.pow(N1 as u32 - 1) <= D * (N0 as u32));
 
         let sk = hex::decode(MY_SECKEY).unwrap();
+        let pks = (0..N).map(|digit_index| public_key::<D>(sk.clone(), digit_index)).collect::<Vec<Vec<u8>>>();
 
         let mut prng = ChaCha20Rng::seed_from_u64(0);
         let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
@@ -303,44 +272,36 @@ mod test {
 
         let fq = ark_bn254::Fq::rand(&mut prng);
         let fq_biguint = BigUint::from(fq).mul(r.clone()).rem(p.clone());
-        
-        println!("{fq_biguint}");
 
         let message = biguint_to_digits::<D, N0>(fq_biguint.clone());
-
-        println!("message: {:?}", message);
         
+        let sign_size = sign::<D, N0, N1, N>(sk.clone(), message).len();
+        let checksig_size = checksig_verify::<D, LOG_D, N0, N1, N>(pks.clone()).len();
+        let signature_stack_size = N + 2;
+        let fq_fit = 1000 / signature_stack_size;
+
+        println!("LOGD, D = ({:?}, {:?})", LOG_D, D);
+        println!("N = {:?}, N0 = {:?}, N1 = {:?}", N, N0, N1);
+        println!("sign script size: {:?}", sign_size);
+        println!("checksig script size: {:?}", checksig_size);
+        println!("Fq signature size in stack: {:?}", signature_stack_size);
+        println!("{:?} Fqs can fit", fq_fit);
+        println!("remaining script size: {:?}", 4_000_000 - checksig_size * fq_fit);
+
         let script = script! {
             { sign::<D, N0, N1, N>(sk.clone(), message) }
-            { checksig_verify::<D, LOG_D, N0, N1, N>(sk.clone()) }
-            { U254::from_bytes() }
-        };
-
-        println!(
-            "Winternitz signature size:\n \t{:?} bytes / {:?} bits \n\t{:?} bytes / bit",
-            script.len(),
-            (N0 as u32) * LOG_D,
-            script.len() as f64 / ((N0 as u32) * LOG_D) as f64
-        );
-
-        let final_script = script! {
-            { sign::<D, N0, N1, N>(sk.clone(), message) }
-            { checksig_verify::<D, LOG_D, N0, N1, N>(sk.clone()) }
+            { checksig_verify::<D, LOG_D, N0, N1, N>(pks.clone()) }
 
             for i in 1..N0 {
                 { i } OP_ROLL
             }
 
-            { U254::from_bytes() }
-
-            { U254::push_u32_le(&fq_biguint.to_u32_digits()) }
-
-            { U254::equalverify(1, 0) }
-
+            { Fq::from_digits::<LOG_D>() }
+            { Fq::push_u32_le(&BigUint::from(fq).to_u32_digits()) }
+            { Fq::equalverify(1, 0) }
             OP_TRUE
-            
         };
 
-        assert!(exe_script(final_script));
+        assert!(exe_script(script));
     }
 }

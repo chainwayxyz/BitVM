@@ -609,14 +609,14 @@ impl Fq12 {
         }
     }
 
-    pub fn from_digits() -> Script {
+    pub fn from_digits<const LOG_D: u32>() -> Script {
         script! {
             for _ in 0..11 {
-                { Fq::from_digits() }
+                { Fq::from_digits::<LOG_D>() }
                 { Fq::toaltstack() }
             }
 
-            { Fq::from_digits() }
+            { Fq::from_digits::<LOG_D>() }
 
             for _ in 0..11 {
                 { Fq::fromaltstack() }

@@ -543,7 +543,7 @@ mod test {
                     {i + 1} OP_ROLL
                 }
 
-                { Fq::from_digits() }
+                { Fq::from_digits::<4>() }
                 { Fq::toaltstack() }
             }
         };
@@ -772,17 +772,17 @@ mod test {
             
             // check sig b
             { checksig_verify(b_sk_bytes.clone()) }
-            { Fq::from_digits() }
+            { Fq::from_digits::<LOG_D>() }
             { Fq::toaltstack() }
 
             // check sig a
             { checksig_verify(a_sk_bytes.clone()) }
-            { Fq::from_digits() }
+            { Fq::from_digits::<LOG_D>() }
             { Fq::toaltstack() }
 
             // check sig e
             { checksig_verify(e_sk_bytes.clone()) }
-            { Fq::from_digits() }
+            { Fq::from_digits::<LOG_D>() }
 
             { Fq::fromaltstack() }
             { Fq::fromaltstack() }
@@ -805,17 +805,17 @@ mod test {
             
             // check sig e
             { checksig_verify(e_sk_bytes.clone()) }
-            { Fq::from_digits() }
+            { Fq::from_digits::<LOG_D>() }
             { Fq::toaltstack() }
 
             // check sig c
             { checksig_verify(c_sk_bytes.clone()) }
-            { Fq::from_digits() }
+            { Fq::from_digits::<LOG_D>() }
             { Fq::toaltstack() }
 
             // check sig d
             { checksig_verify(d_sk_bytes.clone()) }
-            { Fq::from_digits() }
+            { Fq::from_digits::<LOG_D>() }
 
             { Fq::fromaltstack() }
             { Fq::fromaltstack() }
@@ -829,7 +829,7 @@ mod test {
 
         let s = script! {
             { checksig_verify(e_sk_bytes.clone()) }
-            { Fq::from_digits() }
+            { Fq::from_digits::<LOG_D>() }
         };
 
         println!("check sig and from digits size: {:?}", s.len());
@@ -1438,17 +1438,17 @@ mod test {
             { script_inputs }
             for i in 0..12 {
                 { checksig_verify(a_sk_bytes[11 - i].clone()) }
-                { Fq::from_digits() }
+                { Fq::from_digits::<LOG_D>() }
                 { Fq::toaltstack() }
             }
             for i in 0..12 {
                 { checksig_verify(b_sk_bytes[11 - i].clone()) }
-                { Fq::from_digits() }
+                { Fq::from_digits::<LOG_D>() }
                 { Fq::toaltstack() }
             }
             for i in 0..12 {
                 { checksig_verify(c_sk_bytes[11 - i].clone()) }
-                { Fq::from_digits() }
+                { Fq::from_digits::<LOG_D>() }
                 { Fq::toaltstack() }
             }
             { Fq12::fromaltstack() }

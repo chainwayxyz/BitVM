@@ -226,129 +226,258 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
         }
     }
 
-    pub fn from_digits() -> Script {
-        script! {
-            // reverse digits
-            for i in 0..63 {
-                { i + 1 } OP_ROLL
-            }
+    pub fn from_digits<const LOG_D: u32>() -> Script {
+        if LOG_D == 4 {
+            return script! {
+                for _ in 0..56 { OP_TOALTSTACK }
+                // b0, b1, b2, b3, b4, b5, b6, b7
+    
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_2 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+    
+                for _ in 0..8 { OP_FROMALTSTACK }
+                // c0, b7>>1, b8, b9, b10, b11, b12, b13, b14
+    
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_8MUL OP_ADD
+    
+                for _ in 0..8 { OP_FROMALTSTACK }
+                // c0, c1, b14>>2, b15, b16, b17, b18, b19, b20, b21
+    
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_4MUL OP_ADD
+    
+                for _ in 0..8 { OP_FROMALTSTACK }
+                // c0, c1, c2, b21>>3, b22, b23, b24, b25, b26, b27, b28
+    
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                { OP_2MUL() } OP_ADD
+    
+                for _ in 0..8 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, b29, b30, b31, b32, b33, b34, b35, b36
+    
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_2 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+    
+                for _ in 0..8 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, c4, b36>>1, b37, b38, b39, b40, b41, b42, b43
+    
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_8MUL OP_ADD
+    
+                for _ in 0..8 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, c4, c5, b43>>2, b44, b45, b46, b47, b48, b49, b50
+    
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_4MUL OP_ADD
+    
+                for _ in 0..8 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, c4, c5, c6, b50>>3, b51, b52, b53, b54, b55, b56, b57
+    
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                { OP_2MUL() } OP_ADD
+    
+                for _ in 0..6 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, c4, c5, c6, c7, b58, b59, b60, b61, b62, b63
+    
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_16MUL OP_ADD
+    
+                // c0, c1, c2, c3, c4, c5, c6, c7, c8
+    
+                for i in 0..8 {
+                    { i + 1 } OP_ROLL
+                }
+                // c8, c7, c6, c5, c4, c3, c2, c1, c0
+            };
+        }
+        else if LOG_D == 7 {
+            return script! {
+                // b0, b1, b2, ..., b36
+                for _ in 0..32 { OP_TOALTSTACK }
+                // b0, b1, b2, b3, b4
 
-            for _ in 0..56 { OP_TOALTSTACK }
-            // b0, b1, b2, b3, b4, b5, b6, b7
+                { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB { 32 } OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_16 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_16 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_8 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_2 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
 
-            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
-            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
-            OP_2 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_FROMALTSTACK
 
-            for _ in 0..8 { OP_FROMALTSTACK }
-            // c0, b7>>1, b8, b9, b10, b11, b12, b13, b14
+                for _ in 0..4 { OP_FROMALTSTACK }
+                // c0, x, b5, b6, b7, b8
 
-            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
-            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_8MUL OP_ADD
+                { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_16 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_8 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_16 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
 
-            for _ in 0..8 { OP_FROMALTSTACK }
-            // c0, c1, b14>>2, b15, b16, b17, b18, b19, b20, b21
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_64MUL OP_ADD
+                OP_FROMALTSTACK
 
-            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_4MUL OP_ADD
+                for _ in 0..4 { OP_FROMALTSTACK }
+                // c0, c1, x, b9, b10, b11, b12
 
-            for _ in 0..8 { OP_FROMALTSTACK }
-            // c0, c1, c2, b21>>3, b22, b23, b24, b25, b26, b27, b28
+                { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_8 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_16 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
 
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            { OP_2MUL() } OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_32MUL OP_ADD
+                OP_FROMALTSTACK
 
-            for _ in 0..8 { OP_FROMALTSTACK }
-            // c0, c1, c2, c3, b29, b30, b31, b32, b33, b34, b35, b36
+                for _ in 0..4 { OP_FROMALTSTACK }
+                // c0, c1, c2, x, b13, b14, b15, b16
 
-            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
-            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
-            OP_2 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
+                { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_16 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
 
-            for _ in 0..8 { OP_FROMALTSTACK }
-            // c0, c1, c2, c3, c4, b36>>1, b37, b38, b39, b40, b41, b42, b43
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_16MUL OP_ADD
+                OP_FROMALTSTACK
 
-            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
-            OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_8MUL OP_ADD
+                for _ in 0..4 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, x, b17, b18, b19, b20
 
-            for _ in 0..8 { OP_FROMALTSTACK }
-            // c0, c1, c2, c3, c4, c5, b43>>2, b44, b45, b46, b47, b48, b49, b50
+                { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
 
-            OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_4MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_8MUL OP_ADD
+                OP_FROMALTSTACK
 
-            for _ in 0..8 { OP_FROMALTSTACK }
-            // c0, c1, c2, c3, c4, c5, c6, b50>>3, b51, b52, b53, b54, b55, b56, b57
+                for _ in 0..4 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, c4, x, b21, b22, b23, b24
 
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            { OP_2MUL() } OP_ADD
+                { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
 
-            for _ in 0..6 { OP_FROMALTSTACK }
-            // c0, c1, c2, c3, c4, c5, c6, c7, b58, b59, b60, b61, b62, b63
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_4MUL OP_ADD
+                OP_FROMALTSTACK
 
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
-            OP_16MUL OP_ADD
+                for _ in 0..4 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, c4, c5, x, b25, b26, b27, b28
 
-            // c0, c1, c2, c3, c4, c5, c6, c7, c8
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                { OP_2MUL() } OP_ADD
 
-            for i in 0..8 {
-                { i + 1 } OP_ROLL
-            }
-            // c8, c7, c6, c5, c4, c3, c2, c1, c0
+                for _ in 0..5 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, c4, c5, c6, b29, b30, b31, b32, b33
 
+                { 0x40 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB { 32 } OP_ELSE OP_DROP OP_0 OP_ENDIF OP_TOALTSTACK
+                { 0x20 } OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_16 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_16 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_8 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_8 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_4 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_4 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_2 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+                OP_2 OP_2DUP OP_GREATERTHANOREQUAL OP_IF OP_SUB OP_1 OP_FROMALTSTACK OP_ADD OP_TOALTSTACK OP_ELSE OP_DROP OP_ENDIF
+
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_FROMALTSTACK
+
+                for _ in 0..3 { OP_FROMALTSTACK }
+                // c0, c1, c2, c3, c4, c5, c6, c7, x, b34, b35, b36
+
+                OP_128MUL OP_ADD
+                OP_128MUL OP_ADD
+                OP_64MUL OP_ADD
+                
+                // c0, c1, c2, c3, c4, c5, c6, c7, c8
+
+                for i in 0..8 {
+                    { i + 1 } OP_ROLL
+                }
+                // c8, c7, c6, c5, c4, c3, c2, c1, c0
+            };
+        }
+        else if LOG_D == 8 {
+            return script! {
+                { Self::from_bytes() }
+            };
+        }
+        else {
+            return script! {
+                // .
+            };
         }
     }
 
@@ -544,6 +673,21 @@ mod test {
     use num_bigint::{BigUint, RandomBits};
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
+    use num_traits::Zero;
+
+    pub fn biguint_to_digits<const D: u32, const N0: usize>(mut number: BigUint) -> [u8; N0] {
+        let mut digits: [u8; N0] = [0; N0];
+        for i in 0..N0 {
+            let digit = number.clone() % (D + 1);
+            number = (number - digit.clone()) / (D + 1);
+            if digit.is_zero() {
+                digits[i] = 0;
+            } else {
+                digits[i] = digit.to_u32_digits()[0] as u8;
+            }
+        }
+        digits
+    }
 
     #[test]
     fn test_zip() {
@@ -828,27 +972,24 @@ mod test {
 
     #[test]
     fn test_from_digits() {
-        println!("U254.from_digits: {} bytes", U254::from_digits().len());
         let mut prng = ChaCha20Rng::seed_from_u64(0);
-
         let a: BigUint = prng.sample(RandomBits::new(254));
-        let mut a_digits = Vec::new();
 
-        for byte in a.to_bytes_le() {
-            let (x, y) = (byte % 16, byte / 16);
-            a_digits.push(x);
-            a_digits.push(y);
-        }
-
-        println!("a bytes: {:?}", a.to_bytes_le());
-        println!("a digits: {:?}", a_digits);
+        // change LOG_D to 8, 7, 4
+        const LOG_D: u32   = 7;                                       // Bits per digit
+        const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
+        const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
+        println!("N0: {:?}", N0);
+        let from_digits = U254::from_digits::<LOG_D>();
+        println!("U254.from_digits_{:?}: {} bytes", LOG_D, from_digits.len());
+        let a_digits = biguint_to_digits::<D, N0>(a.clone());
 
         let script = script! {
             { U254::push_u32_le(&a.to_u32_digits()) }
             for digit in a_digits {
                 { digit }
             }
-            { U254::from_digits() }
+            { from_digits }
             { U254::equal(1, 0) }
         };
         let exec_result = execute_script(script);
