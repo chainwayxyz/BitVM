@@ -42,7 +42,7 @@ pub fn compress_digits(digits: Vec<u8>) -> Script {
     while index < digits.len() {
         let mut val: u32 = 0;
         for j in index..(min(index + compress_size, digits.len())) {
-            val *= (D + 1);
+            val *= D + 1;
             val += digits[j] as u32;
         }
         compressed_digits.push(val);
@@ -460,7 +460,7 @@ mod test {
     use rand_chacha::ChaCha20Rng;
     use rand::{Rng, SeedableRng};
     use sha2::{Digest, Sha256};
-    use crate::{bigint::{std::OP_16MUL, U254}, bn254::{fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, fq6::Fq6, utils::{fq12_push, fq6_push}}, execute_script_without_stack_limit, hash::{blake3::{blake3, blake3_var_length}, sha256::sha256}, signatures::winternitz_groth16::{checksig_verify_digit, reveal, sign_digits_compressed}, treepp::*};
+    use crate::{bigint::{std::OP_16MUL, U254}, bn254::{fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, fq6::Fq6, utils::{fq12_push, fq6_push}}, execute_script_without_stack_limit, hash::{blake3::blake3_var_length, sha256::sha256}, signatures::winternitz_groth16::{checksig_verify_digit, reveal, sign_digits_compressed}, treepp::*};
     use num_traits::Num;
     use std::{iter::zip, ops::{Mul, Rem}};
 
@@ -1001,8 +1001,8 @@ mod test {
 
         let abc_hash_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
 
-        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
-        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+        let _r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let _p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
 
         let a_fq12 = ark_bn254::Fq12::rand(&mut prng);
         let b_fq12 = ark_bn254::Fq12::rand(&mut prng);
@@ -1190,8 +1190,8 @@ mod test {
 
         let abc_hash_sk_bytes = hex_decode("b138982ce17ac813d505b5b40b665d404e9528e7").unwrap();
 
-        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
-        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+        let _r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let _p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
 
         let a_fq6 = ark_bn254::Fq6::rand(&mut prng);
         let b_fq6 = ark_bn254::Fq6::rand(&mut prng);

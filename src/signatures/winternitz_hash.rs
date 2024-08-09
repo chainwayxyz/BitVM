@@ -1,6 +1,5 @@
 use crate::treepp::*;
-use crate::signatures::winternitz::{sign, checksig_verify, generate_public_key, PublicKey
-};
+use crate::signatures::winternitz::{sign, checksig_verify, PublicKey};
 use crate::hash::blake3::blake3_160_var_length;
 use blake3::hash;
 
@@ -44,6 +43,7 @@ pub fn sign_hash(sec_key: &str, message: &[u8]) -> Script {
 
 #[cfg(test)]
 mod test {
+    use crate::signatures::winternitz::generate_public_key;
     use super::*;
 
     #[test]
