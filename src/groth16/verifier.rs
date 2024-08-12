@@ -6,12 +6,15 @@ use crate::bn254::fq12::Fq12;
 use crate::bn254::msm::msm;
 use crate::bn254::pairing::Pairing;
 use crate::bn254::utils::{biguint_to_digits, from_eval_point};
+use crate::bn254::curves::G1Projective;
+use crate::execute_script_without_stack_limit;
 use crate::groth16::constants::{LAMBDA, P_POW3};
 use crate::groth16::offchain_checker::compute_c_wi;
-use crate::groth16::utils::{ScriptInput, Groth16Data, fq12_push, fq2_push};
+use crate::groth16::utils::{fq12_push, fq2_push, g2a_push, Groth16Data, ScriptInput};
 use crate::treepp::{script, Script};
 use crate::signatures::winternitz_compact::*;
-use ark_bn254::{Bn254, G1Projective};
+use ark_bn254::Bn254;
+use ark_ec::bn::BnConfig;
 use ark_ec::pairing::Pairing as ark_Pairing;
 use ark_ec::short_weierstrass::Projective;
 use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
@@ -157,6 +160,111 @@ impl Verifier {
     pub fn groth16_scripts_and_inputs(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
         let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
+        let base1: ark_bn254::G1Projective = vk.gamma_abc_g1[0].into();
+        let base2: ark_bn254::G1Projective = vk.gamma_abc_g1[1].into();
+        let base2_times_public = base2 * public;
+        let msm_g1 = ark_bn254::G1Projective::msm(&vk.gamma_abc_g1, &[<ark_bn254::Bn254 as ark_Pairing>::ScalarField::ONE, public.clone()]).unwrap();
+
+        // let (sx, ix) = Fr::mul_by_constant_g1_verify(base2, *public, base2_times_public);
+        // scripts.extend(sx);
+        // inputs.extend(ix);
+
+        let msm_scalar_mul_script = script! {
+            { G1Projective::scalar_mul() }
+            { G1Projective::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(msm_scalar_mul_script);
+        inputs.push(vec![ScriptInput::G1P(base2_times_public), ScriptInput::G1P(base2), ScriptInput::Fr(*public)]);
+
+        let msm_addition_script = script! {
+            { Fq::push_u32_le(&BigUint::from(base1.x).to_u32_digits()) }
+            { Fq::push_u32_le(&BigUint::from(base1.y).to_u32_digits()) }
+            { Fq::push_u32_le(&BigUint::from(base1.z).to_u32_digits()) }
+            { G1Projective::add() }
+            { G1Projective::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(msm_addition_script);
+        inputs.push(vec![ScriptInput::G1P(msm_g1), ScriptInput::G1P(base2_times_public)]);
+        
+        let exp = &*P_POW3 - &*LAMBDA;
+
+        // G1/G2 points for pairings
+        let (p1, p2, p3, p4) = (msm_g1.into_affine(), proof.c, vk.alpha_g1, proof.a);
+        let (q1, q2, q3, q4) = (
+            vk.gamma_g2.into_group().neg().into_affine(),
+            vk.delta_g2.into_group().neg().into_affine(),
+            -vk.beta_g2,
+            proof.b,
+        );
+
+        // hint from arkworks
+        let f = Bn254::multi_miller_loop_affine([p1, p2, p3, p4], [q1, q2, q3, q4]).0;
+        let (c, wi) = compute_c_wi(f);
+        let c_inv = c.inverse().unwrap();
+        let hint = f * wi * c.pow(exp.to_u64_digits());
+
+        assert_eq!(hint, c.pow(P_POW3.to_u64_digits()), "hint isn't correct!");
+
+        let q_prepared = vec![
+            G2Prepared::from_affine(q1),
+            G2Prepared::from_affine(q2),
+            G2Prepared::from_affine(q3),
+            G2Prepared::from_affine(q4),
+        ];
+
+        let mut f = c_inv;
+        let mut t4 = q4;
+
+        for i in (1..ark_bn254::Config::ATE_LOOP_COUNT.len()).rev() {
+            let fx = f.square();
+            let (sx, ix) = Fq12::mul_verify(f, f, fx);
+            scripts.extend(sx);
+            inputs.extend(ix);
+            f = fx;
+
+            if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1 {
+                let fx = f * c_inv;
+                let (sx, ix) = Fq12::mul_verify(f, c_inv, fx);
+                scripts.extend(sx);
+                inputs.extend(ix);
+                f = fx;
+            }
+            else if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
+                let fx = f * c;
+                let (sx, ix) = Fq12::mul_verify(f, c, fx);
+                scripts.extend(sx);
+                inputs.extend(ix);
+                f = fx;
+            }
+        }
+
+        // let s = script! {
+        //     { constants() }
+        //     { from_eval_point(p1) }
+        //     { from_eval_point(p2) }
+        //     { from_eval_point(p3) }
+        //     { from_eval_point(p4) }
+        //     { g2a_push(q4) }
+
+        //     { fq12_push(c) }
+        //     { fq12_push(c_inv) }
+        //     { fq12_push(wi) }
+
+        //     { g2a_push(t4) }
+
+        //     // stack: [beta_12, beta_13, beta_22, P1, P2, P3, P4, Q4, c, c_inv, wi, T4]
+        //     { Pairing::quad_miller_loop_with_c_wi(q_prepared) }
+
+        //     { fq12_push(hint) }
+        //     { Fq12::equalverify() }
+        //     OP_TRUE
+        // };
+
+        // let exec_result = execute_script_without_stack_limit(s);
+        // assert!(exec_result.success);
+
         (scripts, inputs)
     }
 
@@ -179,7 +287,7 @@ impl Verifier {
         ]
         .concat();
         let sum_ai_abc_gamma =
-            G1Projective::msm(&vk.gamma_abc_g1, &scalars).expect("failed to calculate msm");
+            ark_bn254::G1Projective::msm(&vk.gamma_abc_g1, &scalars).expect("failed to calculate msm");
         (msm(&vk.gamma_abc_g1, &scalars), sum_ai_abc_gamma)
     }
 

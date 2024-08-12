@@ -367,11 +367,6 @@ mod test {
         let script = script! {
             { sign::<D, N0, N1, N>(sk.clone(), message) }
             { checksig_verify::<D, LOG_D, N0, N1, N>(pks.clone()) }
-
-            for i in 1..N0 {
-                { i } OP_ROLL
-            }
-
             { Fq::from_digits::<LOG_D>() }
             { Fq::push_u32_le(&BigUint::from(fq).to_u32_digits()) }
             { Fq::equalverify(1, 0) }

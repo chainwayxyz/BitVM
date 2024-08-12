@@ -3,6 +3,7 @@ use crate::bn254::fq::Fq;
 use crate::bn254::fq2::Fq2;
 use crate::bn254::fq6::Fq6;
 use crate::bn254::fr::Fr;
+use crate::groth16::utils::ScriptInput;
 use crate::treepp::{script, Script};
 use ark_ff::Fp12Config;
 use num_bigint::BigUint;
@@ -101,6 +102,88 @@ impl Fq12 {
             { Fq6::add(18, 12)}
             { Fq6::sub(12, 0) }
         }
+    }
+
+    pub fn mul_verify(a: ark_bn254::Fq12, b: ark_bn254::Fq12, c: ark_bn254::Fq12) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+        let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
+
+        let (ax, ay) = (a.c0, a.c1);
+        let (bx, by) = (b.c0, b.c1);
+        let (cx, cy) = (c.c0, c.c1);
+        let d = ax * bx;
+        let e = ay * by;
+
+        // inputs: ax, bx, d
+        // checks d=ax*bx
+        let s1 = script! {
+            { Fq6::mul(6, 0) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s1);
+        inputs.push(vec![ScriptInput::Fq6(d), ScriptInput::Fq6(ax), ScriptInput::Fq6(bx)]);
+
+        // inputs: ay, by, e 
+        // checks e=ay*by
+        let s2 = script! {
+            { Fq6::mul(6, 0) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s2);
+        inputs.push(vec![ScriptInput::Fq6(e), ScriptInput::Fq6(ay), ScriptInput::Fq6(by)]);
+
+        // inputs: cx, d, e 
+        // checks cx=d+eß
+        let s3 = script! {
+            { Fq12::mul_fq6_by_nonresidue() }
+            { Fq6::add(6, 0) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s3);
+        inputs.push(vec![ScriptInput::Fq6(cx), ScriptInput::Fq6(d), ScriptInput::Fq6(e)]);
+
+        // check cy=ax*by+ay*bx=(ax+ay)*(bx+by)-(d+e)
+
+        // inputs: ax+ay, ax, ay
+        let s4 = script! {
+            { Fq6::add(6, 0) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s4);
+        inputs.push(vec![ScriptInput::Fq6(ax + ay), ScriptInput::Fq6(ax), ScriptInput::Fq6(ay)]);
+
+        // inputs: bx+by, bx, by
+        let s5 = script! {
+            { Fq6::add(6, 0) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s5);
+        inputs.push(vec![ScriptInput::Fq6(bx + by), ScriptInput::Fq6(bx), ScriptInput::Fq6(by)]);
+
+        // inputs: d+e, d, e
+        let s6 = script! {
+            { Fq6::add(6, 0) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s6);
+        inputs.push(vec![ScriptInput::Fq6(d + e), ScriptInput::Fq6(d), ScriptInput::Fq6(e)]);
+
+        // inputs: cy, d+e, ax+ay, bx+by
+        let s7 = script! {
+            { Fq6::mul(6, 0) }
+            { Fq6::sub(0, 6) }
+            { Fq6::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s7);
+        inputs.push(vec![ScriptInput::Fq6(cy), ScriptInput::Fq6(d + e), ScriptInput::Fq6(ax + ay), ScriptInput::Fq6(bx + by)]);
+
+        (scripts, inputs)
     }
 
     pub fn mul_cpt(mut a: u32, mut b: u32) -> Script {
