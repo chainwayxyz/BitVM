@@ -5,7 +5,8 @@ use crate::bn254::fq6::Fq6;
 use crate::bn254::fr::Fr;
 use crate::groth16::utils::ScriptInput;
 use crate::treepp::{script, Script};
-use ark_ff::Fp12Config;
+use ark_bn254::Fq12Config;
+use ark_ff::{AdditiveGroup, Fp12Config};
 use num_bigint::BigUint;
 use num_traits::{Num, Zero};
 use std::ops::{ShrAssign, Sub};
@@ -542,6 +543,70 @@ impl Fq12 {
         }
     }
 
+    pub fn square_verify(a: ark_bn254::Fq12, c: ark_bn254::Fq12) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+        let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
+
+        let mut v0 = a.c0 + a.c1;
+        let v2 = a.c0 * a.c1;
+        let mut v3 = a.c1;
+        Fq12Config::mul_fp6_by_nonresidue_in_place(&mut v3);
+        v3 += a.c0;
+        v0 *= v3;
+        let mut v2_new = v2;
+        Fq12Config::mul_fp6_by_nonresidue_in_place(&mut v2_new);
+
+        let ax = ark_bn254::Fq12::new(v0 - v2 - v2_new, v2.double());
+
+        assert_eq!(ax, c);
+
+        // inputs [c.c1, v2, a.c0, a.c1]
+        // verified: [c.c1, v2]
+        let s1 = script! {
+            // c.c1, v2, a.c0, a.c1
+            { Fq6::mul(6, 0) }
+            // c.c1, v2, a.c0*a.c1
+            { Fq6::copy(6) }
+            { Fq6::equalverify() }
+            { Fq6::double(0) }
+            // c.c1, 2*v2
+            { Fq6::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s1);
+        inputs.push(vec![ScriptInput::Fq6(c.c1), ScriptInput::Fq6(v2), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(a.c1)]);
+
+        // inputs [c.c0, v2, a.c0, a.c1]
+        // verified: [c.c0]
+        let s2 = script! {
+            // c.c0, v2, a.c0, a.c1
+            { Fq6::copy(6) }
+            { Fq6::copy(6) }
+            { Fq6::add(6, 0) }
+            // c.c0, v2, a.c0, a.c1, v0
+            { Fq6::roll(6) }
+            { Fq12::mul_fq6_by_nonresidue() }
+            { Fq6::roll(12) }
+            { Fq6::add(6, 0) }
+            // c.c0, v2, v0, v3
+            { Fq6::mul(6, 0) }
+            // c.c0, v2, v0*v3
+            { Fq6::copy(6) }
+            { Fq12::mul_fq6_by_nonresidue() }
+            { Fq6::roll(12) }
+            { Fq6::add(6, 0) }
+            { Fq6::sub(6, 0) }
+            // c.c0, v0*v3-(beta + 1)*v2
+            { Fq6::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(s2);
+        inputs.push(vec![ScriptInput::Fq6(c.c0), ScriptInput::Fq6(v2), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(a.c1)]);
+
+        (scripts, inputs)
+    }
+
     pub fn cyclotomic_inverse() -> Script {
         script! {
             { Fq6::neg(0) }
@@ -717,16 +782,33 @@ mod test {
     use crate::bn254::fp254impl::Fp254Impl;
     use crate::bn254::fq::Fq;
     use crate::bn254::fq12::Fq12;
-    use crate::treepp::*;
+    use crate::groth16::utils::ScriptInput;
+    use crate::{execute_script_without_stack_limit, treepp::*};
     use ark_ff::AdditiveGroup;
     use ark_ff::{CyclotomicMultSubgroup, Field};
-    use ark_std::UniformRand;
+    use ark_std::{end_timer, start_timer, UniformRand};
     use bitcoin_scriptexec::ExecError;
     use core::ops::Mul;
+    use std::iter::zip;
     use num_bigint::BigUint;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
     use std::str::FromStr;
+
+    fn test_script_with_inputs(script: Script, inputs: Vec<ScriptInput>) -> (bool, usize, usize) {
+        let script_test = script! {
+            for input in inputs {
+                { input.push() }
+            }
+            { script }
+        };
+        let size = script_test.len();
+        let start = start_timer!(|| "execute_script");
+        let exec_result = execute_script_without_stack_limit(script_test);
+        let max_stack_items = exec_result.stats.max_nb_stack_items;
+        end_timer!(start);
+        (exec_result.success, size, max_stack_items)
+    }
 
     fn fq2_push(element: ark_bn254::Fq2) -> Script {
         script! {
@@ -876,6 +958,43 @@ mod test {
             let exec_result = execute_script(script);
             assert!(exec_result.success);
         }
+    }
+
+    #[test]
+    fn test_bn254_fq12_square_verify() {
+       let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a = ark_bn254::Fq12::rand(&mut prng);
+        let c = a.square();
+        
+        let (scripts, inputs) = Fq12::square_verify(a, c);
+        let n = scripts.len();
+
+        assert_eq!(scripts.len(), inputs.len());
+
+        let mut script_sizes = Vec::new();
+        let mut max_stack_sizes = Vec::new();
+        let mut fq_counts = Vec::new();
+        let mut script_total_size: u64 = 0;
+
+        for (i, (script, input)) in zip(scripts, inputs).enumerate() {
+            let (result, script_size, max_stack_size) = test_script_with_inputs(script.clone(), input.to_vec());
+            script_total_size += script_size as u64;
+            let fq_count = input.iter().map(|inp| inp.size()).sum::<usize>();
+            script_sizes.push(script_size);
+            max_stack_sizes.push(max_stack_size);
+            fq_counts.push(fq_count);
+            println!("script[{:?}]: size: {:?} bytes, max stack size: {:?} items, input fq count: {:?}", i, script_size, max_stack_size, fq_count);
+            assert!(result);
+        }
+        
+        println!();
+        println!("number of pieces: {:?}", n);
+        println!("script total size: {:?}", script_total_size);
+        println!("max (script size): {:?} bytes", script_sizes.iter().max().unwrap());
+        println!("max (max stack size): {:?} items", max_stack_sizes.iter().max().unwrap());
+        println!("max fq count: {:?} fqs", fq_counts.iter().max().unwrap());
+           
     }
 
     #[test]
