@@ -5,11 +5,36 @@ use crate::bn254::{fq12::Fq12, fq2::Fq2};
 use ark_ec::{bn::BnConfig, AffineRepr};
 use ark_ff::Field;
 use num_bigint::BigUint;
+use num_traits::Zero;
 
 use crate::{
     bn254::{fp254impl::Fp254Impl, fq::Fq},
     treepp::*,
 };
+
+// pub fn u254_to_digits<const D: u32, const DIGIT_COUNT: usize>(a: BigUint) -> [u8; DIGIT_COUNT] {
+//     let mut digits = [0_u8; DIGIT_COUNT];
+//     for (i, byte) in a.to_bytes_le().iter().enumerate() {
+//         let (x, y) = (byte % 16, byte / 16);
+//         digits[2 * i] = x;
+//         digits[2 * i + 1] = y;
+//     }
+//     digits
+// }
+
+pub fn biguint_to_digits<const D: u32, const DIGIT_COUNT: usize>(mut number: BigUint) -> [u8; DIGIT_COUNT] {
+    let mut digits: [u8; DIGIT_COUNT] = [0; DIGIT_COUNT];
+    for i in 0..DIGIT_COUNT {
+        let digit = number.clone() % (D + 1);
+        number = (number - digit.clone()) / (D + 1);
+        if digit.is_zero() {
+            digits[i] = 0;
+        } else {
+            digits[i] = digit.to_u32_digits()[0] as u8;
+        }
+    }
+    digits
+}
 
 // input:
 //  f            12 elements
@@ -966,6 +991,8 @@ mod test {
         let x = alpha.square() - t.x - q.x;
         let y = bias_minus - alpha * x;
 
+        println!("affine add line size: {:?}", affine_add_line(alpha, bias_minus).len());
+
         let script = script! {
             { fq2_push(t.x) }
             { fq2_push(q.x) }
@@ -1005,6 +1032,8 @@ mod test {
         let x = alpha.square() - t.x.double();
         let y = bias_minus - alpha * x;
 
+        println!("affine double line size: {:?}", affine_double_line(alpha, bias_minus).len());
+
         let script = script! {
             { fq2_push(t.x) }
             { affine_double_line(alpha, bias_minus) }
@@ -1035,6 +1064,7 @@ mod test {
         alpha.mul_assign_by_fp(&three_div_two);
         // -bias
         let bias_minus = alpha * t.x - t.y;
+        println!("check tangent line size: {:?}", check_line_through_point(alpha, bias_minus).len());
         assert_eq!(alpha * t.x - t.y, bias_minus);
         let script = script! {
             { fq2_push(t.x) }
@@ -1054,6 +1084,7 @@ mod test {
         let alpha = (t.y - q.y) / (t.x - q.x);
         // -bias
         let bias_minus = alpha * t.x - t.y;
+        println!("check chord line size: {:?}", check_chord_line(alpha, bias_minus).len());
         assert_eq!(alpha * t.x - t.y, bias_minus);
         let script = script! {
             { fq2_push(t.x) }
