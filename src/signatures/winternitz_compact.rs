@@ -1,4 +1,4 @@
-use crate::treepp::*;
+use crate::{bigint::U254, treepp::*};
 use bitcoin::hashes::{hash160, Hash};
 
 /// Generate the public key for the i-th digit of the message
@@ -203,9 +203,16 @@ pub fn checksig_verify<const D: u32, const LOG_D: u32, const N0: usize, const N1
         // 3. Ensure both checksums are equal
         OP_EQUALVERIFY
 
+        // 4. reverse order of digits
         for i in 0..N0 - 1 {
             { i + 1 } OP_ROLL
         }
+
+        // 5. convert from digits to u254
+        { U254::from_digits::<LOG_D>() }
+
+        // 6. send to altstack
+        { U254::toaltstack() }
     }
 }
 
@@ -367,7 +374,7 @@ mod test {
         let script = script! {
             { sign::<D, N0, N1, N>(sk.clone(), message) }
             { checksig_verify::<D, LOG_D, N0, N1, N>(pks.clone()) }
-            { Fq::from_digits::<LOG_D>() }
+            { Fq::fromaltstack() }
             { Fq::push_u32_le(&BigUint::from(fq).to_u32_digits()) }
             { Fq::equalverify(1, 0) }
             OP_TRUE
@@ -410,8 +417,6 @@ mod test {
         let commit_script = script! {
             for pk in pks.iter().rev() {
                 { checksig_verify::<D, LOG_D, N0, N1, N>(pk.clone()) }
-                { Fq::from_digits::<LOG_D>() }
-                { Fq::toaltstack() }
             }
         };
 

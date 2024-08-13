@@ -11,7 +11,7 @@ use crate::bn254::curves::G1Projective;
 use crate::execute_script_without_stack_limit;
 use crate::groth16::constants::{LAMBDA, P_POW3};
 use crate::groth16::offchain_checker::compute_c_wi;
-use crate::groth16::utils::{fq12_push, fq2_push, g1p_push, g2a_push, Groth16Data, ScriptInput};
+use crate::groth16::utils::{fq12_push, fq2_push, fq_push, g1p_push, g2a_push, Groth16Data, ScriptInput};
 use crate::treepp::{script, Script};
 use crate::signatures::winternitz_compact::*;
 use ark_bn254::Bn254;
@@ -21,6 +21,7 @@ use ark_ec::short_weierstrass::Projective;
 use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
 use ark_ff::Field;
 use ark_groth16::{Proof, VerifyingKey};
+use bitcoin::script;
 use num_bigint::BigUint;
 use rand::Rng;
 use num_traits::Num;
@@ -90,6 +91,7 @@ impl Verifier {
         }
 
         println!("number of Fq/Fr/bit: {:?}", sks_map.len());
+        println!("sks map: {:?}", sks_map);
 
         let (main_scripts, main_inputs) = Verifier::groth16_scripts_and_inputs(vk, proof, public);
         let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
@@ -166,6 +168,15 @@ impl Verifier {
     pub fn groth16_scripts_and_inputs(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
         let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
+        // let s = script! {
+        //     { Fq::drop() }
+        //     OP_TRUE
+        // };
+        // scripts.push(s);
+        // inputs.push(vec![ScriptInput::Fq(proof.a.x)]);
+
+        // return (scripts, inputs);
+
         let base1: ark_bn254::G1Projective = vk.gamma_abc_g1[0].into();
         let base2: ark_bn254::G1Projective = vk.gamma_abc_g1[1].into();
         let base2_times_public = base2 * public;
@@ -183,6 +194,8 @@ impl Verifier {
         };
         scripts.push(msm_addition_script);
         inputs.push(vec![ScriptInput::G1P(msm_g1), ScriptInput::G1P(base2_times_public)]);
+
+        // return (scripts, inputs);
         
         let exp = &*P_POW3 - &*LAMBDA;
 
