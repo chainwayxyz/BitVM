@@ -66,7 +66,7 @@ impl Verifier {
                             let sk: [u8; 32] = rand::thread_rng().gen();  // TODO: Better RNG function
                             let sk_vec = sk.to_vec();
                             let mut digit_pks: Vec<Vec<u8>> = Vec::new();
-                            for i in 0..68 {
+                            for i in 0..N {
                                 digit_pks.push(public_key::<D>(sk_vec.clone(), i));
                             }
                             sks_map.insert(ScriptInput::Fr(fr), (sk_vec.clone(), digit_pks));
@@ -78,7 +78,7 @@ impl Verifier {
                                 let sk: [u8; 32] = rand::thread_rng().gen();  // TODO: Better RNG function
                                 let sk_vec = sk.to_vec();
                                 let mut digit_pks: Vec<Vec<u8>> = Vec::new();
-                                for i in 0..68 {
+                                for i in 0..N {
                                     digit_pks.push(public_key::<D>(sk_vec.clone(), i));
                                 }
                                 sks_map.insert(ScriptInput::Fq(fq_element), (sk_vec.clone(), digit_pks));
@@ -88,6 +88,8 @@ impl Verifier {
                 }
             }
         }
+
+        println!("number of Fq/Fr/bit: {:?}", sks_map.len());
 
         let (main_scripts, main_inputs) = Verifier::groth16_scripts_and_inputs(vk, proof, public);
         let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();

@@ -213,14 +213,14 @@ pub fn sign_bit<const D: u32>(sk: Vec<u8>, bit: u8) -> Script {
     script! {
         { digit_signature(sk.clone(), 0, bit) }
         { digit_signature(sk.clone(), 1, D as u8 - bit) }
-        { 16 * bit + (D as u8 - bit) }
+        { D as u8 * bit + (D as u8 - bit) }
     }
 }
 
 pub fn checksig_verify_bit<const D: u32>(pks: Vec<Vec<u8>>) -> Script {
     script! {
         // bit_sig, x_sig, compressed
-        { 16 }
+        { D }
         OP_2DUP
         OP_GREATERTHAN
         OP_DUP
