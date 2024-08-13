@@ -1,15 +1,44 @@
 // utils for push fields into stack
 use crate::bn254::ell_coeffs::EllCoeff;
 use crate::bn254::ell_coeffs::G2Prepared;
+use crate::bn254::fq6::Fq6;
 use crate::bn254::{fq12::Fq12, fq2::Fq2};
+use crate::groth16::utils::ScriptInput;
+use ark_bn254::Fq12Config;
 use ark_ec::{bn::BnConfig, AffineRepr};
 use ark_ff::Field;
+use ark_ff::Fp12Config;
 use num_bigint::BigUint;
+use num_traits::Zero;
 
 use crate::{
     bn254::{fp254impl::Fp254Impl, fq::Fq},
     treepp::*,
 };
+
+// pub fn u254_to_digits<const D: u32, const DIGIT_COUNT: usize>(a: BigUint) -> [u8; DIGIT_COUNT] {
+//     let mut digits = [0_u8; DIGIT_COUNT];
+//     for (i, byte) in a.to_bytes_le().iter().enumerate() {
+//         let (x, y) = (byte % 16, byte / 16);
+//         digits[2 * i] = x;
+//         digits[2 * i + 1] = y;
+//     }
+//     digits
+// }
+
+pub fn biguint_to_digits<const D: u32, const DIGIT_COUNT: usize>(mut number: BigUint) -> [u8; DIGIT_COUNT] {
+    let mut digits: [u8; DIGIT_COUNT] = [0; DIGIT_COUNT];
+    for i in 0..DIGIT_COUNT {
+        let digit = number.clone() % (D + 1);
+        number = (number - digit.clone()) / (D + 1);
+        if digit.is_zero() {
+            digits[i] = 0;
+        } else {
+            digits[i] = digit.to_u32_digits()[0] as u8;
+        }
+    }
+    digits
+}
 
 // input:
 //  f            12 elements
@@ -109,6 +138,117 @@ pub fn ell_by_constant_affine(constant: &EllCoeff) -> Script {
         { Fq12::mul_by_34() }
         // [f]
     }
+}
+
+// stack input:
+//  f            12 elements
+//  x': -p.x / p.y   1 element
+//  y': 1 / p.y      1 element
+// func params:
+//  (c0, c1, c2) where c0 is a trival value ONE in affine mode
+//
+// output:
+//  new f        12 elements
+pub fn ell_by_constant_affine_verify(f: ark_bn254::Fq12, x: ark_bn254::Fq, y: ark_bn254::Fq, constant: &EllCoeff, f_new: ark_bn254::Fq12) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+    let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
+    
+    assert_eq!(constant.0, ark_bn254::Fq2::ONE);
+
+    let c0 = constant.0;
+    let mut c3 = constant.1;
+    let mut c4 = constant.2;
+
+    c3.mul_assign_by_fp(&x);
+    c4.mul_assign_by_fp(&y);
+
+
+    let a0 = f.c0.c0 * c0;
+    let a1 = f.c0.c1 * c0;
+    let a2 = f.c0.c2 * c0;
+    let a = ark_bn254::Fq6::new(a0, a1, a2);
+    let mut b = f.c1;
+    b.mul_by_01(&c3, &c4);
+
+    let cc0 = c0 + c3;
+    let cc1 = c4;
+    let mut e = f.c0 + &f.c1;
+    e.mul_by_01(&cc0, &cc1);
+
+    let mut fx: ark_ff::QuadExtField<ark_ff::Fp12ConfigWrapper<ark_bn254::Fq12Config>> = f.clone();
+    fx.c1 = e - &(a + &b);
+    fx.c0 = b;
+    Fq12Config::mul_fp6_by_nonresidue_in_place(&mut fx.c0);
+    fx.c0 += &a;
+
+    assert_eq!(fx, f_new);
+
+    // inputs [fx.c0, f.c0, b, f.c1, y, x]
+    // verified: [fx.c0, b]
+    let s1 = script! {
+        // fx.c0, f.c0, b, f.c1, y, x
+        { Fq::copy(0) }
+        { Fq::mul_by_constant(&constant.1.c0) }
+        { Fq::roll(1) }
+        { Fq::mul_by_constant(&constant.1.c1) }
+        // fx.c0, f.c0, b, f.c1, y, c3
+
+        { Fq::copy(2) }
+        { Fq::mul_by_constant(&constant.2.c0) }
+        { Fq::roll(3) }
+        { Fq::mul_by_constant(&constant.2.c1) }
+        // fx.c0, f.c0, b, f.c1, c3, c4
+
+        { Fq6::mul_by_01() }
+        { Fq6::copy(6) }
+        { Fq6::equalverify() }
+        // fx.c0, f.c0, b
+
+        { Fq12::mul_fq6_by_nonresidue() }
+        { Fq6::add(6, 0) }
+        { Fq6::equalverify() }
+
+        OP_TRUE
+    };
+    scripts.push(s1);
+    inputs.push(vec![ScriptInput::Fq6(fx.c0), ScriptInput::Fq6(f.c0), ScriptInput::Fq6(b), ScriptInput::Fq6(f.c1), ScriptInput::Fq(y), ScriptInput::Fq(x)]);
+
+    // inputs [fx.c1, b, y, x, f.c0, f.c1]
+    // verified: [fx.c1]
+    let s2 = script! {
+        // fx.c1, b, y, x, f.c0, f.c1
+        { Fq6::copy(6) }
+        { Fq6::add(6, 0) }
+        // fx.c1, b, y, x, f.c0, f.c0+f.c1
+
+        { Fq::copy(12) }
+        { Fq::mul_by_constant(&constant.1.c0) }
+        { Fq::roll(13) }
+        { Fq::mul_by_constant(&constant.1.c1) }
+        { Fq2::push_one() }
+        { Fq2::add(2, 0) }
+        // fx.c1, b, y, f.c0, f.c0+f.c1, cc0
+
+        { Fq::copy(14) }
+        { Fq::mul_by_constant(&constant.2.c0) }
+        { Fq::roll(15) }
+        { Fq::mul_by_constant(&constant.2.c1) }
+        // fx.c1, b, f.c0, f.c0+f.c1, cc0, cc1
+
+        { Fq6::mul_by_01() }
+        // fx.c1, b, f.c0, e
+
+        { Fq6::add(12, 6) }
+        { Fq6::sub(6, 0) }
+        // // fx.c1, e-(b+f.c0)
+        { Fq6::equalverify() }
+
+        OP_TRUE
+    };
+    scripts.push(s2);
+    inputs.push(vec![ScriptInput::Fq6(fx.c1), ScriptInput::Fq6(b), ScriptInput::Fq(y), ScriptInput::Fq(x), ScriptInput::Fq6(f.c0), ScriptInput::Fq6(f.c1)]);
+
+    (scripts, inputs)
+
 }
 
 pub fn collect_line_coeffs(
@@ -796,13 +936,30 @@ pub fn double_line() -> Script {
 
 #[cfg(test)]
 mod test {
+    use std::iter::zip;
+
     use super::*;
-    use crate::bn254::fq2::Fq2;
+    use crate::{bn254::fq2::Fq2, execute_script_without_stack_limit};
     use ark_ff::AdditiveGroup;
-    use ark_std::UniformRand;
+    use ark_std::{end_timer, start_timer, UniformRand};
     use num_traits::One;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
+
+    fn test_script_with_inputs(script: Script, inputs: Vec<ScriptInput>) -> (bool, usize, usize) {
+        let script_test = script! {
+            for input in inputs {
+                { input.push() }
+            }
+            { script }
+        };
+        let size = script_test.len();
+        let start = start_timer!(|| "execute_script");
+        let exec_result = execute_script_without_stack_limit(script_test);
+        let max_stack_items = exec_result.stats.max_nb_stack_items;
+        end_timer!(start);
+        (exec_result.success, size, max_stack_items)
+    }
 
     #[test]
     fn test_ell() {
@@ -935,6 +1092,64 @@ mod test {
     }
 
     #[test]
+    fn test_ell_by_constant_affine_verify() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let f = ark_bn254::Fq12::rand(&mut prng);
+        let b: ark_ec::short_weierstrass::Affine<ark_bn254::g2::Config> = ark_bn254::g2::G2Affine::rand(&mut prng);
+        let p = ark_bn254::g1::G1Affine::rand(&mut prng);
+
+        
+        // affine mode
+        let coeffs = G2Prepared::from_affine(b);
+        
+        // affine mode as well
+        let hint = {
+            assert_eq!(coeffs.ell_coeffs[0].0, ark_bn254::fq2::Fq2::ONE);
+
+            let mut f1 = f;
+            let mut c1new = coeffs.ell_coeffs[0].1;
+            c1new.mul_assign_by_fp(&(-p.x / p.y));
+
+            let mut c2new = coeffs.ell_coeffs[0].2;
+            c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
+
+            f1.mul_by_034(&coeffs.ell_coeffs[0].0, &c1new, &c2new);
+            f1
+        };
+
+        
+        let (scripts, inputs) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(),&coeffs.ell_coeffs[0], hint);
+        let n = scripts.len();
+
+        assert_eq!(scripts.len(), inputs.len());
+
+        let mut script_sizes = Vec::new();
+        let mut max_stack_sizes = Vec::new();
+        let mut fq_counts = Vec::new();
+        let mut script_total_size: u64 = 0;
+
+        for (i, (script, input)) in zip(scripts, inputs).enumerate() {
+            let (result, script_size, max_stack_size) = test_script_with_inputs(script.clone(), input.to_vec());
+            script_total_size += script_size as u64;
+            let fq_count = input.iter().map(|inp| inp.size()).sum::<usize>();
+            script_sizes.push(script_size);
+            max_stack_sizes.push(max_stack_size);
+            fq_counts.push(fq_count);
+            println!("script[{:?}]: size: {:?} bytes, max stack size: {:?} items, input fq count: {:?}", i, script_size, max_stack_size, fq_count);
+            assert!(result);
+        }
+        
+        println!();
+        println!("number of pieces: {:?}", n);
+        println!("script total size: {:?}", script_total_size);
+        println!("max (script size): {:?} bytes", script_sizes.iter().max().unwrap());
+        println!("max (max stack size): {:?} items", max_stack_sizes.iter().max().unwrap());
+        println!("max fq count: {:?} fqs", fq_counts.iter().max().unwrap());
+           
+    }
+
+    #[test]
     fn test_from_eval_point() {
         let mut prng = ChaCha20Rng::seed_from_u64(0);
         let p = ark_bn254::G1Affine::rand(&mut prng);
@@ -965,6 +1180,8 @@ mod test {
 
         let x = alpha.square() - t.x - q.x;
         let y = bias_minus - alpha * x;
+
+        println!("affine add line size: {:?}", affine_add_line(alpha, bias_minus).len());
 
         let script = script! {
             { fq2_push(t.x) }
@@ -1005,6 +1222,8 @@ mod test {
         let x = alpha.square() - t.x.double();
         let y = bias_minus - alpha * x;
 
+        println!("affine double line size: {:?}", affine_double_line(alpha, bias_minus).len());
+
         let script = script! {
             { fq2_push(t.x) }
             { affine_double_line(alpha, bias_minus) }
@@ -1035,6 +1254,7 @@ mod test {
         alpha.mul_assign_by_fp(&three_div_two);
         // -bias
         let bias_minus = alpha * t.x - t.y;
+        println!("check tangent line size: {:?}", check_line_through_point(alpha, bias_minus).len());
         assert_eq!(alpha * t.x - t.y, bias_minus);
         let script = script! {
             { fq2_push(t.x) }
@@ -1054,6 +1274,7 @@ mod test {
         let alpha = (t.y - q.y) / (t.x - q.x);
         // -bias
         let bias_minus = alpha * t.x - t.y;
+        println!("check chord line size: {:?}", check_chord_line(alpha, bias_minus).len());
         assert_eq!(alpha * t.x - t.y, bias_minus);
         let script = script! {
             { fq2_push(t.x) }

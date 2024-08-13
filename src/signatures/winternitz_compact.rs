@@ -1,4 +1,4 @@
-use crate::treepp::*;
+use crate::{bigint::U254, treepp::*};
 use bitcoin::hashes::{hash160, Hash};
 
 /// Generate the public key for the i-th digit of the message
@@ -203,17 +203,99 @@ pub fn checksig_verify<const D: u32, const LOG_D: u32, const N0: usize, const N1
         // 3. Ensure both checksums are equal
         OP_EQUALVERIFY
 
+        // 4. reverse order of digits
+        for i in 0..N0 - 1 {
+            { i + 1 } OP_ROLL
+        }
+
+        // 5. convert from digits to u254
+        { U254::from_digits::<LOG_D>() }
+
+        // 6. send to altstack
+        { U254::toaltstack() }
+    }
+}
+
+pub fn sign_bit<const D: u32>(sk: Vec<u8>, bit: u8) -> Script {
+    script! {
+        { digit_signature(sk.clone(), 0, bit) }
+        { digit_signature(sk.clone(), 1, D as u8 - bit) }
+        { D as u8 * bit + (D as u8 - bit) }
+    }
+}
+
+pub fn checksig_verify_bit<const D: u32>(pks: Vec<Vec<u8>>) -> Script {
+    script! {
+        // bit_sig, x_sig, compressed
+        { D }
+        OP_2DUP
+        OP_GREATERTHAN
+        OP_DUP
+        OP_TOALTSTACK
+        OP_IF
+            OP_SUB
+        OP_ELSE
+            OP_DROP
+        OP_ENDIF
+        // bit_sig, x_sig, x=D-bit | bit
+        { checksig_verify_digit::<D>(pks[1].clone()) }
+        // bit_sig, x | bit
+        OP_FROMALTSTACK
+        // bit_sig, x, bit
+        OP_ROT
+        // x, bit, bit_sig
+        OP_SWAP
+        // x, bit_sig, bit
+        { checksig_verify_digit::<D>(pks[0].clone()) }
+        // x, bit
+        OP_DUP
+        // x, bit, bit
+        OP_ROT
+        // bit, bit, x
+        OP_ADD
+        // bit, bit+x
+        { D }
+        // bit, bit+x, D
+        OP_EQUALVERIFY
+        // bit
+        OP_TOALTSTACK
+    }
+}
+
+pub fn checksig_verify_digit<const D: u32>(pk: Vec<u8>) -> Script {
+    script! {
+        { D }
+        OP_MIN
+
+        OP_DUP
+        OP_TOALTSTACK
+        OP_TOALTSTACK
+
+        for _ in 0..D {
+            OP_DUP OP_HASH160
+        }
+
+        OP_FROMALTSTACK
+        OP_PICK
+        { pk }
+        OP_EQUALVERIFY
+
+        for _ in 0..(D + 1) / 2 {
+            OP_2DROP
+        }
+
+        OP_FROMALTSTACK
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::bigint::U254;
     use crate::{bn254::fq::Fq, execute_script_without_stack_limit};
     use crate::bn254::fp254impl::Fp254Impl;
     use crate::treepp::*;
-    use crate::signatures::winternitz_compact::{checksig_verify, public_key, sign};
+    use crate::signatures::winternitz_compact::{checksig_verify, checksig_verify_bit, public_key, sign, sign_bit};
     use core::ops::Rem;
+    use std::iter::zip;
     use std::ops::Mul;
     use ark_ff::UniformRand;
     use ark_std::{end_timer, start_timer};
@@ -222,6 +304,7 @@ mod test {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
     use num_traits::Zero;
+    use rand::Rng;
 
     // The secret key
     const MY_SECKEY: &str = "b138982ce17ac813d505b5b40b665d404e9528e7";
@@ -250,10 +333,36 @@ mod test {
         }
         digits
     }
+
+    #[test]
+    fn test_winternitz_bit() {
+        const LOG_D: u32   = 4;                                       // Bits per digit
+        const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
+
+        let sk = hex::decode(MY_SECKEY).unwrap();
+        let pk1 = public_key::<D>(sk.clone(), 0);
+        let pk2 = public_key::<D>(sk.clone(), 1);
+        
+        let bit = 1;
+        
+        let sign_size = sign_bit::<D>(sk.clone(), bit).len();
+        let checksig_size = checksig_verify_bit::<D>(vec![pk1.clone(), pk2.clone()]).len();
+
+        let script = script! {
+            { sign_bit::<D>(sk.clone(), bit) }
+            { checksig_verify_bit::<D>(vec![pk1, pk2]) }
+            OP_FROMALTSTACK
+            { bit }
+            OP_EQUALVERIFY
+            OP_TRUE
+        };
+
+        assert!(exe_script(script));
+    }
     
     #[test]
     fn test_winternitz() {
-        const LOG_D: u32   = 7;                                       // Bits per digit
+        const LOG_D: u32   = 8;                                       // Bits per digit
         const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
         const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
         const N1   : usize = 2;                                       // Number of digits of the checksum
@@ -291,17 +400,63 @@ mod test {
         let script = script! {
             { sign::<D, N0, N1, N>(sk.clone(), message) }
             { checksig_verify::<D, LOG_D, N0, N1, N>(pks.clone()) }
-
-            for i in 1..N0 {
-                { i } OP_ROLL
-            }
-
-            { Fq::from_digits::<LOG_D>() }
+            { Fq::fromaltstack() }
             { Fq::push_u32_le(&BigUint::from(fq).to_u32_digits()) }
             { Fq::equalverify(1, 0) }
             OP_TRUE
         };
 
         assert!(exe_script(script));
+    }
+
+    #[test]
+    fn test_winternitz_multiple_fq() {
+        const LOG_D: u32   = 8;                                       // Bits per digit
+        const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
+        const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
+        const N1   : usize = 2;                                       // Number of digits of the checksum
+        const N    : usize = N0 + N1;                                 // Total number of digits to be signed
+
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+        let fq_count = 24;
+        let sk_bytes = (0..fq_count).map(|_| {let sk: [u8; 32] = rand::thread_rng().gen(); sk.to_vec()}).collect::<Vec<Vec<u8>>>();
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+        let fq_list = (0..fq_count).map(|_| {ark_bn254::Fq::rand(&mut prng)}).collect::<Vec<_>>();
+        let digits_list = fq_list.iter().map(|fq| {biguint_to_digits::<D, N0>(BigUint::from(*fq).mul(r.clone()).rem(p.clone()))}).collect::<Vec<_>>();
+
+        let commit_script_inputs = script! {
+            for (sk, digits) in zip(sk_bytes.clone(), digits_list) {
+                { sign::<D, N0, N1, N>(sk, digits) }
+            }
+        };
+
+        let mut pks: Vec<Vec<Vec<u8>>> = Vec::new();
+        for sk in sk_bytes.iter() {
+            let mut digit_pks: Vec<Vec<u8>> = Vec::new();
+            for i in 0..68 {
+                digit_pks.push(public_key::<D>(sk.clone(), i));
+            }
+            pks.push(digit_pks);
+        }
+
+        let commit_script = script! {
+            for pk in pks.iter().rev() {
+                { checksig_verify::<D, LOG_D, N0, N1, N>(pk.clone()) }
+            }
+        };
+
+        let commit_script_test = script! {
+            { commit_script_inputs }
+            { commit_script }
+            for fq in fq_list {
+                { Fq::fromaltstack() }
+                { Fq::push_u32_le(&BigUint::from(fq).to_u32_digits()) }
+                { Fq::equalverify(1, 0) }
+            }
+            OP_TRUE
+        };
+        
+        assert!(exe_script(commit_script_test));
     }
 }
