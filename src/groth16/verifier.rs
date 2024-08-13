@@ -36,11 +36,12 @@ pub struct Verifier;
 
 impl Verifier {
     pub fn verify(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<Script>>, Vec<Vec<Vec<Vec<u8>>>>) {
-        const LOG_D: u32   = 7;                                       // Bits per digit
+        const LOG_D: u32   = 8;                                       // Bits per digit
         const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
         const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
         const N1   : usize = 2;                                       // Number of digits of the checksum
         const N    : usize = N0 + N1;                                 // Total number of digits to be signed
+        const D_BIT: u32   = 15;
 
         let (mut scripts, mut script_input_signatures, mut pks) = (Vec::new(), Vec::new(), Vec::new());
         let mut sks_map: HashMap<ScriptInput, (Vec<u8>, Vec<Vec<u8>>)> = HashMap::new();
@@ -57,7 +58,7 @@ impl Verifier {
                             let sk_vec = sk.to_vec();
                             let mut digit_pks: Vec<Vec<u8>> = Vec::new();
                             for i in 0..2 {
-                                digit_pks.push(public_key::<D>(sk_vec.clone(), i));
+                                digit_pks.push(public_key::<D_BIT>(sk_vec.clone(), i));
                             }
                             sks_map.insert(ScriptInput::Bit(b, label), (sk_vec.clone(), digit_pks));
                         }
@@ -91,7 +92,6 @@ impl Verifier {
         }
 
         println!("number of Fq/Fr/bit: {:?}", sks_map.len());
-        println!("sks map: {:?}", sks_map);
 
         let (main_scripts, main_inputs) = Verifier::groth16_scripts_and_inputs(vk, proof, public);
         let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
@@ -104,7 +104,7 @@ impl Verifier {
             for input in input_list.iter().rev() {
                 match input {
                     ScriptInput::Bit(b, label) => {
-                        commit_scripts.push(checksig_verify_bit::<D>(sks_map.get(&ScriptInput::Bit(*b, label.clone())).unwrap().clone().1));
+                        commit_scripts.push(checksig_verify_bit::<D_BIT>(sks_map.get(&ScriptInput::Bit(*b, label.clone())).unwrap().clone().1));
                     },
                     ScriptInput::Fr(fr) => {
                         commit_scripts.push(checksig_verify::<D, LOG_D, N0, N1, N>(sks_map.get(&ScriptInput::Fr(*fr)).unwrap().clone().1));
@@ -119,7 +119,7 @@ impl Verifier {
             for input in input_list.clone() {
                 match input {
                     ScriptInput::Bit(b, label) => {
-                        signatures.push(sign_bit::<D>(sks_map.get(&ScriptInput::Bit(b, label.clone())).unwrap().clone().0, b as u8));
+                        signatures.push(sign_bit::<D_BIT>(sks_map.get(&ScriptInput::Bit(b, label.clone())).unwrap().clone().0, b as u8));
                         public_keys.push(sks_map.get(&ScriptInput::Bit(b, label)).unwrap().clone().1);
                     },
                     ScriptInput::Fr(fr) => {
@@ -168,15 +168,6 @@ impl Verifier {
     pub fn groth16_scripts_and_inputs(vk: &VerifyingKey<Bn254>, proof: &Proof<Bn254>, public: &<Bn254 as ark_Pairing>::ScalarField) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
         let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
-        // let s = script! {
-        //     { Fq::drop() }
-        //     OP_TRUE
-        // };
-        // scripts.push(s);
-        // inputs.push(vec![ScriptInput::Fq(proof.a.x)]);
-
-        // return (scripts, inputs);
-
         let base1: ark_bn254::G1Projective = vk.gamma_abc_g1[0].into();
         let base2: ark_bn254::G1Projective = vk.gamma_abc_g1[1].into();
         let base2_times_public = base2 * public;
@@ -194,8 +185,6 @@ impl Verifier {
         };
         scripts.push(msm_addition_script);
         inputs.push(vec![ScriptInput::G1P(msm_g1), ScriptInput::G1P(base2_times_public)]);
-
-        // return (scripts, inputs);
         
         let exp = &*P_POW3 - &*LAMBDA;
 

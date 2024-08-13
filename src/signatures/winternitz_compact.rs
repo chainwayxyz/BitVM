@@ -293,7 +293,7 @@ mod test {
     use crate::{bn254::fq::Fq, execute_script_without_stack_limit};
     use crate::bn254::fp254impl::Fp254Impl;
     use crate::treepp::*;
-    use crate::signatures::winternitz_compact::{checksig_verify, public_key, sign};
+    use crate::signatures::winternitz_compact::{checksig_verify, checksig_verify_bit, public_key, sign, sign_bit};
     use core::ops::Rem;
     use std::iter::zip;
     use std::ops::Mul;
@@ -333,10 +333,36 @@ mod test {
         }
         digits
     }
+
+    #[test]
+    fn test_winternitz_bit() {
+        const LOG_D: u32   = 4;                                       // Bits per digit
+        const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
+
+        let sk = hex::decode(MY_SECKEY).unwrap();
+        let pk1 = public_key::<D>(sk.clone(), 0);
+        let pk2 = public_key::<D>(sk.clone(), 1);
+        
+        let bit = 1;
+        
+        let sign_size = sign_bit::<D>(sk.clone(), bit).len();
+        let checksig_size = checksig_verify_bit::<D>(vec![pk1.clone(), pk2.clone()]).len();
+
+        let script = script! {
+            { sign_bit::<D>(sk.clone(), bit) }
+            { checksig_verify_bit::<D>(vec![pk1, pk2]) }
+            OP_FROMALTSTACK
+            { bit }
+            OP_EQUALVERIFY
+            OP_TRUE
+        };
+
+        assert!(exe_script(script));
+    }
     
     #[test]
     fn test_winternitz() {
-        const LOG_D: u32   = 7;                                       // Bits per digit
+        const LOG_D: u32   = 8;                                       // Bits per digit
         const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
         const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
         const N1   : usize = 2;                                       // Number of digits of the checksum
@@ -385,7 +411,7 @@ mod test {
 
     #[test]
     fn test_winternitz_multiple_fq() {
-        const LOG_D: u32   = 7;                                       // Bits per digit
+        const LOG_D: u32   = 8;                                       // Bits per digit
         const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
         const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
         const N1   : usize = 2;                                       // Number of digits of the checksum
