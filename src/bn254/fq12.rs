@@ -108,81 +108,104 @@ impl Fq12 {
     pub fn mul_verify(a: ark_bn254::Fq12, b: ark_bn254::Fq12, c: ark_bn254::Fq12) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
         let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
-        let (ax, ay) = (a.c0, a.c1);
-        let (bx, by) = (b.c0, b.c1);
-        let (cx, cy) = (c.c0, c.c1);
-        let d = ax * bx;
-        let e = ay * by;
+        let tmp = a.c0 + a.c1;
+        let v1 = tmp  * (b.c0 + b.c1);
+        let v2 = a.c0 * b.c0;
+        let v3 = a.c1 * b.c1;
+        let mut v4 = v3;
+        Fq12Config::mul_fp6_by_nonresidue_in_place(&mut v4);
 
-        // inputs: ax, bx, d
-        // checks d=ax*bx
+        let cx = ark_bn254::Fq12::new(v4 + v2, v1 - (v3 + v2));
+
+        assert_eq!(cx, c);
+
+        // inputs [tmp, a.c0, a.c1]
+        // verified: [tmp]
         let s1 = script! {
-            { Fq6::mul(6, 0) }
+            // tmp, a.c0, a.c1
+            { Fq6::add(6, 0) }
+            // tmp, a.c0+a.c1
             { Fq6::equalverify() }
+
             OP_TRUE
         };
         scripts.push(s1);
-        inputs.push(vec![ScriptInput::Fq6(d), ScriptInput::Fq6(ax), ScriptInput::Fq6(bx)]);
+        inputs.push(vec![ScriptInput::Fq6(tmp), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(a.c1)]);
 
-        // inputs: ay, by, e 
-        // checks e=ay*by
-        let s2 = script! {
+        
+        // inputs [v1, tmp, b.c0, b.c1]
+        // verified: [v1]
+        let s2: Script = script! {
+            // v1, tmp, b.c0, b.c1
+            { Fq6::add(6, 0) }
+            // v1, tmp, b.c0+b.c1
             { Fq6::mul(6, 0) }
+            // v1, tmp*(b.c0+b.c1)
             { Fq6::equalverify() }
+
             OP_TRUE
         };
         scripts.push(s2);
-        inputs.push(vec![ScriptInput::Fq6(e), ScriptInput::Fq6(ay), ScriptInput::Fq6(by)]);
+        inputs.push(vec![ScriptInput::Fq6(v1), ScriptInput::Fq6(tmp), ScriptInput::Fq6(b.c0), ScriptInput::Fq6(b.c1)]);
 
-        // inputs: cx, d, e 
-        // checks cx=d+eß
-        let s3 = script! {
-            { Fq12::mul_fq6_by_nonresidue() }
-            { Fq6::add(6, 0) }
+        
+        // inputs [v2, a.c0, b.c0]
+        // verified: [v2]
+        let s3: Script = script! {
+            // v2, a.c0, b.c0
+            { Fq6::mul(6, 0) }
+            // v2, a.c0*b.c0
             { Fq6::equalverify() }
+
             OP_TRUE
         };
         scripts.push(s3);
-        inputs.push(vec![ScriptInput::Fq6(cx), ScriptInput::Fq6(d), ScriptInput::Fq6(e)]);
+        inputs.push(vec![ScriptInput::Fq6(v2), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(b.c0)]);
 
-        // check cy=ax*by+ay*bx=(ax+ay)*(bx+by)-(d+e)
-
-        // inputs: ax+ay, ax, ay
-        let s4 = script! {
-            { Fq6::add(6, 0) }
+        
+        // inputs [v3, a.c1, b.c1]
+        // verified: [v3]
+        let s4: Script = script! {
+            // v3, a.c1, b.c1
+            { Fq6::mul(6, 0) }
+            // v3, a.c1*b.c1
             { Fq6::equalverify() }
+
             OP_TRUE
         };
         scripts.push(s4);
-        inputs.push(vec![ScriptInput::Fq6(ax + ay), ScriptInput::Fq6(ax), ScriptInput::Fq6(ay)]);
+        inputs.push(vec![ScriptInput::Fq6(v3), ScriptInput::Fq6(a.c1), ScriptInput::Fq6(b.c1)]);
 
-        // inputs: bx+by, bx, by
-        let s5 = script! {
+        
+        // inputs [c.c0, v2, v3]
+        // verified: [c.c0]
+        let s5: Script = script! {
+            // c.c0, v2, v3
+            { Fq12::mul_fq6_by_nonresidue() }
             { Fq6::add(6, 0) }
+            // c.c0, v2+(v3*beta)
             { Fq6::equalverify() }
+
             OP_TRUE
         };
         scripts.push(s5);
-        inputs.push(vec![ScriptInput::Fq6(bx + by), ScriptInput::Fq6(bx), ScriptInput::Fq6(by)]);
+        inputs.push(vec![ScriptInput::Fq6(c.c0), ScriptInput::Fq6(v2), ScriptInput::Fq6(v3)]);
 
-        // inputs: d+e, d, e
-        let s6 = script! {
+        
+        // inputs [c.c1, v1, v2, v3]
+        // verified: [c.c1]
+        let s6: Script = script! {
+            // c.c1, v1, v2, v3
             { Fq6::add(6, 0) }
+            // c.c1, v1, v2+v3
+            { Fq6::sub(6, 0) }
+            // c.c1, v1-(v2+v3)
             { Fq6::equalverify() }
+
             OP_TRUE
         };
         scripts.push(s6);
-        inputs.push(vec![ScriptInput::Fq6(d + e), ScriptInput::Fq6(d), ScriptInput::Fq6(e)]);
-
-        // inputs: cy, d+e, ax+ay, bx+by
-        let s7 = script! {
-            { Fq6::mul(6, 0) }
-            { Fq6::sub(0, 6) }
-            { Fq6::equalverify() }
-            OP_TRUE
-        };
-        scripts.push(s7);
-        inputs.push(vec![ScriptInput::Fq6(cy), ScriptInput::Fq6(d + e), ScriptInput::Fq6(ax + ay), ScriptInput::Fq6(bx + by)]);
+        inputs.push(vec![ScriptInput::Fq6(c.c1), ScriptInput::Fq6(v1), ScriptInput::Fq6(v2), ScriptInput::Fq6(v3)]);
 
         (scripts, inputs)
     }
@@ -893,6 +916,43 @@ mod test {
     }
 
     #[test]
+    fn test_bn254_fq12_mul_verify() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let a: ark_ff::QuadExtField<ark_ff::Fp12ConfigWrapper<ark_bn254::Fq12Config>> = ark_bn254::Fq12::rand(&mut prng);
+        let b = ark_bn254::Fq12::rand(&mut prng);
+        let c = a.mul(&b);
+        
+        let (scripts, inputs) = Fq12::mul_verify(a, b, c);
+        let n = scripts.len();
+
+        assert_eq!(scripts.len(), inputs.len());
+
+        let mut script_sizes = Vec::new();
+        let mut max_stack_sizes = Vec::new();
+        let mut fq_counts = Vec::new();
+        let mut script_total_size: u64 = 0;
+
+        for (i, (script, input)) in zip(scripts, inputs).enumerate() {
+            let (result, script_size, max_stack_size) = test_script_with_inputs(script.clone(), input.to_vec());
+            script_total_size += script_size as u64;
+            let fq_count = input.iter().map(|inp| inp.size()).sum::<usize>();
+            script_sizes.push(script_size);
+            max_stack_sizes.push(max_stack_size);
+            fq_counts.push(fq_count);
+            println!("script[{:?}]: size: {:?} bytes, max stack size: {:?} items, input fq count: {:?}", i, script_size, max_stack_size, fq_count);
+            assert!(result);
+        }
+        
+        println!();
+        println!("number of pieces: {:?}", n);
+        println!("script total size: {:?}", script_total_size);
+        println!("max (script size): {:?} bytes", script_sizes.iter().max().unwrap());
+        println!("max (max stack size): {:?} items", max_stack_sizes.iter().max().unwrap());
+        println!("max fq count: {:?} fqs", fq_counts.iter().max().unwrap());
+    }
+
+    #[test]
     fn test_bn254_fq12_mul_cpt() {
         println!("Fq12.mul_cpt: {} bytes", Fq12::mul_cpt(12, 0).len());
         let mut prng = ChaCha20Rng::seed_from_u64(0);
@@ -962,7 +1022,7 @@ mod test {
 
     #[test]
     fn test_bn254_fq12_square_verify() {
-       let mut prng = ChaCha20Rng::seed_from_u64(0);
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
 
         let a = ark_bn254::Fq12::rand(&mut prng);
         let c = a.square();
