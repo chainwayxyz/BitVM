@@ -11,7 +11,7 @@ use crate::bn254::curves::G1Projective;
 use crate::execute_script_without_stack_limit;
 use crate::groth16::constants::{LAMBDA, P_POW3};
 use crate::groth16::offchain_checker::compute_c_wi;
-use crate::groth16::utils::{fq12_push, fq2_push, g2a_push, Groth16Data, ScriptInput};
+use crate::groth16::utils::{fq12_push, fq2_push, g1p_push, g2a_push, Groth16Data, ScriptInput};
 use crate::treepp::{script, Script};
 use crate::signatures::winternitz_compact::*;
 use ark_bn254::Bn254;
@@ -25,6 +25,7 @@ use num_bigint::BigUint;
 use rand::Rng;
 use num_traits::Num;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::{iter::zip, ops::{Mul, Rem, Neg}};
 use num_traits::One;
 use ark_ff::AdditiveGroup;
@@ -168,22 +169,12 @@ impl Verifier {
         let base2_times_public = base2 * public;
         let msm_g1 = ark_bn254::G1Projective::msm(&vk.gamma_abc_g1, &[<ark_bn254::Bn254 as ark_Pairing>::ScalarField::ONE, public.clone()]).unwrap();
 
-        // let (sx, ix) = Fr::mul_by_constant_g1_verify(base2, *public, base2_times_public);
-        // scripts.extend(sx);
-        // inputs.extend(ix);
-
-        let msm_scalar_mul_script = script! {
-            { G1Projective::scalar_mul() }
-            { G1Projective::equalverify() }
-            OP_TRUE
-        };
-        scripts.push(msm_scalar_mul_script);
-        inputs.push(vec![ScriptInput::G1P(base2_times_public), ScriptInput::G1P(base2), ScriptInput::Fr(*public)]);
+        let (sx, ix) = Fr::mul_by_constant_g1_verify(base2, *public, base2_times_public);
+        scripts.extend(sx);
+        inputs.extend(ix);
 
         let msm_addition_script = script! {
-            { Fq::push_u32_le(&BigUint::from(base1.x).to_u32_digits()) }
-            { Fq::push_u32_le(&BigUint::from(base1.y).to_u32_digits()) }
-            { Fq::push_u32_le(&BigUint::from(base1.z).to_u32_digits()) }
+            { g1p_push(base1) }
             { G1Projective::add() }
             { G1Projective::equalverify() }
             OP_TRUE
@@ -230,7 +221,7 @@ impl Verifier {
 
         for i in (1..ark_bn254::Config::ATE_LOOP_COUNT.len()).rev() {
             let fx = f.square();
-            let (sx, ix) = Fq12::mul_verify(f, f, fx);
+            let (sx, ix) = Fq12::square_verify(f, fx);
             scripts.extend(sx);
             inputs.extend(ix);
             f = fx;
@@ -346,6 +337,147 @@ impl Verifier {
                 }
             }
         }
+
+        let c_inv_p = c_inv.frobenius_map(1);
+        let s = script! {
+            { Fq12::frobenius_map(1) }
+            { Fq12::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s);
+        inputs.push(vec![ScriptInput::Fq12(c_inv_p), ScriptInput::Fq12(c_inv)]);
+
+        let fx = f * c_inv_p;
+        let (sx, ix) = Fq12::mul_verify(f, c_inv_p, fx);
+        scripts.extend(sx);
+        inputs.extend(ix);
+        f = fx;
+
+        let c_p2 = c.frobenius_map(2);
+        let s = script! {
+            { Fq12::frobenius_map(2) }
+            { Fq12::equalverify() }
+            OP_TRUE
+        };
+        scripts.push(s);
+        inputs.push(vec![ScriptInput::Fq12(c_p2), ScriptInput::Fq12(c)]);
+
+        let fx = f * c_p2;
+        let (sx, ix) = Fq12::mul_verify(f, c_p2, fx);
+        scripts.extend(sx);
+        inputs.extend(ix);
+        f = fx;
+
+        let fx = f * wi;
+        let (sx, ix) = Fq12::mul_verify(f, wi, fx);
+        scripts.extend(sx);
+        inputs.extend(ix);
+        f = fx;
+
+        for j in 0..num_line_groups {
+            let p = p_lst[j];
+            let coeffs = &line_coeffs[num_lines - 2][j][0];
+            assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
+            let mut fx = f;
+            let mut c1new = coeffs.1;
+            c1new.mul_assign_by_fp(&(-p.x / p.y));
+            let mut c2new = coeffs.2;
+            c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
+            fx.mul_by_034(&coeffs.0, &c1new, &c2new);
+            
+            let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
+            scripts.extend(sx);
+            inputs.extend(ix);
+            f = fx;
+
+            if j == num_constant {
+                let beta_12x = BigUint::from_str("21575463638280843010398324269430826099269044274347216827212613867836435027261").unwrap();
+                let beta_12y = BigUint::from_str("10307601595873709700152284273816112264069230130616436755625194854815875713954").unwrap();
+                let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems([ark_bn254::Fq::from(beta_12x.clone()), ark_bn254::Fq::from(beta_12y.clone())]).unwrap();
+                let beta_13x = BigUint::from_str("2821565182194536844548159561693502659359617185244120367078079554186484126554").unwrap();
+                let beta_13y = BigUint::from_str("3505843767911556378687030309984248845540243509899259641013678093033130930403").unwrap();
+                let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems([ark_bn254::Fq::from(beta_13x.clone()), ark_bn254::Fq::from(beta_13y.clone())]).unwrap();
+                let mut q4x = q4.x;
+                q4x.conjugate_in_place();
+                q4x = q4x * beta_12;
+                let mut q4y = q4.y;
+                q4y.conjugate_in_place();
+                q4y = q4y * beta_13;
+                let alpha = (t4.y - q4y) / (t4.x - q4x);
+                let bias_minus = alpha * t4.x - t4.y;
+                let x = alpha.square() - t4.x - q4x;
+                let y = bias_minus - alpha * x;
+                let t4x = ark_bn254::G2Affine::new(x, y);
+                let s = script! {
+                    { Fq::neg(0) }
+                    // beta_13
+                    { Fq::push_dec("2821565182194536844548159561693502659359617185244120367078079554186484126554") }
+                    { Fq::push_dec("3505843767911556378687030309984248845540243509899259641013678093033130930403") }
+                    { Fq2::mul(2, 0) }
+                    { Fq2::toaltstack() }
+
+                    { Fq::neg(0) }
+                    // beta_12
+                    { Fq::push_dec("21575463638280843010398324269430826099269044274347216827212613867836435027261") }
+                    { Fq::push_dec("10307601595873709700152284273816112264069230130616436755625194854815875713954") }
+                    { Fq2::mul(2, 0) }
+                    { Fq2::fromaltstack() }
+
+                    { Fq2::copy(2) }
+                    { Fq2::toaltstack() }
+                    { Fq2::copy(6) }
+                    { Fq2::toaltstack() }
+                    // t4x, t4, q4' | t4.x, q4'.x
+
+                    { check_chord_line(line_coeffs[num_lines - 2][j][0].1, line_coeffs[num_lines - 2][j][0].2) }
+                    { Fq2::fromaltstack() }
+                    { Fq2::fromaltstack() }
+                    { affine_add_line(line_coeffs[num_lines - 2][j][0].1, line_coeffs[num_lines - 2][j][0].2) }
+                    { Fq2::roll(4) }
+                    { Fq2::equalverify() }
+                    { Fq2::equalverify() }
+        
+                    OP_TRUE
+                };
+                scripts.push(s);
+                inputs.push(vec![ScriptInput::G2A(t4x), ScriptInput::G2A(t4), ScriptInput::G2A(q4)]); // ScriptInput::Fq2(q4x), , ScriptInput::Fq2(q4y), 
+                t4 = t4x;
+            }
+        }
+
+        for j in 0..num_line_groups {
+            let p = p_lst[j];
+            let coeffs = &line_coeffs[num_lines - 1][j][0];
+            assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
+            let mut fx = f;
+            let mut c1new = coeffs.1;
+            c1new.mul_assign_by_fp(&(-p.x / p.y));
+            let mut c2new = coeffs.2;
+            c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
+            fx.mul_by_034(&coeffs.0, &c1new, &c2new);
+            
+            let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
+            scripts.extend(sx);
+            inputs.extend(ix);
+            f = fx;
+
+            if j == num_constant {
+                let s = script! {
+                    { Fq2::roll(2) }
+                    // beta_22
+                    { Fq::push_dec("21888242871839275220042445260109153167277707414472061641714758635765020556616") }
+                    { Fq::push_zero() }
+                    { Fq2::mul(2, 0) }
+                    { Fq2::roll(2) }
+                    { check_chord_line(line_coeffs[num_lines - 1][j][0].1, line_coeffs[num_lines - 1][j][0].2) }
+                    OP_TRUE
+                };
+                scripts.push(s);
+                inputs.push(vec![ScriptInput::G2A(t4), ScriptInput::G2A(q4)]);
+            }
+        }
+
+        assert_eq!(f, hint);
 
         // let s = script! {
         //     { constants() }
