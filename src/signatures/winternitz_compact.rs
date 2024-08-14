@@ -202,17 +202,6 @@ pub fn checksig_verify<const D: u32, const LOG_D: u32, const N0: usize, const N1
 
         // 3. Ensure both checksums are equal
         OP_EQUALVERIFY
-
-        // 4. reverse order of digits
-        for i in 0..N0 - 1 {
-            { i + 1 } OP_ROLL
-        }
-
-        // 5. convert from digits to u254
-        { U254::from_digits::<LOG_D>() }
-
-        // 6. send to altstack
-        { U254::toaltstack() }
     }
 }
 
@@ -290,6 +279,8 @@ pub fn checksig_verify_digit<const D: u32>(pk: Vec<u8>) -> Script {
 
 #[cfg(test)]
 mod test {
+    use crate::groth16::utils::fq_push;
+    use crate::hash::blake3::blake3_var_length;
     use crate::{bn254::fq::Fq, execute_script_without_stack_limit};
     use crate::bn254::fp254impl::Fp254Impl;
     use crate::treepp::*;
@@ -458,5 +449,218 @@ mod test {
         };
         
         assert!(exe_script(commit_script_test));
+    }
+
+    #[test]
+    fn test_winternitz_hash() {
+        const LOG_D: u32   = 8;                                       // Bits per digit
+        const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
+        const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
+        const N1   : usize = 2;                                       // Number of digits of the checksum
+        const N    : usize = N0 + N1;                                 // Total number of digits to be signed
+
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+        let a = ark_bn254::Fq::rand(&mut prng);
+        let b = ark_bn254::Fq::rand(&mut prng);
+        let sk = rand::thread_rng().gen::<[u8; 32]>().to_vec();
+        let pks = (0..N).map(|digit_index| public_key::<D>(sk.clone(), digit_index)).collect::<Vec<Vec<u8>>>();
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+        let c = BigUint::from(a).mul(r.clone()).rem(p.clone());
+        let d = BigUint::from(b).mul(r.clone()).rem(p.clone());
+        let mut x = [c.to_bytes_le(), d.to_bytes_le()].concat();
+        x.reverse();
+
+        let mut hasher_blake3 = blake3::Hasher::new();
+        hasher_blake3.update(&x);
+        let result_blake3 = hasher_blake3.finalize();
+        let message = result_blake3.as_bytes();
+
+        let s_inputs = script! {
+            { fq_push(a) }
+            { fq_push(b) }
+            { sign::<D, N0, N1, N>(sk, *message) }
+        };
+
+        let s = script! {
+            { checksig_verify::<D, LOG_D, N0, N1, N>(pks) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            { Fq::toaltstack() }
+            { Fq::convert_to_be_bytes_without_montgomery() }
+            { Fq::fromaltstack() }
+            { Fq::convert_to_be_bytes_without_montgomery() }
+            { blake3_var_length(64) }
+
+            for _ in 0..8 {
+                for _ in 0..4 {
+                    OP_FROMALTSTACK
+                }
+                4 OP_ROLL OP_EQUALVERIFY 3 OP_ROLL OP_EQUALVERIFY 2 OP_ROLL OP_EQUALVERIFY OP_EQUALVERIFY
+            }
+            OP_TRUE
+        };
+
+        let s_test = script! {
+            { s_inputs }
+            { s }
+        };
+        
+        assert!(exe_script(s_test));
+    }
+
+    #[test]
+    fn test_winternitz_hash_multiple() {
+        const LOG_D: u32   = 8;                                       // Bits per digit
+        const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
+        const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
+        const N1   : usize = 2;                                       // Number of digits of the checksum
+        const N    : usize = N0 + N1;                                 // Total number of digits to be signed
+
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+        let k = 18;
+        let mut fqs = Vec::new();
+        let mut sks = Vec::new();
+        let mut pkss = Vec::new();
+        let mut messages = Vec::new();
+
+        for _i in 0..k {
+            let a = ark_bn254::Fq::rand(&mut prng);
+            let b = ark_bn254::Fq::rand(&mut prng);
+            fqs.push((a, b));
+            let sk = rand::thread_rng().gen::<[u8; 32]>().to_vec();
+            sks.push(sk.clone());
+            let pks = (0..N).map(|digit_index| public_key::<D>(sk.clone(), digit_index)).collect::<Vec<Vec<u8>>>();
+            pkss.push(pks);
+            let mut x = [BigUint::from(a).mul(r.clone()).rem(p.clone()).to_bytes_le(), BigUint::from(b).mul(r.clone()).rem(p.clone()).to_bytes_le()].concat();
+            x.reverse();
+
+            let mut hasher_blake3 = blake3::Hasher::new();
+            hasher_blake3.update(&x);
+            let result_blake3 = hasher_blake3.finalize();
+            let message = result_blake3.as_bytes().clone();
+            messages.push(message);
+        }
+
+        let s_inputs = script! {
+            for i in 0..k {
+                { fq_push(fqs[i].0) }
+                { fq_push(fqs[i].1) }
+                { sign::<D, N0, N1, N>(sks[i].clone(), messages[i].clone()) }
+            }
+        };
+
+        let s = script! {
+            for i in (0..k).rev() {
+                { checksig_verify::<D, LOG_D, N0, N1, N>(pkss[i].clone()) }
+                for _ in 0..32 {
+                    OP_TOALTSTACK
+                }
+                { Fq::toaltstack() }
+                { Fq::convert_to_be_bytes_without_montgomery() }
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes_without_montgomery() }
+                { blake3_var_length(64) }
+
+                for _ in 0..8 {
+                    for _ in 0..4 {
+                        OP_FROMALTSTACK
+                    }
+                    4 OP_ROLL OP_EQUALVERIFY 3 OP_ROLL OP_EQUALVERIFY 2 OP_ROLL OP_EQUALVERIFY OP_EQUALVERIFY
+                }
+            }
+            OP_TRUE
+        };
+
+        println!("script size: {:?}", s.len());
+
+        let s_test = script! {
+            { s_inputs }
+            { s }
+        };
+        
+        assert!(exe_script(s_test));
+    }
+
+    #[test]
+    fn test_winternitz_hash_chain() {
+        const LOG_D: u32   = 8;                                       // Bits per digit
+        const D    : u32   = (1 << LOG_D) - 1;                        // Digits are base d+1
+        const N0   : usize = 1 + (254 - 1) / (LOG_D as usize);        // Number of digits of the message fq, ceil(254 / logd)
+        const N1   : usize = 2;                                       // Number of digits of the checksum
+        const N    : usize = N0 + N1;                                 // Total number of digits to be signed
+
+        let r = BigUint::from_str_radix(Fq::MONTGOMERY_ONE, 16).unwrap();
+        let p = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let fq_count = 36;
+        let mut fqs = Vec::new();
+        let a = ark_bn254::Fq::rand(&mut prng);
+        fqs.push(a);
+        let mut bytes = BigUint::from(a).mul(r.clone()).rem(p.clone()).to_bytes_le();
+        for _ in 1..fq_count {
+            let b = ark_bn254::Fq::rand(&mut prng);
+            fqs.push(b.clone());
+            bytes.extend(BigUint::from(b).mul(r.clone()).rem(p.clone()).to_bytes_le());
+            bytes.reverse();
+
+            let mut hasher_blake3 = blake3::Hasher::new();
+            hasher_blake3.update(&bytes);
+            let result_blake3 = hasher_blake3.finalize();
+            bytes = result_blake3.as_bytes().to_vec();
+        }
+        
+        let sk = rand::thread_rng().gen::<[u8; 32]>().to_vec();
+        let pks = (0..N).map(|digit_index| public_key::<D>(sk.clone(), digit_index)).collect::<Vec<Vec<u8>>>();
+
+        let mut message = [0_u8; 32];
+        for j in 0..32 {
+            message[j] = bytes[j];
+        }
+        
+        let s_inputs = script! {
+            for fq in fqs {
+                { fq_push(fq) }
+            }
+            { sign::<D, N0, N1, N>(sk, message) }
+        };
+
+        let s = script! {
+            { checksig_verify::<D, LOG_D, N0, N1, N>(pks) }
+            for _ in 0..32 {
+                OP_TOALTSTACK
+            }
+            for _ in 1..fq_count {
+                { Fq::toaltstack() }
+            }
+            { Fq::convert_to_be_bytes_without_montgomery() }
+            for _ in 1..fq_count {
+                { Fq::fromaltstack() }
+                { Fq::convert_to_be_bytes_without_montgomery() }
+                { blake3_var_length(64) }
+                for _ in 0..8 {
+                    28 OP_ROLL
+                    29 OP_ROLL
+                    30 OP_ROLL
+                    31 OP_ROLL
+                }
+            }
+            for _ in 0..32 {
+                OP_FROMALTSTACK OP_EQUALVERIFY
+            }
+            OP_TRUE
+        };
+
+        let s_test = script! {
+            { s_inputs }
+            { s }
+        };
+        
+        assert!(exe_script(s_test));
     }
 }

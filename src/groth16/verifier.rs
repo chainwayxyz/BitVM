@@ -107,11 +107,25 @@ impl Verifier {
                         commit_scripts.push(checksig_verify_bit::<D_BIT>(sks_map.get(&ScriptInput::Bit(*b, label.clone())).unwrap().clone().1));
                     },
                     ScriptInput::Fr(fr) => {
-                        commit_scripts.push(checksig_verify::<D, LOG_D, N0, N1, N>(sks_map.get(&ScriptInput::Fr(*fr)).unwrap().clone().1));
+                        commit_scripts.push(script! {
+                            { checksig_verify::<D, LOG_D, N0, N1, N>(sks_map.get(&ScriptInput::Fr(*fr)).unwrap().clone().1) }
+                            for i in 0..N0 - 1 {
+                                { i + 1 } OP_ROLL
+                            }
+                            { Fr::from_digits::<LOG_D>() }
+                            { Fr::toaltstack() }
+                        })
                     },
                     fqs => {
                         for fq_element in fqs.to_fq().iter().rev() {
-                            commit_scripts.push(checksig_verify::<D, LOG_D, N0, N1, N>(sks_map.get(&ScriptInput::Fq(*fq_element)).unwrap().clone().1));
+                            commit_scripts.push(script! {
+                                { checksig_verify::<D, LOG_D, N0, N1, N>(sks_map.get(&ScriptInput::Fq(*fq_element)).unwrap().clone().1) }
+                                for i in 0..N0 - 1 {
+                                    { i + 1 } OP_ROLL
+                                }
+                                { Fq::from_digits::<LOG_D>() }
+                                { Fq::toaltstack() }
+                            });
                         }
                     }
                 }
