@@ -71,6 +71,15 @@ pub fn OP_4FROMALTSTACK() -> Script {
 // Multiplication by Powers of 2
 //
 
+/// The top stack item is multiplied by 2**k
+pub fn op_2k_mul(k: u32) -> Script {
+    script! {
+        for _ in 0..k{
+            {OP_2MUL()}
+        }
+    }
+}
+
 /// The top stack item is multiplied by 2
 pub fn OP_2MUL() -> Script {
     script! {
@@ -85,12 +94,11 @@ pub fn OP_4MUL() -> Script {
     }
 }
 
-/// The top stack item is multiplied by 2**k
-pub fn op_2k_mul(k: u32) -> Script {
+/// The top stack item is multiplied by 8
+pub fn OP_8MUL() -> Script {
     script! {
-        for _ in 0..k{
-            {OP_2MUL()}
-        }
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
     }
 }
 
@@ -99,6 +107,34 @@ pub fn OP_16MUL() -> Script {
     script! {
         OP_DUP OP_ADD OP_DUP OP_ADD
         OP_DUP OP_ADD OP_DUP OP_ADD
+    }
+}
+
+/// The top stack item is multiplied by 32
+pub fn OP_32MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD
+    }
+}
+
+/// The top stack item is multiplied by 64
+pub fn OP_64MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+    }
+}
+
+/// The top stack item is multiplied by 128
+pub fn OP_128MUL() -> Script {
+    script! {
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD
     }
 }
 
