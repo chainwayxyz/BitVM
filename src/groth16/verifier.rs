@@ -6,7 +6,7 @@ use crate::bn254::fq::Fq;
 use crate::bn254::fq12::Fq12;
 use crate::bn254::msm::msm;
 use crate::bn254::pairing::Pairing;
-use crate::bn254::utils::{affine_add_line, affine_double_line, biguint_to_digits, check_chord_line, check_tangent_line, collect_line_coeffs, ell_by_constant_affine_verify, from_eval_point};
+use crate::bn254::utils::{affine_add_line, affine_double_line, biguint_to_digits, check_chord_line, check_tangent_line, collect_line_coeffs, double_ell_by_constant_affine_verify, ell_by_constant_affine_verify, from_eval_point};
 use crate::bn254::curves::G1Projective;
 use crate::groth16::constants::{LAMBDA, P_POW3};
 use crate::groth16::offchain_checker::compute_c_wi;
@@ -244,20 +244,33 @@ impl Verifier {
             }
 
             for j in 0..num_line_groups {
-                let p = p_lst[j];
-                let coeffs = &line_coeffs[num_lines - (i + 2)][j][0];
-                assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
-                let mut fx = f;
-                let mut c1new = coeffs.1;
-                c1new.mul_assign_by_fp(&(-p.x / p.y));
-                let mut c2new = coeffs.2;
-                c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
-                fx.mul_by_034(&coeffs.0, &c1new, &c2new);
-                
-                let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
-                scripts.extend(sx);
-                inputs.extend(ix);
-                f = fx;
+                if j % 2 == 0 {
+                        let p: Vec<_> = vec![p_lst[j], p_lst[j + 1]];
+                        let coeffs: Vec<_> = vec![line_coeffs[num_lines - (i + 2)][j][0], line_coeffs[num_lines - (i + 2)][j + 1][0]];
+                        let x: Vec<_> = p.iter().map(|elem| -elem.x / elem.y).collect();
+                        let y: Vec<_> = p.iter().map(|elem| elem.y.inverse().unwrap()).collect();
+                        assert_eq!(coeffs[0].0, ark_bn254::Fq2::ONE);
+                        assert_eq!(coeffs[1].0, ark_bn254::Fq2::ONE);
+
+                        let mut fx = f;
+                        let mut c1new = coeffs[0].1;
+                        c1new.mul_assign_by_fp(&x[0]);
+                        let mut c2new = coeffs[0].2;
+                        c2new.mul_assign_by_fp(&y[0]);
+                        fx.mul_by_034(&coeffs[0].0, &c1new, &c2new);
+
+                        let mut fxx = fx;
+                        let mut xc1new = coeffs[1].1;
+                        xc1new.mul_assign_by_fp(&x[1]);
+                        let mut xc2new = coeffs[1].2;
+                        xc2new.mul_assign_by_fp(&y[1]);
+                        fxx.mul_by_034(&coeffs[1].0, &xc1new, &xc2new);
+                        
+                        let (sx, ix) = double_ell_by_constant_affine_verify(f, x, y, coeffs, fxx);
+                        scripts.extend(sx);
+                        inputs.extend(ix);
+                        f = fxx;
+                    }
 
                 if j == num_constant {
                     let two_inv = ark_bn254::Fq::one().double().inverse().unwrap();
@@ -289,20 +302,33 @@ impl Verifier {
 
             if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1 || ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
                 for j in 0..num_line_groups {
-                    let p = p_lst[j];
-                    let coeffs = &line_coeffs[num_lines - (i + 2)][j][1];
-                    assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
-                    let mut fx = f;
-                    let mut c1new = coeffs.1;
-                    c1new.mul_assign_by_fp(&(-p.x / p.y));
-                    let mut c2new = coeffs.2;
-                    c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
-                    fx.mul_by_034(&coeffs.0, &c1new, &c2new);
-                    
-                    let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
-                    scripts.extend(sx);
-                    inputs.extend(ix);
-                    f = fx;
+                    if j % 2 == 0 {
+                        let p: Vec<_> = vec![p_lst[j], p_lst[j + 1]];
+                        let coeffs: Vec<_> = vec![line_coeffs[num_lines - (i + 2)][j][1], line_coeffs[num_lines - (i + 2)][j + 1][1]];
+                        let x: Vec<_> = p.iter().map(|elem| -elem.x / elem.y).collect();
+                        let y: Vec<_> = p.iter().map(|elem| elem.y.inverse().unwrap()).collect();
+                        assert_eq!(coeffs[0].0, ark_bn254::Fq2::ONE);
+                        assert_eq!(coeffs[1].0, ark_bn254::Fq2::ONE);
+
+                        let mut fx = f;
+                        let mut c1new = coeffs[0].1;
+                        c1new.mul_assign_by_fp(&x[0]);
+                        let mut c2new = coeffs[0].2;
+                        c2new.mul_assign_by_fp(&y[0]);
+                        fx.mul_by_034(&coeffs[0].0, &c1new, &c2new);
+
+                        let mut fxx = fx;
+                        let mut xc1new = coeffs[1].1;
+                        xc1new.mul_assign_by_fp(&x[1]);
+                        let mut xc2new = coeffs[1].2;
+                        xc2new.mul_assign_by_fp(&y[1]);
+                        fxx.mul_by_034(&coeffs[1].0, &xc1new, &xc2new);
+                        
+                        let (sx, ix) = double_ell_by_constant_affine_verify(f, x, y, coeffs, fxx);
+                        scripts.extend(sx);
+                        inputs.extend(ix);
+                        f = fxx;
+                    }
 
                     if j == num_constant {
                         let mut pm_q4 = q4;
@@ -377,20 +403,33 @@ impl Verifier {
         f = fx;
 
         for j in 0..num_line_groups {
-            let p = p_lst[j];
-            let coeffs = &line_coeffs[num_lines - 2][j][0];
-            assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
-            let mut fx = f;
-            let mut c1new = coeffs.1;
-            c1new.mul_assign_by_fp(&(-p.x / p.y));
-            let mut c2new = coeffs.2;
-            c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
-            fx.mul_by_034(&coeffs.0, &c1new, &c2new);
-            
-            let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
-            scripts.extend(sx);
-            inputs.extend(ix);
-            f = fx;
+            if j % 2 == 0 {
+                let p: Vec<_> = vec![p_lst[j], p_lst[j + 1]];
+                let coeffs: Vec<_> = vec![line_coeffs[num_lines - 2][j][0], line_coeffs[num_lines - 2][j + 1][0]];
+                let x: Vec<_> = p.iter().map(|elem| -elem.x / elem.y).collect();
+                let y: Vec<_> = p.iter().map(|elem| elem.y.inverse().unwrap()).collect();
+                assert_eq!(coeffs[0].0, ark_bn254::Fq2::ONE);
+                assert_eq!(coeffs[1].0, ark_bn254::Fq2::ONE);
+
+                let mut fx = f;
+                let mut c1new = coeffs[0].1;
+                c1new.mul_assign_by_fp(&x[0]);
+                let mut c2new = coeffs[0].2;
+                c2new.mul_assign_by_fp(&y[0]);
+                fx.mul_by_034(&coeffs[0].0, &c1new, &c2new);
+
+                let mut fxx = fx;
+                let mut xc1new = coeffs[1].1;
+                xc1new.mul_assign_by_fp(&x[1]);
+                let mut xc2new = coeffs[1].2;
+                xc2new.mul_assign_by_fp(&y[1]);
+                fxx.mul_by_034(&coeffs[1].0, &xc1new, &xc2new);
+                
+                let (sx, ix) = double_ell_by_constant_affine_verify(f, x, y, coeffs, fxx);
+                scripts.extend(sx);
+                inputs.extend(ix);
+                f = fxx;
+            }
 
             if j == num_constant {
                 let beta_12x = BigUint::from_str("21575463638280843010398324269430826099269044274347216827212613867836435027261").unwrap();
@@ -448,20 +487,33 @@ impl Verifier {
         }
 
         for j in 0..num_line_groups {
-            let p = p_lst[j];
-            let coeffs = &line_coeffs[num_lines - 1][j][0];
-            assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
-            let mut fx = f;
-            let mut c1new = coeffs.1;
-            c1new.mul_assign_by_fp(&(-p.x / p.y));
-            let mut c2new = coeffs.2;
-            c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
-            fx.mul_by_034(&coeffs.0, &c1new, &c2new);
-            
-            let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
-            scripts.extend(sx);
-            inputs.extend(ix);
-            f = fx;
+            if j % 2 == 0 {
+                let p: Vec<_> = vec![p_lst[j], p_lst[j + 1]];
+                let coeffs: Vec<_> = vec![line_coeffs[num_lines - 1][j][0], line_coeffs[num_lines - 1][j + 1][0]];
+                let x: Vec<_> = p.iter().map(|elem| -elem.x / elem.y).collect();
+                let y: Vec<_> = p.iter().map(|elem| elem.y.inverse().unwrap()).collect();
+                assert_eq!(coeffs[0].0, ark_bn254::Fq2::ONE);
+                assert_eq!(coeffs[1].0, ark_bn254::Fq2::ONE);
+
+                let mut fx = f;
+                let mut c1new = coeffs[0].1;
+                c1new.mul_assign_by_fp(&x[0]);
+                let mut c2new = coeffs[0].2;
+                c2new.mul_assign_by_fp(&y[0]);
+                fx.mul_by_034(&coeffs[0].0, &c1new, &c2new);
+
+                let mut fxx = fx;
+                let mut xc1new = coeffs[1].1;
+                xc1new.mul_assign_by_fp(&x[1]);
+                let mut xc2new = coeffs[1].2;
+                xc2new.mul_assign_by_fp(&y[1]);
+                fxx.mul_by_034(&coeffs[1].0, &xc1new, &xc2new);
+                
+                let (sx, ix) = double_ell_by_constant_affine_verify(f, x, y, coeffs, fxx);
+                scripts.extend(sx);
+                inputs.extend(ix);
+                f = fxx;
+            }
 
             if j == num_constant {
                 let s = script! {

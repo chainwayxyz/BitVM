@@ -248,7 +248,172 @@ pub fn ell_by_constant_affine_verify(f: ark_bn254::Fq12, x: ark_bn254::Fq, y: ar
     inputs.push(vec![ScriptInput::Fq6(fx.c1), ScriptInput::Fq6(b), ScriptInput::Fq(y), ScriptInput::Fq(x), ScriptInput::Fq6(f.c0), ScriptInput::Fq6(f.c1)]);
 
     (scripts, inputs)
+}
 
+pub fn double_ell_by_constant_affine_verify(f: ark_bn254::Fq12, x: Vec<ark_bn254::Fq>, y: Vec<ark_bn254::Fq>, constant: Vec<EllCoeff>, f_new: ark_bn254::Fq12) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
+    let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
+
+    assert_eq!(constant[0].0, ark_bn254::Fq2::ONE);
+    assert_eq!(constant[1].0, ark_bn254::Fq2::ONE);
+
+    let mut c3 = constant[0].1;
+    let mut c4 = constant[0].2;
+    c3.mul_assign_by_fp(&x[0]);
+    c4.mul_assign_by_fp(&y[0]);
+    
+    let cc3 = constant[0].0 + c3;
+    let cc4 = c4;
+
+    let mut s0 = f.c1;
+    s0.mul_by_01(&c3, &c4);
+    let mut s0beta = s0;
+    Fq12Config::mul_fp6_by_nonresidue_in_place(&mut s0beta);
+
+    let mut s1 = f.c0 + f.c1;
+    s1.mul_by_01(&cc3, &cc4);
+
+    let mut xc3 = constant[1].1;
+    let mut xc4 = constant[1].2;
+    xc3.mul_assign_by_fp(&x[1]);
+    xc4.mul_assign_by_fp(&y[1]);
+    
+    let xcc3 = constant[1].0 + xc3;
+    let xcc4 = xc4;
+    
+    let mut xs0 = s1 - (f.c0 + s0);
+    xs0.mul_by_01(&xc3, &xc4);
+    let mut xs0beta = xs0;
+    Fq12Config::mul_fp6_by_nonresidue_in_place(&mut xs0beta);
+
+    let mut xs1 = s0beta + s1 - s0;
+    xs1.mul_by_01(&xcc3, &xcc4);
+
+    let xxf = ark_bn254::Fq12::new(
+        xs0beta + s0beta + f.c0,
+        xs1 - (xs0 + s0beta + f.c0)
+    );
+
+    assert_eq!(xxf, f_new);
+
+    // inputs [s0, f.c1, y[0], x[0]]
+    // verified: [s0]
+    let script1 = script! {
+        // s0, f.c1, y[0], x[0]
+        { Fq::copy(0) }
+        { Fq::mul_by_constant(&constant[0].1.c0) }
+        { Fq::roll(1) }
+        { Fq::mul_by_constant(&constant[0].1.c1) }
+        // s0, f.c1, y[0], c3
+        { Fq::copy(2) }
+        { Fq::mul_by_constant(&constant[0].2.c0) }
+        { Fq::roll(3) }
+        { Fq::mul_by_constant(&constant[0].2.c1) }
+        // s0, f.c1, c3, c4
+        { Fq6::mul_by_01() }
+        { Fq6::equalverify() }
+
+        OP_TRUE
+    };
+    scripts.push(script1);
+    inputs.push(vec![ScriptInput::Fq6(s0), ScriptInput::Fq6(f.c1), ScriptInput::Fq(y[0]), ScriptInput::Fq(x[0])]);
+
+    // inputs [s1, y[0], x[0], f]
+    // verified: [s1]
+    let script2 = script! {
+        { Fq6::add(6, 0) }
+        // s1, y[0], x[0], f.c1+f.c0
+        { Fq::copy(6) }
+        { Fq::mul_by_constant(&constant[0].1.c0) }
+        { Fq::roll(7) }
+        { Fq::mul_by_constant(&constant[0].1.c1) }
+        { Fq2::push_one() }
+        { Fq2::add(2, 0) }
+        // s1, y[0], f.c1+f.c0, cc3
+        { Fq::copy(8) }
+        { Fq::mul_by_constant(&constant[0].2.c0) }
+        { Fq::roll(9) }
+        { Fq::mul_by_constant(&constant[0].2.c1) }
+        // s1, f.c1+f.c0, cc3, cc4
+        { Fq6::mul_by_01() }
+        { Fq6::equalverify() }
+
+        OP_TRUE
+    };
+    scripts.push(script2);
+    inputs.push(vec![ScriptInput::Fq6(s1), ScriptInput::Fq(y[0]), ScriptInput::Fq(x[0]), ScriptInput::Fq12(f)]);
+
+    // inputs [xxf.c0, xs0, y[1], x[1], s1, f.c0, s0]
+    // verified: [xxf.c0, xs0]
+    let script3 = script! {
+        { Fq6::copy(6) }
+        { Fq6::copy(6) }
+        // xxf.c0, xs0, y[1], x[1], s1, f.c0, s0, f.c0, s0
+        { Fq6::add(6, 0) }
+        { Fq6::sub(18, 0) }
+        // xxf.c0, xs0, y[1], x[1], f.c0, s0, s1-(f.c0+s0)
+        { Fq::copy(18) }
+        { Fq::mul_by_constant(&constant[1].1.c0) }
+        { Fq::roll(19) }
+        { Fq::mul_by_constant(&constant[1].1.c1) }
+        // xxf.c0, xs0, y[1], f.c0, s0, s1-(f.c0+s0), xc3
+        { Fq::copy(20) }
+        { Fq::mul_by_constant(&constant[1].2.c0) }
+        { Fq::roll(21) }
+        { Fq::mul_by_constant(&constant[1].2.c1) }
+        // xxf.c0, xs0, f.c0, s0, s1-(f.c0+s0), xc3, xc4
+        { Fq6::mul_by_01() }
+        { Fq6::copy(18) }
+        { Fq6::equalverify() }
+        // xxf.c0, xs0, f.c0, s0,
+        { Fq12::mul_fq6_by_nonresidue() }
+        { Fq6::roll(12) }
+        { Fq12::mul_fq6_by_nonresidue() }
+        { Fq6::add(6, 0) }
+        { Fq6::add(6, 0) }
+        { Fq6::equalverify() }
+
+        OP_TRUE
+    };
+    scripts.push(script3);
+    inputs.push(vec![ScriptInput::Fq6(xxf.c0), ScriptInput::Fq6(xs0), ScriptInput::Fq(y[1]), ScriptInput::Fq(x[1]), ScriptInput::Fq6(s1), ScriptInput::Fq6(f.c0), ScriptInput::Fq6(s0)]);
+
+    // inputs [xxf.c1, xs0, f.c0, y[1], x[1], s1, s0]
+    // verified: [xxf.c1]
+    let script4 = script! {
+        // xxf.c1, xs0, f.c0, y[1], x[1], s1, s0
+        { Fq6::copy(0) }
+        { Fq12::mul_fq6_by_nonresidue() }
+        { Fq6::copy(0) }
+        { Fq6::sub(0, 12) }
+        // xxf.c1, xs0, f.c0, y[1], x[1], s1, s0*beta, (s0*beta)-s0
+        { Fq6::add(12, 0) }
+        // xxf.c1, xs0, f.c0, y[1], x[1], s0*beta, ((s0*beta)-s0)+s1
+        { Fq::copy(12) }
+        { Fq::mul_by_constant(&constant[1].1.c0) }
+        { Fq::roll(13) }
+        { Fq::mul_by_constant(&constant[1].1.c1) }
+        { Fq2::push_one() }
+        { Fq2::add(2, 0) }
+        // xxf.c1, xs0, f.c0, y[1], s0*beta, ((s0*beta)-s0)+s1, xcc3
+        { Fq::copy(14) }
+        { Fq::mul_by_constant(&constant[1].2.c0) }
+        { Fq::roll(15) }
+        { Fq::mul_by_constant(&constant[1].2.c1) }
+        // xxf.c1, xs0, f.c0, s0*beta, ((s0*beta)-s0)+s1, xcc3, xcc4
+        { Fq6::mul_by_01() }
+        // xxf.c1, xs0, f.c0, s0*beta, xs1
+        { Fq6::add(12, 6) }
+        { Fq6::add(12, 0) }
+        // xxf.c1, xs1, (f.c0+(s0*beta))+xs0
+        { Fq6::sub(6, 0) }
+        { Fq6::equalverify() }
+        
+        OP_TRUE
+    };
+    scripts.push(script4);
+    inputs.push(vec![ScriptInput::Fq6(xxf.c1), ScriptInput::Fq6(xs0), ScriptInput::Fq6(f.c0), ScriptInput::Fq(y[1]), ScriptInput::Fq(x[1]), ScriptInput::Fq6(s1), ScriptInput::Fq6(s0)]);
+
+    (scripts, inputs)
 }
 
 pub fn collect_line_coeffs(
@@ -1120,6 +1285,64 @@ mod test {
 
         
         let (scripts, inputs) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(),&coeffs.ell_coeffs[0], hint);
+        let n = scripts.len();
+
+        assert_eq!(scripts.len(), inputs.len());
+
+        let mut script_sizes = Vec::new();
+        let mut max_stack_sizes = Vec::new();
+        let mut fq_counts = Vec::new();
+        let mut script_total_size: u64 = 0;
+
+        for (i, (script, input)) in zip(scripts, inputs).enumerate() {
+            let (result, script_size, max_stack_size) = test_script_with_inputs(script.clone(), input.to_vec());
+            script_total_size += script_size as u64;
+            let fq_count = input.iter().map(|inp| inp.size()).sum::<usize>();
+            script_sizes.push(script_size);
+            max_stack_sizes.push(max_stack_size);
+            fq_counts.push(fq_count);
+            println!("script[{:?}]: size: {:?} bytes, max stack size: {:?} items, input fq count: {:?}", i, script_size, max_stack_size, fq_count);
+            assert!(result);
+        }
+        
+        println!();
+        println!("number of pieces: {:?}", n);
+        println!("script total size: {:?}", script_total_size);
+        println!("max (script size): {:?} bytes", script_sizes.iter().max().unwrap());
+        println!("max (max stack size): {:?} items", max_stack_sizes.iter().max().unwrap());
+        println!("max fq count: {:?} fqs", fq_counts.iter().max().unwrap());
+           
+    }
+
+    #[test]
+    fn test_double_ell_by_constant_affine_verify() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        let f = ark_bn254::Fq12::rand(&mut prng);
+        let b: Vec<ark_ec::short_weierstrass::Affine<ark_bn254::g2::Config>> = (0..2).map(|_| ark_bn254::g2::G2Affine::rand(&mut prng)).collect();
+        let p: Vec<_> = (0..2).map(|_| ark_bn254::g1::G1Affine::rand(&mut prng)).collect();
+
+        // affine mode
+        let coeffs: Vec<_> = b.iter().map(|elem| G2Prepared::from_affine(*elem).ell_coeffs[0]).collect();
+        
+        // affine mode as well
+        let mut hint = f.clone();
+        for i in 0..2 { 
+            assert_eq!(coeffs[i].0, ark_bn254::fq2::Fq2::ONE);
+
+            let mut c1new = coeffs[i].1;
+            c1new.mul_assign_by_fp(&(-p[i].x / p[i].y));
+
+            let mut c2new = coeffs[i].2;
+            c2new.mul_assign_by_fp(&(p[i].y.inverse().unwrap()));
+
+            hint.mul_by_034(&coeffs[i].0, &c1new, &c2new);
+        }
+
+        let x: Vec<_> = p.iter().map(|elem| -elem.x / elem.y).collect();
+        let y: Vec<_> = p.iter().map(|elem| elem.y.inverse().unwrap()).collect();
+
+        let (scripts, inputs) = double_ell_by_constant_affine_verify(f, x, y, coeffs, hint);
         let n = scripts.len();
 
         assert_eq!(scripts.len(), inputs.len());
