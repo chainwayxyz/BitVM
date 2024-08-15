@@ -98,7 +98,7 @@ pub fn OP_4MUL() -> Script {
 pub fn OP_8MUL() -> Script {
     script! {
         OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
+        OP_DUP OP_ADD
     }
 }
 
@@ -158,14 +158,12 @@ pub fn OP_NDUP(n: usize) -> Script {
             OP_DUP
         }
 
-
         if n >= 3 {
             OP_2DUP
         }
         else if n >= 2{
             OP_DUP
         }
-
 
         for _ in 0..times_3_dup {
             OP_3DUP
