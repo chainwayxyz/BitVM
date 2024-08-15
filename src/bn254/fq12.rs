@@ -108,104 +108,76 @@ impl Fq12 {
     pub fn mul_verify(a: ark_bn254::Fq12, b: ark_bn254::Fq12, c: ark_bn254::Fq12) -> (Vec<Script>, Vec<Vec<ScriptInput>>) {
         let (mut scripts, mut inputs) = (Vec::new(), Vec::new());
 
-        let tmp = a.c0 + a.c1;
-        let v1 = tmp  * (b.c0 + b.c1);
+        let mut v1 = a.c1 * b.c1;
+        Fq12Config::mul_fp6_by_nonresidue_in_place(&mut v1);
         let v2 = a.c0 * b.c0;
-        let v3 = a.c1 * b.c1;
-        let mut v4 = v3;
-        Fq12Config::mul_fp6_by_nonresidue_in_place(&mut v4);
+        let v3 = a.c0 * b.c1;
+        let v4 = a.c1 * b.c0;
 
-        let cx = ark_bn254::Fq12::new(v4 + v2, v1 - (v3 + v2));
+        let cx = ark_bn254::Fq12::new(v1 + v2, v3 + v4);
 
         assert_eq!(cx, c);
 
-        // inputs [tmp, a.c0, a.c1]
-        // verified: [tmp]
-        let s1 = script! {
-            // tmp, a.c0, a.c1
-            { Fq6::add(6, 0) }
-            // tmp, a.c0+a.c1
-            { Fq6::equalverify() }
-
-            OP_TRUE
-        };
-        scripts.push(s1);
-        inputs.push(vec![ScriptInput::Fq6(tmp), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(a.c1)]);
-
-        
-        // inputs [v1, tmp, b.c0, b.c1]
+        // inputs [v1, a.c1, b.c1]
         // verified: [v1]
-        let s2: Script = script! {
-            // v1, tmp, b.c0, b.c1
-            { Fq6::add(6, 0) }
-            // v1, tmp, b.c0+b.c1
+        let script1 = script! {
+            // v1, a.c1, b.c1
             { Fq6::mul(6, 0) }
-            // v1, tmp*(b.c0+b.c1)
-            { Fq6::equalverify() }
-
-            OP_TRUE
-        };
-        scripts.push(s2);
-        inputs.push(vec![ScriptInput::Fq6(v1), ScriptInput::Fq6(tmp), ScriptInput::Fq6(b.c0), ScriptInput::Fq6(b.c1)]);
-
-        
-        // inputs [v2, a.c0, b.c0]
-        // verified: [v2]
-        let s3: Script = script! {
-            // v2, a.c0, b.c0
-            { Fq6::mul(6, 0) }
-            // v2, a.c0*b.c0
-            { Fq6::equalverify() }
-
-            OP_TRUE
-        };
-        scripts.push(s3);
-        inputs.push(vec![ScriptInput::Fq6(v2), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(b.c0)]);
-
-        
-        // inputs [v3, a.c1, b.c1]
-        // verified: [v3]
-        let s4: Script = script! {
-            // v3, a.c1, b.c1
-            { Fq6::mul(6, 0) }
-            // v3, a.c1*b.c1
-            { Fq6::equalverify() }
-
-            OP_TRUE
-        };
-        scripts.push(s4);
-        inputs.push(vec![ScriptInput::Fq6(v3), ScriptInput::Fq6(a.c1), ScriptInput::Fq6(b.c1)]);
-
-        
-        // inputs [c.c0, v2, v3]
-        // verified: [c.c0]
-        let s5: Script = script! {
-            // c.c0, v2, v3
+            // v1, a.c1*b.c1
             { Fq12::mul_fq6_by_nonresidue() }
-            { Fq6::add(6, 0) }
-            // c.c0, v2+(v3*beta)
+            // v1, (a.c1*b.c1)*beta
             { Fq6::equalverify() }
 
             OP_TRUE
         };
-        scripts.push(s5);
-        inputs.push(vec![ScriptInput::Fq6(c.c0), ScriptInput::Fq6(v2), ScriptInput::Fq6(v3)]);
+        scripts.push(script1);
+        inputs.push(vec![ScriptInput::Fq6(v1), ScriptInput::Fq6(a.c1), ScriptInput::Fq6(b.c1)]);
 
         
-        // inputs [c.c1, v1, v2, v3]
-        // verified: [c.c1]
-        let s6: Script = script! {
-            // c.c1, v1, v2, v3
+        // inputs [c.c0, v1, a.c0, b.c0]
+        // verified: [c.c0]
+        let script2 = script! {
+            // c.c0, v1, a.c0, b.c0
+            { Fq6::mul(6, 0) }
+            // c.c0, v1, a.c0*b.c0
             { Fq6::add(6, 0) }
-            // c.c1, v1, v2+v3
-            { Fq6::sub(6, 0) }
-            // c.c1, v1-(v2+v3)
+            // c.c0, v1+(a.c0*b.c0)
             { Fq6::equalverify() }
 
             OP_TRUE
         };
-        scripts.push(s6);
-        inputs.push(vec![ScriptInput::Fq6(c.c1), ScriptInput::Fq6(v1), ScriptInput::Fq6(v2), ScriptInput::Fq6(v3)]);
+        scripts.push(script2);
+        inputs.push(vec![ScriptInput::Fq6(c.c0), ScriptInput::Fq6(v1), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(b.c0)]);
+
+        
+        // inputs [v3, a.c0, b.c1]
+        // verified: [v3]
+        let script3 = script! {
+            // v3, a.c0, b.c1
+            { Fq6::mul(6, 0) }
+            // v3, a.c0*b.c1
+            { Fq6::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(script3);
+        inputs.push(vec![ScriptInput::Fq6(v3), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(b.c1)]);
+
+        
+        // inputs [c.c1, v3, a.c1, b.c0]
+        // verified: [c.c1]
+        let script4 = script! {
+            // c.c1, v3, a.c1, b.c0
+            { Fq6::mul(6, 0) }
+            // c.c1, v3, a.c1*b.c0
+            { Fq6::add(6, 0) }
+            // c.c1, v3+(a.c1*b.c0)
+            { Fq6::equalverify() }
+
+            OP_TRUE
+        };
+        scripts.push(script4);
+        inputs.push(vec![ScriptInput::Fq6(c.c1), ScriptInput::Fq6(v3), ScriptInput::Fq6(a.c1), ScriptInput::Fq6(b.c0)]);
 
         (scripts, inputs)
     }
@@ -584,7 +556,7 @@ impl Fq12 {
 
         // inputs [c.c1, v2, a.c0, a.c1]
         // verified: [c.c1, v2]
-        let s1 = script! {
+        let script1 = script! {
             // c.c1, v2, a.c0, a.c1
             { Fq6::mul(6, 0) }
             // c.c1, v2, a.c0*a.c1
@@ -596,12 +568,12 @@ impl Fq12 {
 
             OP_TRUE
         };
-        scripts.push(s1);
+        scripts.push(script1);
         inputs.push(vec![ScriptInput::Fq6(c.c1), ScriptInput::Fq6(v2), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(a.c1)]);
 
         // inputs [c.c0, v2, a.c0, a.c1]
         // verified: [c.c0]
-        let s2 = script! {
+        let script2: Script = script! {
             // c.c0, v2, a.c0, a.c1
             { Fq6::copy(6) }
             { Fq6::copy(6) }
@@ -624,7 +596,7 @@ impl Fq12 {
 
             OP_TRUE
         };
-        scripts.push(s2);
+        scripts.push(script2);
         inputs.push(vec![ScriptInput::Fq6(c.c0), ScriptInput::Fq6(v2), ScriptInput::Fq6(a.c0), ScriptInput::Fq6(a.c1)]);
 
         (scripts, inputs)

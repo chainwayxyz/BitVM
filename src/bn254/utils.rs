@@ -184,7 +184,7 @@ pub fn ell_by_constant_affine_verify(f: ark_bn254::Fq12, x: ark_bn254::Fq, y: ar
 
     // inputs [fx.c0, f.c0, b, f.c1, y, x]
     // verified: [fx.c0, b]
-    let s1 = script! {
+    let script1 = script! {
         // fx.c0, f.c0, b, f.c1, y, x
         { Fq::copy(0) }
         { Fq::mul_by_constant(&constant.1.c0) }
@@ -209,12 +209,12 @@ pub fn ell_by_constant_affine_verify(f: ark_bn254::Fq12, x: ark_bn254::Fq, y: ar
 
         OP_TRUE
     };
-    scripts.push(s1);
+    scripts.push(script1);
     inputs.push(vec![ScriptInput::Fq6(fx.c0), ScriptInput::Fq6(f.c0), ScriptInput::Fq6(b), ScriptInput::Fq6(f.c1), ScriptInput::Fq(y), ScriptInput::Fq(x)]);
 
     // inputs [fx.c1, b, y, x, f.c0, f.c1]
     // verified: [fx.c1]
-    let s2 = script! {
+    let script2 = script! {
         // fx.c1, b, y, x, f.c0, f.c1
         { Fq6::copy(6) }
         { Fq6::add(6, 0) }
@@ -244,7 +244,7 @@ pub fn ell_by_constant_affine_verify(f: ark_bn254::Fq12, x: ark_bn254::Fq, y: ar
 
         OP_TRUE
     };
-    scripts.push(s2);
+    scripts.push(script2);
     inputs.push(vec![ScriptInput::Fq6(fx.c1), ScriptInput::Fq6(b), ScriptInput::Fq(y), ScriptInput::Fq(x), ScriptInput::Fq6(f.c0), ScriptInput::Fq6(f.c1)]);
 
     (scripts, inputs)
