@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
+use crate::treepp::*;
+
 use bitcoin_script_stack::stack::{StackTracker, StackVariable};
 
 pub use bitcoin_script::script;
 
-use crate::u4::{u4_add_stack::*, u4_logic_stack::*, u4_shift_stack::*, u4_std::u4_repeat_number};
+use crate::u4::{u4_add_stack::*, u4_logic_stack::*, u4_shift_stack::*, u4_std::{u4_hex_to_nibbles, u4_repeat_number}};
 
 const IV: [u32; 8] = [
     0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
@@ -577,6 +579,24 @@ pub fn blake3(stack: &mut StackTracker, mut msg_len: u32, final_rounds: u8) {
     stack.from_altstack_joined(final_rounds as u32 * 8, "blake3-hash");
 }
 
+
+//TODO: update input stage
+pub fn blake3_u4_to_script() -> Script {
+    let mut stack = StackTracker::new();
+    let hex_in = "00000002".repeat(16);
+    stack.custom(
+        to_script_buf(
+        script! { { u4_hex_to_nibbles(&hex_in) } }),
+        0,
+        false,
+        0,
+        "msg",
+    );
+    blake3(&mut stack, 64, 8);
+    let script = script! {};
+    script.push_script(stack.get_script())
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -626,9 +646,9 @@ mod tests {
             "msg",
         );
 
-        let start = stack.get_script_len();
+        let start = stack.get_script().len();
         blake3(&mut stack, 64, 8);
-        let end = stack.get_script_len();
+        let end = stack.get_script().len();
         println!("Blake3 size: {}", end - start);
 
         stack.custom(
@@ -643,7 +663,7 @@ mod tests {
         stack.op_true();
 
         assert!(stack.run().success);
-    }
+            }
 
     #[test]
     fn test_blake3_160() {
@@ -661,9 +681,9 @@ mod tests {
             "msg",
         );
 
-        let start = stack.get_script_len();
+        let start = stack.get_script().len();
         blake3(&mut stack, 40, 5);
-        let end = stack.get_script_len();
+        let end = stack.get_script().len();
         println!("Blake3 size: {}", end - start);
 
         stack.custom(
@@ -693,9 +713,9 @@ mod tests {
             "msg",
         );
 
-        let start = stack.get_script_len();
+        let start = stack.get_script().len();
         blake3(&mut stack, repeat * 4, 8);
-        let end = stack.get_script_len();
+        let end = stack.get_script().len();
         println!("Blake3 size: {} for: {} bytes", end - start, repeat * 4);
 
         stack.custom(
@@ -781,7 +801,7 @@ mod tests {
         var_map.insert(2, ret[2]);
         var_map.insert(3, ret[3]);
 
-        let start = stack.get_script_len();
+        let start = stack.get_script().len();
         g(
             &mut stack,
             &mut var_map,
@@ -793,7 +813,7 @@ mod tests {
             ret[5],
             &tables,
         );
-        let end = stack.get_script_len();
+        let end = stack.get_script().len();
         println!("G size: {}", end - start);
 
         stack.number_u32(0xc4d46c6c); //b
@@ -830,9 +850,9 @@ mod tests {
             msg_map.insert(i, stack.number_u32(i as u32));
         }
 
-        let start = stack.get_script_len();
+        let start = stack.get_script().len();
         round(&mut stack, &mut var_map, &msg_map, &tables);
-        let end = stack.get_script_len();
+        let end = stack.get_script().len();
         println!("Round size: {}", end - start);
     }
 }
