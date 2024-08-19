@@ -1,11 +1,11 @@
-use super::u4_shift::{u4_push_lshift_tables, u4_push_rshift_tables};
-use crate::treepp::{script, Script};
+use super::{u4_logic_stack::to_script_buf, u4_shift::{u4_push_lshift_tables, u4_push_rshift_tables}};
+use crate::treepp::script;
 use bitcoin_script_stack::stack::{StackTracker, StackVariable};
 
 pub fn u4_push_shift_tables_stack(stack: &mut StackTracker) -> StackVariable {
     stack.var(
         16 * 6,
-        script! { {u4_push_lshift_tables()} {u4_push_rshift_tables()}},
+        to_script_buf(script! { {u4_push_lshift_tables()} {u4_push_rshift_tables()}}),
         "shift_tables",
     )
 }
@@ -22,6 +22,7 @@ pub fn u4_lshift_stack(stack: &mut StackTracker, tables: StackVariable, n: u32) 
 
 pub fn u4_push_shift_for_blake(stack: &mut StackTracker) -> StackVariable {
     stack.custom(
+        to_script_buf(
         script! {
             OP_14
             OP_12
@@ -50,7 +51,7 @@ pub fn u4_push_shift_for_blake(stack: &mut StackTracker) -> StackVariable {
             OP_2DUP
             OP_2DUP
             OP_2DUP
-        },
+        }),
         0,
         false,
         0,

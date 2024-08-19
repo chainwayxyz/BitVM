@@ -54,6 +54,7 @@ mod tests {
 
     use super::*;
     use crate::treepp::script;
+    use crate::u4::u4_logic_stack::to_script_buf;
     use crate::u4::u4_shift_stack::u4_push_shift_tables_stack;
     use bitcoin_script_stack::stack::StackTracker;
     use rand::Rng;
@@ -91,13 +92,14 @@ mod tests {
             stack.number_u32(rshift(x, n));
 
             stack.custom(
+                to_script_buf(
                 script! {
                     for i in 0..8 {
                         { 8 - i}
                         OP_ROLL
                         OP_EQUALVERIFY
                     }
-                },
+                }),
                 2,
                 false,
                 0,
@@ -131,13 +133,14 @@ mod tests {
             stack.number_u32(rrot(x, n));
 
             stack.custom(
+                to_script_buf(
                 script! {
                     for i in 0..8 {
                         { 8 - i}
                         OP_ROLL
                         OP_EQUALVERIFY
                     }
-                },
+                }),
                 2,
                 false,
                 0,

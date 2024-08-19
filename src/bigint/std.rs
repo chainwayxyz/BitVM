@@ -3,67 +3,8 @@ use num_traits::Num;
 use std::str::FromStr;
 
 use crate::bigint::BigIntImpl;
-use crate::pseudo::push_to_stack;
+use crate::pseudo::{push_to_stack, OP_128MUL, OP_16MUL, OP_256MUL, OP_2MUL, OP_32MUL, OP_4MUL, OP_64MUL, OP_8MUL};
 use crate::treepp::*;
-
-pub fn OP_256MUL() -> Script {
-    script! {
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
-    }
-}
-
-pub fn OP_128MUL() -> Script {
-    script! {
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD
-    }
-}
-
-pub fn OP_64MUL() -> Script {
-    script! {
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
-    }
-}
-
-pub fn OP_32MUL() -> Script {
-    script! {
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD
-    }
-}
-
-pub fn OP_16MUL() -> Script {
-    script! {
-        OP_DUP OP_ADD OP_DUP OP_ADD
-        OP_DUP OP_ADD OP_DUP OP_ADD
-    }
-}
-
-pub fn OP_8MUL() -> Script {
-    script! {
-        OP_DUP OP_ADD OP_DUP OP_ADD OP_DUP OP_ADD
-    }
-}
-
-pub fn OP_4MUL() -> Script {
-    script! {
-        OP_DUP OP_ADD OP_DUP OP_ADD
-    }
-}
-
-pub fn OP_2MUL() -> Script {
-    script! {
-        OP_DUP OP_ADD
-    }
-}
 
 impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
     pub fn push_u32_le(v: &[u32]) -> Script {

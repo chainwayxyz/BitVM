@@ -6,12 +6,11 @@ use crate::bn254::fq::Fq;
 use crate::bn254::fq12::Fq12;
 use crate::bn254::msm::msm;
 use crate::bn254::pairing::Pairing;
-use crate::bn254::utils::{affine_add_line, affine_double_line, biguint_to_digits, check_chord_line, check_tangent_line, collect_line_coeffs, ell_by_constant_affine_verify, from_eval_point};
+use crate::bn254::utils::{affine_add_line, affine_double_line, biguint_to_digits, check_chord_line, check_tangent_line, collect_line_coeffs, double_ell_by_constant_affine_verify, ell_by_constant_affine_verify, from_eval_point};
 use crate::bn254::curves::G1Projective;
-use crate::execute_script_without_stack_limit;
 use crate::groth16::constants::{LAMBDA, P_POW3};
 use crate::groth16::offchain_checker::compute_c_wi;
-use crate::groth16::utils::{fq12_push, fq2_push, fq_push, g1p_push, g2a_push, Groth16Data, ScriptInput};
+use crate::groth16::utils::{fq12_push, fq2_push, g1p_push, Groth16Data, ScriptInput};
 use crate::treepp::{script, Script};
 use crate::signatures::winternitz_compact::*;
 use ark_bn254::Bn254;
@@ -21,7 +20,6 @@ use ark_ec::short_weierstrass::Projective;
 use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
 use ark_ff::Field;
 use ark_groth16::{Proof, VerifyingKey};
-use bitcoin::script;
 use num_bigint::BigUint;
 use rand::Rng;
 use num_traits::Num;
@@ -228,15 +226,13 @@ impl Verifier {
 
         let p_lst = vec![p1, p2, p3, p4];
 
-        let mut f = c_inv;
-        let mut t4 = q4;
-
         let num_line_groups = q_prepared.len();
         let num_constant = 3;
 
         let line_coeffs = collect_line_coeffs(q_prepared);
         let num_lines = line_coeffs.len();
 
+        let mut f = c_inv;
         for i in (1..ark_bn254::Config::ATE_LOOP_COUNT.len()).rev() {
             let fx = f.square();
             let (sx, ix) = Fq12::square_verify(f, fx);
@@ -260,99 +256,150 @@ impl Verifier {
             }
 
             for j in 0..num_line_groups {
-                let p = p_lst[j];
-                let coeffs = &line_coeffs[num_lines - (i + 2)][j][0];
-                assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
-                let mut fx = f;
-                let mut c1new = coeffs.1;
-                c1new.mul_assign_by_fp(&(-p.x / p.y));
-                let mut c2new = coeffs.2;
-                c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
-                fx.mul_by_034(&coeffs.0, &c1new, &c2new);
-                
-                let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
-                scripts.extend(sx);
-                inputs.extend(ix);
-                f = fx;
+                if j % 2 == 0 {
+                    let p: Vec<_> = vec![p_lst[j], p_lst[j + 1]];
+                    let coeffs: Vec<_> = vec![line_coeffs[num_lines - (i + 2)][j][0], line_coeffs[num_lines - (i + 2)][j + 1][0]];
+                    let x: Vec<_> = p.iter().map(|elem| -elem.x / elem.y).collect();
+                    let y: Vec<_> = p.iter().map(|elem| elem.y.inverse().unwrap()).collect();
+                    assert_eq!(coeffs[0].0, ark_bn254::Fq2::ONE);
+                    assert_eq!(coeffs[1].0, ark_bn254::Fq2::ONE);
 
-                if j == num_constant {
-                    let two_inv = ark_bn254::Fq::one().double().inverse().unwrap();
-                    let three_div_two = (ark_bn254::Fq::one().double() + ark_bn254::Fq::one()) * two_inv;
-                    let mut alpha = t4.x.square();
-                    alpha /= t4.y;
-                    alpha.mul_assign_by_fp(&three_div_two);
-                    let bias_minus = alpha * t4.x - t4.y;
-                    let x = alpha.square() - t4.x.double();
-                    let y = bias_minus - alpha * x;
-                    let t4x = ark_bn254::G2Affine::new(x, y);
+                    let mut fx = f;
+                    let mut c1new = coeffs[0].1;
+                    c1new.mul_assign_by_fp(&x[0]);
+                    let mut c2new = coeffs[0].2;
+                    c2new.mul_assign_by_fp(&y[0]);
+                    fx.mul_by_034(&coeffs[0].0, &c1new, &c2new);
+
+                    let mut fxx = fx;
+                    let mut xc1new = coeffs[1].1;
+                    xc1new.mul_assign_by_fp(&x[1]);
+                    let mut xc2new = coeffs[1].2;
+                    xc2new.mul_assign_by_fp(&y[1]);
+                    fxx.mul_by_034(&coeffs[1].0, &xc1new, &xc2new);
                     
-                    let s = script! {
-                        { Fq2::copy(2) }
-                        { Fq2::copy(2) }
-                        { check_tangent_line(line_coeffs[num_lines - (i + 2)][j][0].1, line_coeffs[num_lines - (i + 2)][j][0].2) }
-                        { Fq2::drop() }
-                        { affine_double_line(line_coeffs[num_lines - (i + 2)][j][0].1, line_coeffs[num_lines - (i + 2)][j][0].2) }
-                        { Fq2::roll(4) }
-                        { Fq2::equalverify() }
-                        { Fq2::equalverify() }
-                        OP_TRUE
-                    };
-                    scripts.push(s);
-                    inputs.push(vec![ScriptInput::G2A(t4x), ScriptInput::G2A(t4)]);
-                    t4 = t4x;
+                    let (sx, ix) = double_ell_by_constant_affine_verify(f, x, y, coeffs, fxx);
+                    scripts.extend(sx);
+                    inputs.extend(ix);
+                    f = fxx;
                 }
             }
 
             if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1 || ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
                 for j in 0..num_line_groups {
-                    let p = p_lst[j];
-                    let coeffs = &line_coeffs[num_lines - (i + 2)][j][1];
-                    assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
-                    let mut fx = f;
-                    let mut c1new = coeffs.1;
-                    c1new.mul_assign_by_fp(&(-p.x / p.y));
-                    let mut c2new = coeffs.2;
-                    c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
-                    fx.mul_by_034(&coeffs.0, &c1new, &c2new);
-                    
-                    let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
-                    scripts.extend(sx);
-                    inputs.extend(ix);
-                    f = fx;
+                    if j % 2 == 0 {
+                        let p: Vec<_> = vec![p_lst[j], p_lst[j + 1]];
+                        let coeffs: Vec<_> = vec![line_coeffs[num_lines - (i + 2)][j][1], line_coeffs[num_lines - (i + 2)][j + 1][1]];
+                        let x: Vec<_> = p.iter().map(|elem| -elem.x / elem.y).collect();
+                        let y: Vec<_> = p.iter().map(|elem| elem.y.inverse().unwrap()).collect();
+                        assert_eq!(coeffs[0].0, ark_bn254::Fq2::ONE);
+                        assert_eq!(coeffs[1].0, ark_bn254::Fq2::ONE);
 
-                    if j == num_constant {
-                        let mut pm_q4 = q4;
-                        if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
-                            pm_q4 = q4.neg();
-                        }
-                        let alpha = (t4.y - pm_q4.y) / (t4.x - pm_q4.x);
-                        let bias_minus = alpha * t4.x - t4.y;
-                        let x = alpha.square() - t4.x - pm_q4.x;
-                        let y = bias_minus - alpha * x;
-                        let t4x = ark_bn254::G2Affine::new(x, y);
+                        let mut fx = f;
+                        let mut c1new = coeffs[0].1;
+                        c1new.mul_assign_by_fp(&x[0]);
+                        let mut c2new = coeffs[0].2;
+                        c2new.mul_assign_by_fp(&y[0]);
+                        fx.mul_by_034(&coeffs[0].0, &c1new, &c2new);
+
+                        let mut fxx = fx;
+                        let mut xc1new = coeffs[1].1;
+                        xc1new.mul_assign_by_fp(&x[1]);
+                        let mut xc2new = coeffs[1].2;
+                        xc2new.mul_assign_by_fp(&y[1]);
+                        fxx.mul_by_034(&coeffs[1].0, &xc1new, &xc2new);
                         
-                        let s = script! {
-                            { Fq2::copy(2) }
-                            { Fq2::toaltstack() }
-                            { Fq2::copy(6) }
-                            { Fq2::toaltstack() }
-                            if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
-                                { Fq2::neg(0) }
-                            }
-                            { check_chord_line(line_coeffs[num_lines - (i + 2)][j][1].1, line_coeffs[num_lines - (i + 2)][j][1].2) }
-                            { Fq2::fromaltstack() }
-                            { Fq2::fromaltstack() }
-                            { affine_add_line(line_coeffs[num_lines - (i + 2)][j][1].1, line_coeffs[num_lines - (i + 2)][j][1].2) }
-                            { Fq2::roll(4) }
-                            { Fq2::equalverify() }
-                            { Fq2::equalverify() }
-                            OP_TRUE
-                        };
-                        scripts.push(s);
-                        inputs.push(vec![ScriptInput::G2A(t4x), ScriptInput::G2A(t4), ScriptInput::G2A(q4)]);
-                        t4 = t4x;
+                        let (sx, ix) = double_ell_by_constant_affine_verify(f, x, y, coeffs, fxx);
+                        scripts.extend(sx);
+                        inputs.extend(ix);
+                        f = fxx;
                     }
                 }
+            }
+        }
+
+        let mut t4 = q4;
+        for i in (1..ark_bn254::Config::ATE_LOOP_COUNT.len()).rev() {
+            if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1 || ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
+                let j = num_constant;
+            
+                let two_inv = ark_bn254::Fq::one().double().inverse().unwrap();
+                let three_div_two = (ark_bn254::Fq::one().double() + ark_bn254::Fq::one()) * two_inv;
+                let mut alpha = t4.x.square();
+                alpha /= t4.y;
+                alpha.mul_assign_by_fp(&three_div_two);
+                let bias_minus = alpha * t4.x - t4.y;
+                let x = alpha.square() - t4.x.double();
+                let y = bias_minus - alpha * x;
+                let t4x = ark_bn254::G2Affine::new(x, y);
+
+                let mut pm_q4 = q4;
+                if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
+                    pm_q4 = q4.neg();
+                }
+                let alpha = (t4x.y - pm_q4.y) / (t4x.x - pm_q4.x);
+                let bias_minus = alpha * t4x.x - t4x.y;
+                let x = alpha.square() - t4x.x - pm_q4.x;
+                let y = bias_minus - alpha * x;
+                let t4xx = ark_bn254::G2Affine::new(x, y);
+                
+                let s = script! {
+                    { Fq2::copy(2) }
+                    { Fq2::copy(2) }
+                    { check_tangent_line(line_coeffs[num_lines - (i + 2)][j][0].1, line_coeffs[num_lines - (i + 2)][j][0].2) }
+                    { Fq2::drop() }
+                    { affine_double_line(line_coeffs[num_lines - (i + 2)][j][0].1, line_coeffs[num_lines - (i + 2)][j][0].2) }
+
+                    { Fq2::roll(6) }
+                    { Fq2::roll(6) }
+                    { Fq2::copy(2) }
+                    { Fq2::toaltstack() }
+                    { Fq2::copy(6) }
+                    { Fq2::toaltstack() }
+                    if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1 {
+                        { Fq2::neg(0) }
+                    }
+                    { check_chord_line(line_coeffs[num_lines - (i + 2)][j][1].1, line_coeffs[num_lines - (i + 2)][j][1].2) }
+                    { Fq2::fromaltstack() }
+                    { Fq2::fromaltstack() }
+                    { affine_add_line(line_coeffs[num_lines - (i + 2)][j][1].1, line_coeffs[num_lines - (i + 2)][j][1].2) }
+                    { Fq2::roll(4) }
+                    { Fq2::equalverify() }
+                    { Fq2::equalverify() }
+
+                    OP_TRUE
+                };
+                scripts.push(s);
+                inputs.push(vec![ScriptInput::G2A(t4xx), ScriptInput::G2A(q4), ScriptInput::G2A(t4)]);
+                t4 = t4xx;
+            }
+            else {
+                let j = num_constant;
+            
+                let two_inv = ark_bn254::Fq::one().double().inverse().unwrap();
+                let three_div_two = (ark_bn254::Fq::one().double() + ark_bn254::Fq::one()) * two_inv;
+                let mut alpha = t4.x.square();
+                alpha /= t4.y;
+                alpha.mul_assign_by_fp(&three_div_two);
+                let bias_minus = alpha * t4.x - t4.y;
+                let x = alpha.square() - t4.x.double();
+                let y = bias_minus - alpha * x;
+                let t4x = ark_bn254::G2Affine::new(x, y);
+                
+                let s = script! {
+                    { Fq2::copy(2) }
+                    { Fq2::copy(2) }
+                    { check_tangent_line(line_coeffs[num_lines - (i + 2)][j][0].1, line_coeffs[num_lines - (i + 2)][j][0].2) }
+                    { Fq2::drop() }
+                    { affine_double_line(line_coeffs[num_lines - (i + 2)][j][0].1, line_coeffs[num_lines - (i + 2)][j][0].2) }
+                    { Fq2::roll(4) }
+                    { Fq2::equalverify() }
+                    { Fq2::equalverify() }
+                    OP_TRUE
+                };
+                scripts.push(s);
+                inputs.push(vec![ScriptInput::G2A(t4x), ScriptInput::G2A(t4)]);
+                t4 = t4x;
             }
         }
 
@@ -393,20 +440,33 @@ impl Verifier {
         f = fx;
 
         for j in 0..num_line_groups {
-            let p = p_lst[j];
-            let coeffs = &line_coeffs[num_lines - 2][j][0];
-            assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
-            let mut fx = f;
-            let mut c1new = coeffs.1;
-            c1new.mul_assign_by_fp(&(-p.x / p.y));
-            let mut c2new = coeffs.2;
-            c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
-            fx.mul_by_034(&coeffs.0, &c1new, &c2new);
-            
-            let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
-            scripts.extend(sx);
-            inputs.extend(ix);
-            f = fx;
+            if j % 2 == 0 {
+                let p: Vec<_> = vec![p_lst[j], p_lst[j + 1]];
+                let coeffs: Vec<_> = vec![line_coeffs[num_lines - 2][j][0], line_coeffs[num_lines - 2][j + 1][0]];
+                let x: Vec<_> = p.iter().map(|elem| -elem.x / elem.y).collect();
+                let y: Vec<_> = p.iter().map(|elem| elem.y.inverse().unwrap()).collect();
+                assert_eq!(coeffs[0].0, ark_bn254::Fq2::ONE);
+                assert_eq!(coeffs[1].0, ark_bn254::Fq2::ONE);
+
+                let mut fx = f;
+                let mut c1new = coeffs[0].1;
+                c1new.mul_assign_by_fp(&x[0]);
+                let mut c2new = coeffs[0].2;
+                c2new.mul_assign_by_fp(&y[0]);
+                fx.mul_by_034(&coeffs[0].0, &c1new, &c2new);
+
+                let mut fxx = fx;
+                let mut xc1new = coeffs[1].1;
+                xc1new.mul_assign_by_fp(&x[1]);
+                let mut xc2new = coeffs[1].2;
+                xc2new.mul_assign_by_fp(&y[1]);
+                fxx.mul_by_034(&coeffs[1].0, &xc1new, &xc2new);
+                
+                let (sx, ix) = double_ell_by_constant_affine_verify(f, x, y, coeffs, fxx);
+                scripts.extend(sx);
+                inputs.extend(ix);
+                f = fxx;
+            }
 
             if j == num_constant {
                 let beta_12x = BigUint::from_str("21575463638280843010398324269430826099269044274347216827212613867836435027261").unwrap();
@@ -464,20 +524,33 @@ impl Verifier {
         }
 
         for j in 0..num_line_groups {
-            let p = p_lst[j];
-            let coeffs = &line_coeffs[num_lines - 1][j][0];
-            assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
-            let mut fx = f;
-            let mut c1new = coeffs.1;
-            c1new.mul_assign_by_fp(&(-p.x / p.y));
-            let mut c2new = coeffs.2;
-            c2new.mul_assign_by_fp(&(p.y.inverse().unwrap()));
-            fx.mul_by_034(&coeffs.0, &c1new, &c2new);
-            
-            let (sx, ix) = ell_by_constant_affine_verify(f, -p.x / p.y, p.y.inverse().unwrap(), coeffs, fx);
-            scripts.extend(sx);
-            inputs.extend(ix);
-            f = fx;
+            if j % 2 == 0 {
+                let p: Vec<_> = vec![p_lst[j], p_lst[j + 1]];
+                let coeffs: Vec<_> = vec![line_coeffs[num_lines - 1][j][0], line_coeffs[num_lines - 1][j + 1][0]];
+                let x: Vec<_> = p.iter().map(|elem| -elem.x / elem.y).collect();
+                let y: Vec<_> = p.iter().map(|elem| elem.y.inverse().unwrap()).collect();
+                assert_eq!(coeffs[0].0, ark_bn254::Fq2::ONE);
+                assert_eq!(coeffs[1].0, ark_bn254::Fq2::ONE);
+
+                let mut fx = f;
+                let mut c1new = coeffs[0].1;
+                c1new.mul_assign_by_fp(&x[0]);
+                let mut c2new = coeffs[0].2;
+                c2new.mul_assign_by_fp(&y[0]);
+                fx.mul_by_034(&coeffs[0].0, &c1new, &c2new);
+
+                let mut fxx = fx;
+                let mut xc1new = coeffs[1].1;
+                xc1new.mul_assign_by_fp(&x[1]);
+                let mut xc2new = coeffs[1].2;
+                xc2new.mul_assign_by_fp(&y[1]);
+                fxx.mul_by_034(&coeffs[1].0, &xc1new, &xc2new);
+                
+                let (sx, ix) = double_ell_by_constant_affine_verify(f, x, y, coeffs, fxx);
+                scripts.extend(sx);
+                inputs.extend(ix);
+                f = fxx;
+            }
 
             if j == num_constant {
                 let s = script! {

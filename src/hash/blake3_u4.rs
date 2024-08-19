@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use bitcoin_script_stack::stack::{StackTracker, StackVariable};
 
 pub use bitcoin_script::script;
-pub use bitcoin::ScriptBuf as Script;
 
 use crate::u4::{u4_add_stack::*, u4_logic_stack::*, u4_shift_stack::*, u4_std::u4_repeat_number};
 
@@ -482,7 +481,8 @@ pub fn blake3(stack: &mut StackTracker, mut msg_len: u32, final_rounds: u8) {
 
     if mandatory_first_block_padding > 0 {
         stack.custom(
-            u4_repeat_number(0, (mandatory_first_block_padding) * 2),
+            to_script_buf(
+            u4_repeat_number(0, (mandatory_first_block_padding) * 2)),
             0,
             false,
             0,
@@ -508,7 +508,8 @@ pub fn blake3(stack: &mut StackTracker, mut msg_len: u32, final_rounds: u8) {
         // add the padding on the last round
         if last_round && num_padding_bytes > 0 {
             stack.custom(
-                u4_repeat_number(0, (num_padding_bytes) * 2),
+                to_script_buf(
+                u4_repeat_number(0, (num_padding_bytes) * 2)),
                 0,
                 false,
                 0,
@@ -582,6 +583,7 @@ mod tests {
     use std::collections::HashMap;
 
     pub use bitcoin_script::script;
+    use bitcoin_script::Script;
     //pub use bitcoin::ScriptBuf as Script;
     use bitcoin_script_stack::{script_util::verify_n, stack::StackTracker};
 
@@ -616,7 +618,8 @@ mod tests {
 
         let hex_in = "00000001".repeat(16);
         stack.custom(
-            script! { { u4_hex_to_nibbles(&hex_in) } },
+            to_script_buf(
+            script! { { u4_hex_to_nibbles(&hex_in) } }),
             0,
             false,
             0,
@@ -629,7 +632,8 @@ mod tests {
         println!("Blake3 size: {}", end - start);
 
         stack.custom(
-            script! { {verify_blake3_hash(hex_out)}},
+            to_script_buf(
+            script! { {verify_blake3_hash(hex_out)}}),
             1,
             false,
             0,
@@ -649,7 +653,8 @@ mod tests {
 
         let hex_in = "00000001".repeat(10);
         stack.custom(
-            script! { { u4_hex_to_nibbles(&hex_in) } },
+            to_script_buf(
+            script! { { u4_hex_to_nibbles(&hex_in) } }),
             0,
             false,
             0,
@@ -662,7 +667,8 @@ mod tests {
         println!("Blake3 size: {}", end - start);
 
         stack.custom(
-            script! { {verify_blake3_hash(hex_out)}},
+            to_script_buf(
+            script! { {verify_blake3_hash(hex_out)}}),
             1,
             false,
             0,
@@ -679,7 +685,8 @@ mod tests {
 
         let hex_in = "00000001".repeat(repeat as usize);
         stack.custom(
-            script! { { u4_hex_to_nibbles(&hex_in) } },
+            to_script_buf(
+            script! { { u4_hex_to_nibbles(&hex_in) } }),
             0,
             false,
             0,
@@ -692,7 +699,8 @@ mod tests {
         println!("Blake3 size: {} for: {} bytes", end - start, repeat * 4);
 
         stack.custom(
-            script! { {verify_blake3_hash(hex_out)}},
+            to_script_buf(
+            script! { {verify_blake3_hash(hex_out)}}),
             1,
             false,
             0,
@@ -745,7 +753,7 @@ mod tests {
 
         stack.number_u32(0x57bf5f7b);
 
-        stack.custom(script! { {verify_n(8)}}, 2, false, 0, "verify");
+        stack.custom(verify_n(8), 2, false, 0, "verify");
 
         stack.drop(ret[1]);
 
@@ -789,16 +797,16 @@ mod tests {
         println!("G size: {}", end - start);
 
         stack.number_u32(0xc4d46c6c); //b
-        stack.custom(script! { {verify_n(8)}}, 2, false, 0, "verify");
+        stack.custom(verify_n(8), 2, false, 0, "verify");
 
         stack.number_u32(0x6a063602); //c
-        stack.custom(script! { {verify_n(8)}}, 2, false, 0, "verify");
+        stack.custom(verify_n(8), 2, false, 0, "verify");
 
         stack.number_u32(0x6a003600); //d
-        stack.custom(script! { {verify_n(8)}}, 2, false, 0, "verify");
+        stack.custom(verify_n(8), 2, false, 0, "verify");
 
         stack.number_u32(0x0030006a); //a
-        stack.custom(script! { {verify_n(8)}}, 2, false, 0, "verify");
+        stack.custom(verify_n(8), 2, false, 0, "verify");
 
         stack.drop(ret[5]);
         stack.drop(ret[4]);
