@@ -3,6 +3,7 @@ use crate::bn254::fp254impl::Fp254Impl;
 use crate::bn254::fq::Fq;
 use crate::bn254::fr::Fr;
 use crate::treepp::{script, Script};
+use std::cmp::min;
 use std::sync::OnceLock;
 
 static G1_DOUBLE_PROJECTIVE: OnceLock<Script> = OnceLock::new();
@@ -414,36 +415,82 @@ impl G1Projective {
         s
     }
 
+
+    pub fn dfs(index: u32, depth: u32,  mask: u32, offset: u32) -> Script {
+        if depth == 0 {
+            return script!{
+                OP_IF
+                    { G1Projective::copy(offset - (mask + (1<<index))) }
+                OP_ELSE
+                    if mask == 0 {
+                        OP_FROMALTSTACK
+                        OP_NOT
+                        OP_TOALTSTACK
+                    } else {
+                        { G1Projective::copy(offset - mask) }
+                    }
+                OP_ENDIF
+            };
+        }
+        script!{
+            OP_IF 
+                { G1Projective::dfs(index+1, depth-1, mask + (1<<index), offset) }
+            OP_ELSE
+                { G1Projective::dfs(index+1, depth-1, mask, offset) }
+            OP_ENDIF
+        }
+    }
+
     // [g1projective, scalar]
     pub fn scalar_mul() -> Script {
-        assert_eq!(Fq::N_BITS % 2, 0);
+        let mut loop_scripts = Vec::new();
+        let mut i = 0;
+        let i_step = 3;
 
-        let loop_code = G1_SCALAR_MUL_LOOP.get_or_init(|| {
-            script! {
-                { G1Projective::double() }
-                { G1Projective::double() }
+        // i_step=2
+        // G1.scalar_mul: 518430827 bytes
+        // max_stack: 529
 
-                OP_FROMALTSTACK OP_FROMALTSTACK
-                OP_IF
-                    OP_IF
-                        { G1Projective::copy(1) }
-                    OP_ELSE
-                        { G1Projective::copy(3) }
-                    OP_ENDIF
-                    OP_TRUE
-                OP_ELSE
-                    OP_IF
-                        { G1Projective::copy(2) }
-                        OP_TRUE
-                    OP_ELSE
-                        OP_FALSE
-                    OP_ENDIF
-                OP_ENDIF
+        // i_step=3
+        // G1.scalar_mul: 434660776 bytes
+        // max_stack: 635
+
+        // i_step=4
+        // G1.scalar_mul: 405407340 bytes
+        // max_stack: 849
+
+
+        while i < Fr::N_BITS { 
+            let depth = min(Fr::N_BITS - i, i_step);
+
+            if i > 0 {
+                let double_loop = script! {
+                    for _ in 0..depth {
+                        { G1Projective::double() }
+                    }
+                };
+                loop_scripts.push(double_loop.clone());
+            }
+
+            loop_scripts.push(script!{
+                for _ in 0..depth {
+                    OP_FROMALTSTACK
+                }
+            });
+
+            let add_loop = script! {
+                OP_TRUE
+                OP_TOALTSTACK
+                { G1Projective::dfs(0, depth - 1, 0, 1<<i_step) }
+                OP_FROMALTSTACK
+                
                 OP_IF
                     { G1Projective::add() }
                 OP_ENDIF
-            }
-        });
+            };
+            loop_scripts.push(add_loop.clone());
+            i += i_step;
+        }
 
         script! {
             { Fr::decode_montgomery() }
@@ -451,40 +498,22 @@ impl G1Projective {
 
             { G1Projective::copy(0) }
             { G1Projective::double() }
-            { G1Projective::copy(1) }
-            { G1Projective::copy(1) }
-            { G1Projective::add() }
+            for i in 3..(1<<i_step) { 
+                { G1Projective::copy(0) }
+                { G1Projective::copy(i - 1) }
+                { G1Projective::add() }
+            }
 
             { G1Projective::push_zero() }
 
-            OP_FROMALTSTACK OP_FROMALTSTACK
-            OP_IF
-                OP_IF
-                    { G1Projective::copy(1) }
-                OP_ELSE
-                    { G1Projective::copy(3) }
-                OP_ENDIF
-                OP_TRUE
-            OP_ELSE
-                OP_IF
-                    { G1Projective::copy(2) }
-                    OP_TRUE
-                OP_ELSE
-                    OP_FALSE
-                OP_ENDIF
-            OP_ENDIF
-            OP_IF
-                { G1Projective::add() }
-            OP_ENDIF
-
-            for _ in 1..(Fq::N_BITS) / 2 {
-                { loop_code.clone() }
+            for script in loop_scripts {
+                { script }
             }
 
             { G1Projective::toaltstack() }
-            { G1Projective::drop() }
-            { G1Projective::drop() }
-            { G1Projective::drop() }
+            for _ in 1..(1<<i_step) {
+                { G1Projective::drop() }
+            }
             { G1Projective::fromaltstack() }
         }
     }
@@ -785,7 +814,7 @@ mod test {
             };
             println!("curves::test_scalar_mul = {} bytes", script.len());
             let exec_result = execute_script(script);
-            // println!("res: {:100}", exec_result);
+            println!("res: {:?}", exec_result.stats.max_nb_stack_items);
             assert!(exec_result.success);
         }
     }
