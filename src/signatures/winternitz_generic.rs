@@ -15,18 +15,31 @@
 // BEAT OUR IMPLEMENTATION AND WIN A CODE GOLF BOUNTY!
 //
 
+const fn log_base_ceil(mut n: u32, base: u32) -> usize {
+    let mut res: usize = 0;
+    let mut cur: u64 = 1;
+    while cur < (n as u64) {
+        cur *= base as u64;
+        res += 1;
+    }
+    return res;
+}
+
 use crate::treepp::*;
 use bitcoin::hashes::{hash160, Hash};
 use hex::decode as hex_decode;
 
+const BLAKE3_SIZE: u32 = 20;
+
 /// Bits per digit
-const LOG_D: u32 = 4;
+const LOG_D: u32 = 8;
 /// Digits are base d+1
-pub const D: u32 = (1 << LOG_D) - 1;
+pub const D: u8 = (((1 as u32) << LOG_D) - 1) as u8;
 /// Number of digits of the message
-const N0: u32 = 40;
+const N0: u32 = BLAKE3_SIZE * 8 / LOG_D;
+
 /// Number of digits of the checksum.  N1 = ⌈log_{D+1}(D*N0)⌉ + 1
-const N1: usize = 4;
+const N1: usize = log_base_ceil(D as u32 * N0, (D as u32) + 1) + 1;
 /// Total number of digits to be signed
 const N: u32 = N0 + N1 as u32;
 /// The public key type
@@ -95,15 +108,15 @@ pub fn checksum(digits: [u8; N0 as usize]) -> u32 {
     for digit in digits {
         sum += digit as u32;
     }
-    D * N0 - sum
+    D  as u32 * N0 - sum
 }
 
 /// Convert a number to digits
 pub fn to_digits<const DIGIT_COUNT: usize>(mut number: u32) -> [u8; DIGIT_COUNT] {
     let mut digits: [u8; DIGIT_COUNT] = [0; DIGIT_COUNT];
     for i in 0..DIGIT_COUNT {
-        let digit = number % (D + 1);
-        number = (number - digit) / (D + 1);
+        let digit = number % (D as u32 + 1);
+        number = (number - digit) / (D as u32 + 1);
         digits[i] = digit as u8;
     }
     digits
@@ -126,7 +139,7 @@ pub fn sign_digits(secret_key: &str, message_digits: [u8; N0 as usize]) -> Scrip
 
 pub fn sign(secret_key: &str, message_bytes: &[u8]) -> Script {
     // Convert message to digits
-    let mut message_digits = [0u8; 20 * 2 as usize];
+    let mut message_digits = [0u8; N0 as usize];
     for (digits, byte) in message_digits.chunks_mut(2).zip(message_bytes) {
         digits[0] = byte & 0b00001111;
         digits[1] = byte >> 4;
@@ -136,6 +149,9 @@ pub fn sign(secret_key: &str, message_bytes: &[u8]) -> Script {
 }
 
 pub fn checksig_verify(public_key: &PublicKey) -> Script {
+    // for digit_index in 0..N {
+    //     print!("{}: {:?}\n", digit_index, (public_key[N as usize - 1 - digit_index as usize]).to_vec());
+    // }
     script! {
         //
         // Verify the hash chain for each digit
@@ -161,11 +177,11 @@ pub fn checksig_verify(public_key: &PublicKey) -> Script {
             // Verify the signature for this digit
             OP_FROMALTSTACK
             OP_PICK
-            { public_key[N as usize - 1 - digit_index as usize].to_vec() }
+            { (public_key[N as usize - 1 - digit_index as usize]).to_vec() }
             OP_EQUALVERIFY
 
             // Drop the d+1 stack items
-            for _ in 0..(D+1)/2 {
+            for _ in 0..(D as u32+1)/2 {
                 OP_2DROP
             }
         }
@@ -179,7 +195,7 @@ pub fn checksig_verify(public_key: &PublicKey) -> Script {
         for _ in 1..N0 {
             OP_FROMALTSTACK OP_TUCK OP_SUB
         }
-        { D * N0 }
+        { D as u32 * N0 }
         OP_ADD
 
 
@@ -220,6 +236,10 @@ pub fn checksig_verify(public_key: &PublicKey) -> Script {
 
 #[cfg(test)]
 mod test {
+    use bitcoin::opcodes::all::OP_EQUALVERIFY;
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha20Rng;
+
     use super::*;
 
     // The secret key
@@ -228,55 +248,46 @@ mod test {
 
     #[test]
     fn test_winternitz() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
         // The message to sign
-        #[rustfmt::skip]
-        const MESSAGE: [u8; N0 as usize] = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 7, 7, 7, 7, 7,
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 7, 10, 7, 7, 7,
-        ];
+        for _ in 0..100 {
+            let mut message = [0u8; N0 as usize];
+            for i in 0..N0 {
+                message[i as usize] = prng.gen_range(0 as u8..=D);
+            }
 
-        let public_key = generate_public_key(MY_SECKEY);
 
-        let script = script! {
-            { sign_digits(MY_SECKEY, MESSAGE) }
-            { checksig_verify(&public_key) }
-        };
+            let public_key = generate_public_key(MY_SECKEY);
 
-        println!(
-            "Winternitz signature size:\n \t{:?} bytes / {:?} bits \n\t{:?} bytes / bit",
-            script.len(),
-            N0 * 4,
-            script.len() as f64 / (N0 * 4) as f64
-        );
+            let script = script! {
+                { sign_digits(MY_SECKEY, message) }
+                { checksig_verify(&public_key) }
+            };
 
-        execute_script(script! {
-            { sign_digits(MY_SECKEY, MESSAGE) }
-            { checksig_verify(&public_key) }
+            println!(
+                "Winternitz signature size:\n \t{:?} bytes / {:?} bits \n\t{:?} bytes / bit",
+                script.len(),
+                N0 * 4,
+                script.len() as f64 / (N0 * 4) as f64
+            );
 
-            /* 
-            0x21 OP_EQUALVERIFY
-            0x43 OP_EQUALVERIFY
-            0x65 OP_EQUALVERIFY
-            0x87 OP_EQUALVERIFY
-            0xA9 OP_EQUALVERIFY
-            0xCB OP_EQUALVERIFY
-            0xED OP_EQUALVERIFY
-            0x7F OP_EQUALVERIFY
-            0x77 OP_EQUALVERIFY
-            0x77 OP_EQUALVERIFY
-            0x21 OP_EQUALVERIFY
-            0x43 OP_EQUALVERIFY
-            0x65 OP_EQUALVERIFY
-            0x87 OP_EQUALVERIFY
-            0xA9 OP_EQUALVERIFY
-            0xCB OP_EQUALVERIFY
-            0xED OP_EQUALVERIFY
-            0x7F OP_EQUALVERIFY
-            0x77 OP_EQUALVERIFY
-            0x77 OP_EQUAL
-            */
-        });
+            print!("{:x?}\n", message);
+            print!("{:?}\n", message);
+            execute_script(script! {
+                { sign_digits(MY_SECKEY, message) }
+                
+                { checksig_verify(&public_key) }
+                /* 
+                for i in 0..N0/2 {
+                    {(D as u32 + 1) * message[(2 * i + 1) as usize] as u32 + message[(2 * i) as usize] as u32}
+                    OP_EQUAL
+                    if i != N0/2-1 {
+                        OP_VERIFY
+                    } 
+                }
+                */
+            });
+        }
     }
-
     // TODO: test the error cases: negative digits, digits > D, ...
 }

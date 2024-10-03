@@ -131,6 +131,14 @@ pub fn execute_script(script: treepp::Script) -> ExecuteInfo {
         }
     }
     let res = exec.result().unwrap();
+    for (i, a) in exec.stack().iter_str().enumerate() {
+        println!("stack[{}]: {:X?}", i, a);
+    }
+    println!("");
+    for (i, a) in exec.altstack().iter_str().enumerate() {
+        println!("altstack[{}]: {:X?}", i, a);
+    }
+    println!("");
     ExecuteInfo {
         success: res.success,
         error: res.error.clone(),

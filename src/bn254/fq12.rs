@@ -3,12 +3,13 @@ use crate::bn254::fq::Fq;
 use crate::bn254::fq2::Fq2;
 use crate::bn254::fq6::Fq6;
 use crate::bn254::fr::Fr;
+use crate::signatures::winternitz_generic;
 use crate::treepp::{script, Script};
 use ark_ff::{Field, Fp12Config};
+use bitcoin::opcodes::all::OP_FROMALTSTACK;
 use num_bigint::BigUint;
 use num_traits::{Num, Zero};
 use std::ops::{ShrAssign, Sub};
-
 use super::utils::Hint;
 
 pub struct Fq12;
@@ -791,12 +792,87 @@ impl Fq12 {
             { Fq12::equalverify() }
         }
     }
+    pub fn toaltstack_elements(n:u32) -> Script {        
+        script! {
+            for _ in 0..n {
+                OP_TOALTSTACK
+            }
+        }
+    }
+    pub fn fromaltstack_elements(n:u32) -> Script {
+        script! {
+            for _ in 0..n {
+                OP_FROMALTSTACK
+            }
+        }
+    }
+    const HASH_LENGTH: u32 = 20;
+    pub fn blake3_hash() -> Script {
+        /* 
+        use crate::hash::blake3::blake3 as blake3_with_fixed_length;
+        use crate::hash::blake3::blake3_var_length as blake3_with_variable_length;
+        let hash_length = 32;
+        */
+        use crate::hash::blake3::blake3_160 as blake3_with_fixed_length;
+        use crate::hash::blake3::blake3_160_var_length as blake3_with_variable_length;
+        script! { 
+            for i in (0..4).rev() {
+                { Fq::convert_to_be_bytes_and_keep_it_in_altstack() }
+                { Fq::convert_to_be_bytes() }
+                { Self::fromaltstack_elements(32) }
+                { blake3_with_variable_length(32 * 2) }
+                if i != 0 {
+                  { Self::toaltstack_elements(Self::HASH_LENGTH) }
+                }
+            }
+            { Self::fromaltstack_elements(Self::HASH_LENGTH * 3) }
+            { blake3_with_variable_length((Self::HASH_LENGTH * 4) as usize) }
+            { Self::toaltstack_elements(Self::HASH_LENGTH) }
+            { Fq::convert_to_be_bytes_and_keep_it_in_altstack() }
+            { Fq::convert_to_be_bytes_and_keep_it_in_altstack() }
+            { Fq::convert_to_be_bytes_and_keep_it_in_altstack() }
+            { Fq::convert_to_be_bytes() }
+            { Self::fromaltstack_elements(32 * 3) }
+            { blake3_with_variable_length((32 * 4) as usize) }
+            { Self::fromaltstack_elements(Self::HASH_LENGTH) }
+            blake3_with_fixed_length
+        }
+    }
+
+    pub fn duplicate_by_power_of_two(x:u32) -> Script {
+        script! {
+            for i in 0..x {
+                OP_DUP
+                OP_ADD
+            }
+        }
+    }
+    //{Fq12, signature(hash(Fq12))}
+    pub fn signature_check(public_key : &winternitz_generic::PublicKey) -> Script {
+        script! {
+            { winternitz_generic::checksig_verify(public_key) }
+            { Self::toaltstack_elements(Self::HASH_LENGTH/2) }
+            
+            { Self::blake3_hash() }
+            
+            for i in (0..Self::HASH_LENGTH/2).rev() {
+                {Self::duplicate_by_power_of_two(8)}
+                OP_ADD
+                OP_FROMALTSTACK
+                OP_EQUAL
+                if i != 0 {
+                    OP_VERIFY
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
     use crate::bn254::fq12::Fq12;
     use crate::bn254::utils::{fq12_push, fq12_push_not_montgomery, fq2_push, fq2_push_not_montgomery};
+    use crate::signatures::winternitz_generic;
     use crate::{execute_script_without_stack_limit, treepp::*};
     use ark_ff::AdditiveGroup;
     use ark_ff::{CyclotomicMultSubgroup, Field};
@@ -809,9 +885,65 @@ mod test {
     use std::str::FromStr;
 
     #[test]
+    fn test_signature_check() {
+        const MY_SECKEY: &str = "b138982ce17ac813d505b5b40b665d404e9528e7";
+        let public_key = winternitz_generic::generate_public_key(MY_SECKEY);
+
+        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
+        let a: ark_ff::QuadExtField<ark_ff::Fp12ConfigWrapper<ark_bn254::Fq12Config>> = ark_bn254::Fq12::rand(&mut prng);
+        let mut hash_of_first_randomly_generated_a: [u8; 20 as usize] = [
+            0x2C,  // stack[19]
+            0x0E,  // stack[18]
+            0x76,  // stack[17]
+            0x57,  // stack[16]
+            0x3A,  // stack[15]
+            0x65,  // stack[14]
+            0x13,  // stack[13]
+            0x38,  // stack[12]
+            0xE6,  // stack[11]
+            0xFC,  // stack[10]
+            0x37,  // stack[9]
+            0x20,  // stack[8]
+            0xD0,  // stack[7]
+            0x14,  // stack[6]
+            0xFC,  // stack[5]
+            0x78,  // stack[4]
+            0x51,  // stack[3]
+            0xD7,  // stack[2]
+            0x6D,   // stack[1]
+            0x63   //stack[0]
+        ];
+        hash_of_first_randomly_generated_a.reverse();
+        print!("{:X?}\n", hash_of_first_randomly_generated_a);
+       //same check
+        let script = script! {
+            { fq12_push(a) }
+            { winternitz_generic::sign_digits(MY_SECKEY, hash_of_first_randomly_generated_a) }
+            
+            { Fq12::signature_check(&public_key) }
+             
+        };
+        execute_script(script);
+    }
+    
+    #[test] 
+    fn test_blake3_hash() {
+        //Can't compare with real values cause I don't have a function that generates the real blake3 values independent from the bitcoin script
+        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
+        for _ in 0..1 {
+            let a = ark_bn254::Fq12::rand(&mut prng);
+            let script = script! {
+                { fq12_push(a) }
+                { Fq12::blake3_hash() }
+            };
+            execute_script(script);
+        }
+    }
+
+    #[test]
     fn test_bn254_fq12_add() {
         println!("Fq12.add: {} bytes", Fq12::add(12, 0).len());
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
+        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
 
         for _ in 0..50 {
             let a = ark_bn254::Fq12::rand(&mut prng);
