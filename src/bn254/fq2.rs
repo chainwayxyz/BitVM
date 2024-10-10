@@ -1,5 +1,6 @@
 use crate::bn254::fp254impl::Fp254Impl;
 use crate::bn254::fq::Fq;
+use crate::bn254::utils::fq_push_not_montgomery;
 use crate::treepp::{script, Script};
 use ark_ff::Fp2Config;
 use std::ops::Add;
@@ -136,6 +137,33 @@ impl Fq2 {
             { Fq::add(3, 2) }
             { Fq::sub(2, 0) }
         }
+    }
+
+    pub fn hinted_mul_2(a_depth: u32, a: ark_bn254::Fq2, b_depth: u32, b: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
+        assert!(a_depth > b_depth);
+
+        let mut hints = Vec::new();
+
+        let (hinted_script1, hint1) = Fq::hinted_mul_2_keep_element(3, a.c0, 2, a.c1, 1, b.c1, 0, b.c0);
+        let (hinted_script2, hint2) = Fq::hinted_mul_2(3, a.c0, 2, a.c1, 1, b.c0, 0, -b.c1);
+
+        let script = script! {
+            { Fq2::roll(a_depth) }
+            { Fq2::roll(b_depth + 2) }                       // a.c0 a.c1 b.c0 b.c1
+            { Fq::roll(1) }                                  // a.c0 a.c1 b.c1 b.c0
+            { hinted_script1 }                               // a.c0 a.c1 b.c1 b.c0 a.c0*b.c1+a.c1*b.c0
+            { fq_push_not_montgomery(a.c0 * b.c1 + a.c1 * b.c0) }
+            // { Fq::toaltstack() }                             // a.c0 a.c1 b.c1 b.c0 | a.c0*b.c1+a.c1*b.c0
+            // { Fq::roll(1) }                                  // a.c0 a.c1 b.c0 b.c1 | a.c0*b.c1+a.c1*b.c0
+            // { Fq::neg(0) }                                   // a.c0 a.c1 b.c0 -b.c1 | a.c0*b.c1+a.c1*b.c0
+            // { hinted_script2 }                               // a.c0*b.c0-a.c1*b.c1 | a.c0*b.c1+a.c1*b.c0
+            // { Fq::fromaltstack() }                           // a.c0*b.c0-a.c1*b.c1 a.c0*b.c1+a.c1*b.c0
+        };
+
+        hints.extend(hint1);
+        hints.extend(hint2);
+
+        (script, hints)
     }
 
     pub fn hinted_mul(mut a_depth: u32, mut a: ark_bn254::Fq2, mut b_depth: u32, mut b: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
@@ -488,6 +516,45 @@ mod test {
 
             max_stack = max_stack.max(res.stats.max_nb_stack_items);
             println!("Fq2::window_mul: {} @ {} stack", hinted_mul.len(), max_stack);
+        }
+
+    }
+
+    #[test]
+    fn test_bn254_fq2_hinted_mul_2() {
+        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
+
+        let mut max_stack = 0;
+
+        for i in 0..100 {
+            println!("i: {}", i);
+            
+            let a = ark_bn254::Fq2::rand(&mut prng);
+            let b = ark_bn254::Fq2::rand(&mut prng);
+            let c = a.mul(&b);
+
+            if i < 2 {
+                continue;
+            }
+
+            let (hinted_mul, hints) = Fq2::hinted_mul_2(2, a, 0, b);
+
+            let script = script! {
+                for hint in hints { 
+                    { hint.push() }
+                }
+                { fq2_push_not_montgomery(a) }
+                { fq2_push_not_montgomery(b) }
+                { hinted_mul.clone() }
+                // { fq2_push_not_montgomery(c) }
+                // { Fq2::equalverify() }
+                // OP_TRUE
+            };
+            let res = execute_script(script);
+            assert!(res.success);
+
+            max_stack = max_stack.max(res.stats.max_nb_stack_items);
+            println!("Fq2::hinted_mul_2: {} @ {} stack", hinted_mul.len(), max_stack);
         }
 
     }

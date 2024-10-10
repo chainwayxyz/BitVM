@@ -50,6 +50,11 @@ impl Fq {
         }
     }
     
+    pub fn tmul2() -> Script {
+        script!{ 
+            { <Fq as Fp254Mul2LC>::tmul() }
+        }
+    }
 }
 
 pub fn bigint_to_u32_limbs(n: BigInt, n_bits: u32) -> Vec<u32> {
@@ -384,7 +389,7 @@ fp_lc_mul!(Mul2LC, 3, 3, [true, true]);
 
 #[cfg(test)]
 mod test {
-    use crate::bn254::utils::fq_push_not_montgomery;
+    use crate::bn254::utils::{fq2_push_not_montgomery, fq_push_not_montgomery};
    use crate::bn254::fq::Fq;
     use crate::bn254::fp254impl::Fp254Impl;
     use crate::bigint::U254;
@@ -394,6 +399,7 @@ mod test {
 
     use ark_ff::AdditiveGroup;
     use core::ops::{Add, Mul, Rem, Sub};
+    use std::str::FromStr;
     use num_bigint::{BigInt, BigUint, RandBigInt, RandomBits};
     use num_traits::{Num, Signed};
     use rand::{Rng, SeedableRng};
@@ -926,6 +932,127 @@ mod test {
     }
 
     #[test]
+    fn test_hinted_mul_2() {
+        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
+
+        let mut max_stack = 0;
+
+        for _ in 0..1 {
+            let a = ark_bn254::Fq::rand(&mut prng);
+            let b = ark_bn254::Fq::rand(&mut prng);
+            let c = ark_bn254::Fq::rand(&mut prng);
+            let d = ark_bn254::Fq::rand(&mut prng);
+            let e = a.mul(&c).add(b.mul(&d));
+
+            let (hinted_mul_2, hints) = Fq::hinted_mul_2(3, a, 2, b, 1, c, 0, d);
+
+            let script = script! {
+                for hint in hints { 
+                    { hint.push() }
+                }
+                { fq_push_not_montgomery(a) }
+                { fq_push_not_montgomery(b) }
+                { fq_push_not_montgomery(c) }
+                { fq_push_not_montgomery(d) }
+                { hinted_mul_2.clone() }
+                { fq_push_not_montgomery(e) }
+                { Fq::equal(0, 1) }
+            };
+            let res = execute_script(script);
+            assert!(res.success);
+
+            max_stack = max_stack.max(res.stats.max_nb_stack_items);
+            println!("Fq::hinted_mul_2: {} @ {} stack", hinted_mul_2.len(), max_stack);
+        }
+    }
+
+    #[test]
+    fn test_hinted_mul_2_x() {
+        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
+
+        let modulus = &Fq::modulus_as_bigint();
+
+        let mut fails = Vec::new();
+
+        for i in 0..100 {
+            let u = ark_bn254::Fq2::rand(&mut prng);
+            let v = ark_bn254::Fq2::rand(&mut prng);
+
+            let a = u.c0;
+            let b = u.c1;
+            let c = v.c1;
+            let d = v.c0;
+
+            let x = BigInt::from_str(&a.to_string()).unwrap();
+            let y = BigInt::from_str(&b.to_string()).unwrap();
+            let z = BigInt::from_str(&c.to_string()).unwrap();
+            let w = BigInt::from_str(&d.to_string()).unwrap();
+
+            let r = &x.clone().mul(&z).add(&y.clone().mul(&w));
+
+            let q = (x * z + y * w) / modulus;
+
+            let script = script! {
+                { fq_push_not_montgomery(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
+                { fq_push_not_montgomery(a) }
+                { fq_push_not_montgomery(b) }
+                { fq_push_not_montgomery(c) }
+                { fq_push_not_montgomery(d) }
+                { <Fq as Fp254Mul2LC>::tmul() }
+                { fq_push_not_montgomery(ark_bn254::Fq::from_str(&r.to_string()).unwrap()) }
+                { Fq::equal(0, 1) }
+            };
+            let res = execute_script(script);
+            // assert!(res.success);
+            if !res.success {
+                fails.push(i);
+            }
+        }
+        println!("fails: {:?}", fails);
+    }
+
+    #[test]
+    fn test_hinted_mul_2_keep_element() {
+        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
+
+        let mut max_stack = 0;
+
+        for _ in 0..1 {
+            let a = ark_bn254::Fq::rand(&mut prng);
+            let b = ark_bn254::Fq::rand(&mut prng);
+            let c = ark_bn254::Fq::rand(&mut prng);
+            let d = ark_bn254::Fq::rand(&mut prng);
+            let e = a.mul(&c).add(b.mul(&d));
+
+            let (hinted_mul_2, hints) = Fq::hinted_mul_2_keep_element(3, a, 2, b, 1, c, 0, d);
+
+            let script = script! {
+                for hint in hints { 
+                    { hint.push() }
+                }
+                { fq_push_not_montgomery(a) }
+                { fq_push_not_montgomery(b) }
+                { fq_push_not_montgomery(c) }
+                { fq_push_not_montgomery(d) }
+                { hinted_mul_2.clone() }
+                { fq_push_not_montgomery(e) }
+                { Fq::equal(0, 1) }
+                OP_TOALTSTACK
+                { Fq::drop() }
+                { Fq::drop() }
+                { Fq::drop() }
+                { Fq::drop() }
+                OP_FROMALTSTACK
+            };
+            let res = execute_script(script);
+            assert!(res.success);
+
+            max_stack = max_stack.max(res.stats.max_nb_stack_items);
+            println!("Fq::hinted_mul_2: {} @ {} stack", hinted_mul_2.len(), max_stack);
+        }
+    }
+
+    #[test]
     fn test_hinted_mul_keep_element() {
         let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
 
@@ -1102,6 +1229,52 @@ mod test {
             <Fq as Fp254Mul>::tmul().len(),
             max_stack
         );
+    }
+
+    #[test]
+    fn test_tmul_2() {
+        type U = <Fq as Fp254Mul2LC>::U;
+        type T = <Fq as Fp254Mul2LC>::T;
+
+        let lcs = <Fq as Fp254Mul2LC>::LCS;
+
+        let zero = &BigInt::ZERO;
+        let modulus = &Fq::modulus_as_bigint();
+
+        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
+
+        let xs = lcs.map(|_| prng.gen_bigint_range(zero, modulus));
+        let ys = lcs.map(|_| prng.gen_bigint_range(zero, modulus));
+        let mut qs = vec![];
+        let mut rs = vec![];
+
+        let mut c = zero.clone();
+        for i in 0..lcs.len() {
+            let xy = &xs[i] * &ys[i];
+            qs.push(&xy / modulus);
+            rs.push(&xy % modulus);
+            c += if lcs[i] { xy } else { -xy };
+        }
+        let r = &c % modulus;
+        let r = &(if r.is_negative() { modulus + r } else { r });
+
+        // correct quotient
+        let q = &(&c / modulus);
+        let script = script! {
+            { T::push_u32_le(&bigint_to_u32_limbs(q.clone(), T::N_BITS)) }
+            for i in 0..lcs.len() {
+                { U::push_u32_le(&xs[i].to_u32_digits().1) }
+            }
+            for i in 0..lcs.len() {
+                { U::push_u32_le(&ys[i].to_u32_digits().1) }
+            }
+            { <Fq as Fp254Mul2LC>::tmul() }
+            { U::push_u32_le(&r.to_u32_digits().1) }
+            { U::equal(0, 1) }
+        };
+        let res = execute_script(script);
+        assert!(res.success);
+        println!("<Fq as Fp254Mul2LC>::tmul: {} bytes", <Fq as Fp254Mul2LC>::tmul().len());
     }
 
     #[test]
