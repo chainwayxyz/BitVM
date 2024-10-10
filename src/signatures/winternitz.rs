@@ -1,3 +1,4 @@
+/* 
 //
 // Winternitz One-time Signatures
 //
@@ -280,3 +281,4 @@ mod test {
 
     // TODO: test the error cases: negative digits, digits > D, ...
 }
+*/

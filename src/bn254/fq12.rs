@@ -847,25 +847,50 @@ impl Fq12 {
             }
         }
     }
-    //{Fq12, signature(hash(Fq12))}
-    pub fn signature_check(public_key : &winternitz_generic::PublicKey) -> Script {
+    pub fn signature_check_stack_altstack(is_end: bool) -> Script {
         script! {
-            { winternitz_generic::checksig_verify(public_key) }
-            { Self::toaltstack_elements(Self::HASH_LENGTH/2) }
-            
-            { Self::blake3_hash() }
-            
-            for i in (0..Self::HASH_LENGTH/2).rev() {
-                {Self::duplicate_by_power_of_two(8)}
-                OP_ADD
-                OP_FROMALTSTACK
-                OP_EQUAL
-                if i != 0 {
-                    OP_VERIFY
+            for i in (0..Self::HASH_LENGTH).rev() {
+                if i != 0 || !is_end {
+                    OP_EQUALVERIFY
+                } else {
+                    OP_EQUAL
                 }
             }
         }
     }
+    
+    
+    //{Fq12, signature(hash(Fq12))}
+    pub fn signature_check(ps: &winternitz_generic::Parameters, public_key : &winternitz_generic::Key) -> Script {
+        script! {
+            { winternitz_generic::checksig_verify(ps, public_key) }
+            { Self::toaltstack_elements(Self::HASH_LENGTH) }
+            { Self::blake3_hash() }
+            { Self::signature_check_stack_altstack(true) }
+        }
+    }
+    /* 
+    //{a, b, c, signature(hash(a)), signature(hash(b)), signature(hash(c))}
+    pub fn add_signature_check(public_key : &winternitz_generic::PublicKey) -> Script {
+        script! {
+            { winternitz_generic::checksig_verify(public_key) }
+            { Self::toaltstack_elements(Self::HASH_LENGTH/2) }
+            { winternitz_generic::checksig_verify(public_key) }
+            { Self::toaltstack_elements(Self::HASH_LENGTH/2) }
+            { winternitz_generic::checksig_verify(public_key) }
+            { Self::toaltstack_elements(Self::HASH_LENGTH/2) }
+            //{a, b, c} {hash(c), hash(b), hash(a)}
+            OP_3DUP  //{a, b, c, a, b, c} {hash(c), hash(b), hash(a)}
+            OP_2ROT  //{c, a, b, c, a, b} {hash(c), hash(b), hash(a)}
+            OP_ADD   //{c, a, b, c, a+b} {hash(c), hash(b), hash(a)}
+            OP_EQUALVERIFY  //{c, a, b} {hash(c), hash(b), hash(a)} 
+            OP_SWAP   //{c, b, a} {hash(c), hash(b), hash(a)}
+            { Self::signature_check_stack_altstack(false) }
+            { Self::signature_check_stack_altstack(false) }
+            { Self::signature_check_stack_altstack(true) }
+        }
+    }
+    */
 }
 
 #[cfg(test)]
@@ -884,14 +909,16 @@ mod test {
     use rand_chacha::ChaCha20Rng;
     use std::str::FromStr;
 
+    
     #[test]
     fn test_signature_check() {
         const MY_SECKEY: &str = "b138982ce17ac813d505b5b40b665d404e9528e7";
-        let public_key = winternitz_generic::generate_public_key(MY_SECKEY);
+        let ps = winternitz_generic::Parameters::new(20, 8);
+        let public_key = winternitz_generic::generate_public_key(&ps, MY_SECKEY);
 
         let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
         let a: ark_ff::QuadExtField<ark_ff::Fp12ConfigWrapper<ark_bn254::Fq12Config>> = ark_bn254::Fq12::rand(&mut prng);
-        let mut hash_of_first_randomly_generated_a: [u8; 20 as usize] = [
+        let mut hash_of_first_randomly_generated_a: [u32; 20 as usize] = [
             0x2C,  // stack[19]
             0x0E,  // stack[18]
             0x76,  // stack[17]
@@ -899,7 +926,7 @@ mod test {
             0x3A,  // stack[15]
             0x65,  // stack[14]
             0x13,  // stack[13]
-            0x38,  // stack[12]
+            0x38,  // stack[12]s
             0xE6,  // stack[11]
             0xFC,  // stack[10]
             0x37,  // stack[9]
@@ -917,10 +944,9 @@ mod test {
         print!("{:X?}\n", hash_of_first_randomly_generated_a);
        //same check
         let script = script! {
-            { fq12_push(a) }
-            { winternitz_generic::sign_digits(MY_SECKEY, hash_of_first_randomly_generated_a) }
-            
-            { Fq12::signature_check(&public_key) }
+            { fq12_push(a) }    
+            { winternitz_generic::sign_digits(&ps, MY_SECKEY, hash_of_first_randomly_generated_a.to_vec()) }
+            { Fq12::signature_check(&ps, &public_key) }
              
         };
         execute_script(script);

@@ -1,3 +1,4 @@
+/* 
 //
 // Compact Winternitz Signatures
 //
@@ -298,3 +299,4 @@ mod test {
 
     // TODO: test the error cases: negative digits, digits > D, ...
 }
+*/

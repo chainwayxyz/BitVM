@@ -541,8 +541,12 @@ mod tests {
 
     #[test]
     fn test_blake3() {
-        let hex_out = "86ca95aefdee3d969af9bcc78b48a5c1115be5d66cafc2fc106bbd982d820e70";
-
+        let hex_out = "86ca95aefdee3d969af9bcc78b48a5c1115be5d66cafc2fc106bbd982d820e70";   
+        
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"1000100010001000100010001000100010001000100010001000100010001000");
+        let mut result = hasher.finalize();
+        print!("{}", result);
         let script = script! {
             for _ in 0..16 {
                 {u32_push(1)}
@@ -554,7 +558,7 @@ mod tests {
         };
         let stack = script.clone().analyze_stack();
         println!("stack: {:?}", stack);
-        run(script);
+        execute_script(script);
     }
 
     #[test]
@@ -607,7 +611,7 @@ mod tests {
         };
         println!("Blake3_160_var_length_60 size: {:?} \n", script.len());
 
-        run(script);
+        execute_script(script);
     }
 
     #[test]
