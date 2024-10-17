@@ -1,7 +1,8 @@
+use bitcoin::opcodes::all::{OP_FROMALTSTACK, OP_TOALTSTACK};
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, Num, ToPrimitive};
 
-use crate::bigint::BigIntImpl;
+use crate::bigint::{BigIntImpl, U254};
 use crate::bn254::fp254impl::Fp254Impl;
 use crate::pseudo::NMUL;
 use crate::treepp::*;
@@ -47,6 +48,85 @@ impl Fq {
     pub fn tmul() -> Script {
         script!{ 
             { <Fq as Fp254Mul>::tmul() }
+        }
+    }
+
+    pub fn tmul_by_constant(b: ark_bn254::Fq) -> Script {
+        const WINDOW: u32 = 4;
+        fn window(index: u32, n: &BigInt) -> u32 {
+            let shift_by = WINDOW * ((256 / WINDOW) - index - 1);
+            let bit_mask = BigInt::from_i32((1 << WINDOW) - 1).unwrap() << shift_by;
+            ((n & bit_mask) >> shift_by).to_u32().unwrap()
+        }
+
+        let b_bigint = &BigInt::from_str_radix(&b.to_string(), 10).unwrap();
+        let p = &Fq::modulus_as_bigint();
+        pub type T = BigIntImpl<{254+4+1}, 29>;
+
+        script!{                    //input = q a
+            {U254::toaltstack()}    // q | a
+            {T::push_zero()}
+            {T::sub(0,1)}            // -q | a
+            for i in 2..1<<WINDOW {
+                if i%2==0 {
+                    {T::copy((i/2)-1)} 
+                    {T::double(0)}
+
+                }else {
+                    {T::copy(0)}
+                    {T::copy(i-1)} 
+                    {T::add(0,1)}
+                }
+            }             // -q_table | a
+            {T::fromaltstack()}    // -q_table a 
+            for i in 2..1<<WINDOW {
+                if i%2==0 {
+                    {T::copy((i/2)-1)} 
+                    {T::double(0)}
+
+                }else {
+                    {T::copy(0)}
+                    {T::copy(i-1)} 
+                    {T::add(0,1)}
+                }
+            }             // -q_table a_table
+            {T::push_zero()}
+            for i in 0..254{                // -q_table a_table 0        
+                if i%WINDOW==0{
+                    for _ in 0..WINDOW{
+                        {T::double(0)}
+                    }
+                    if window(i/WINDOW,b_bigint)!=0 {
+                        {T::copy((1<<WINDOW)-window(i/WINDOW,b_bigint))}
+                        {T::add(0,1)}
+                    }
+                    if window(i/WINDOW,p)!=0 {
+                        {T::copy(2*(1<<WINDOW)-1-window(i/WINDOW,p))}
+                        {T::add(0,1)}
+                    }
+                    
+                
+                }                           //-q_table a_table ab-pq
+            }
+            { T::is_positive(2*(1<<WINDOW)-2) }    //-q_table a_table ab-pq {0/1}
+             OP_TOALTSTACK                  
+            { T::toaltstack() }              //-q_table a_table | ab-pq {0/1}                      
+
+            // Cleanup
+            for _ in 0..(2*(1<<WINDOW)-2)  { { T::drop() } } //  -> ab-pq {0/1}                   
+
+            // Correction/validation
+            // r = if q < 0 { r + p } else { r }; assert(r < p)
+            { T::push_u32_le(&Fq::modulus_as_bigint().to_u32_digits().1) } // {MODULUS} -> {r} {0/1}
+            { T::fromaltstack() } OP_FROMALTSTACK // {MODULUS} {r} {0/1}
+            OP_IF { T::add_ref(1) } OP_ENDIF      // {MODULUS} {-r/r}
+            { T::copy(0) }                        // {MODULUS} {-r/r} {-r/r}
+            { T::lessthan(0, 2) } OP_VERIFY       // {-r/r}
+
+            // Resize res back to N_BITS
+            { T::resize::<254>() } // {r}
+            
+
         }
     }
     
@@ -394,12 +474,45 @@ mod test {
 
     use ark_ff::AdditiveGroup;
     use core::ops::{Add, Mul, Rem, Sub};
+    use std::str::FromStr;
     use num_bigint::{BigInt, BigUint, RandBigInt, RandomBits};
     use num_traits::{Num, Signed};
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
     use super::*;
+
+    pub fn bigint_to_u32(a: BigInt) -> Vec<u32> {
+        let mut v = Vec::new();
+        for b in a.iter_u32_digits() {
+            v.push(b);
+        }
+        v
+    }
+
+    #[test]
+    fn test_tmul_by_constant() {
+        pub type T = BigIntImpl<{254+4+1}, 29>;
+        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(0);
+        for _ in 0..100 {
+            let a = ark_bn254::Fq::rand(&mut prng);
+            let b = ark_bn254::Fq::rand(&mut prng);
+            let c = a.mul(&b);
+            let x = BigInt::from_str(&a.to_string()).unwrap();
+            let y = BigInt::from_str(&b.to_string()).unwrap();
+            let modulus = &Fq::modulus_as_bigint();
+            let q = (x * y) / modulus;
+
+            let script = script! {
+                { T::push_u32_le(&bigint_to_u32(q.clone())) }
+                {fq_push_not_montgomery(a) }
+                { Fq::tmul_by_constant(b) }
+                {fq_push_not_montgomery(c)}
+                { Fq::equal(1, 0)}
+                
+            };
+        assert!(execute_script(script).success);
+    }}
 
     #[test]
     fn test_decode_montgomery() {
