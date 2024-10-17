@@ -93,8 +93,8 @@ impl Fq {
             {T::push_zero()}
             for i in 0..254{                // -q_table a_table 0        
                 if i%WINDOW==0{
-                    for _ in 0..WINDOW{
-                        {T::double(0)}
+                    if i!=0 {
+                        {T::lshift_prevent_overflow(WINDOW)}
                     }
                     if window(i/WINDOW,b_bigint)!=0 {
                         {T::copy((1<<WINDOW)-window(i/WINDOW,b_bigint))}
@@ -502,6 +502,7 @@ mod test {
             let y = BigInt::from_str(&b.to_string()).unwrap();
             let modulus = &Fq::modulus_as_bigint();
             let q = (x * y) / modulus;
+            
 
             let script = script! {
                 { T::push_u32_le(&bigint_to_u32(q.clone())) }
@@ -511,8 +512,10 @@ mod test {
                 { Fq::equal(1, 0)}
                 
             };
-        assert!(execute_script(script).success);
-    }}
+            println!("Fq tmul_by_constant {} bytes" , Fq::tmul_by_constant(b).len());
+            assert!(execute_script(script).success);
+        }
+    }
 
     #[test]
     fn test_decode_montgomery() {
