@@ -496,6 +496,13 @@ pub fn blake3_160_hash_equalverify() -> Script {
     }
 }
 
+pub fn blake3_fq12(a: ark_bn254::Fq12) -> Script{
+    
+
+
+
+}
+
 #[cfg(test)]
 mod tests {
     use bitcoin::opcodes::all::OP_PUSHNUM_1;
