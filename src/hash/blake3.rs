@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 use std::collections::HashMap;
 
+use crate::bn254::fq::Fq;
 use crate::pseudo::push_to_stack;
 use crate::treepp::{script, Script};
 use crate::u32::u32_std::{u32_equalverify, u32_roll};
@@ -11,6 +12,7 @@ use crate::u32::{
     u32_xor::{u32_xor, u8_drop_xor_table, u8_push_xor_table},
     // unroll,
 };
+use crate::bn254::fp254impl::Fp254Impl;
 
 //
 // Environment
@@ -496,22 +498,87 @@ pub fn blake3_160_hash_equalverify() -> Script {
     }
 }
 
-pub fn blake3_fq12(a: ark_bn254::Fq12) -> Script {
+pub fn blake3_fq12() -> Script {
     script!{
-
+        for _ in 0..11{
+            {Fq::toaltstack()}
+        }
+        {Fq::convert_to_be_bytes()}
+        for _ in 0..11{
+            {Fq::fromaltstack()}
+            {Fq::convert_to_be_bytes()}
+        }
+        {blake3_var_length(384)}
+        for i in 0..8{
+            {4*i+3}
+            OP_ROLL
+            {4*i+3}
+            OP_ROLL
+            {4*i+3}
+            OP_ROLL
+            {4*i+3}
+            OP_ROLL
+        }
+        
     }
 }
 
+
+
 #[cfg(test)]
 mod tests {
-    use bitcoin::opcodes::all::OP_PUSHNUM_1;
+    use ark_ff::{BigInteger, Field, PrimeField, UniformRand};
+    use bitcoin::opcodes::all::{OP_EQUALVERIFY, OP_PUSHNUM_1};
     use blake3::Hasher;
     use hex::encode;
+    use num_bigint::BigInt;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+    
 
+    use crate::bn254::utils::{fq12_push, fq_push};
     use crate::hash::blake3::*;
     use crate::{execute_script_as_chunks, execute_script_without_stack_limit, run};
 
     use crate::treepp::{execute_script, script};
+
+    #[test]
+    fn test_blake3_fq12() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+        let a = ark_bn254::Fq12::rand(&mut prng);
+        let mut bytes=Vec::new();
+    
+        for p in a.to_base_prime_field_elements(){
+            for c in p.into_bigint().to_bytes_le(){
+                bytes.push(c);
+            }
+        }
+        bytes.reverse();
+    
+        let num_bytes=384;
+        let mut hasher = Hasher::new();
+        hasher.update(&bytes);
+        let hash = hasher.finalize();
+        let hex_out = encode(&hash.as_bytes());
+        
+        let script = script! {
+            {fq12_push(a)}
+            {blake3_fq12()}
+            {push_bytes_hex(&hex_out)}
+            for i in 0..32{
+                {32-i}
+                OP_ROLL
+                OP_EQUALVERIFY
+            }
+            OP_TRUE
+        };
+        
+        let res = execute_script(script);
+        assert!(res.success);
+        println!("stack usage {}  " ,res.stats.max_nb_stack_items);
+        println!("script size {}"  ,blake3_fq12().len());
+    }
+
 
     #[test]
     fn test_permute() {
