@@ -1,3 +1,4 @@
+use crate::chunker::utils::Groth16Data;
 use crate::groth16::verifier::Verifier;
 use crate::{execute_script, execute_script_without_stack_limit};
 use ark_bn254::Bn254;
@@ -86,6 +87,23 @@ fn test_groth16_verifier_native() {
 }
 
 #[test]
+fn test_groth16_verifier_native_custom() {
+    let groth16_data = Groth16Data::new("src/chunker/data-sander/proof.json", "src/chunker/data-sander/public.json", "src/chunker/data-sander/vk.json");
+
+    let start = start_timer!(|| "collect_script");
+    let script = Verifier::verify_proof(&groth16_data.public, &groth16_data.proof, &groth16_data.vk);
+    end_timer!(start);
+
+    println!("groth16::test_verify_proof = {} bytes", script.len());
+
+    let start = start_timer!(|| "execute_script");
+    let exec_result = execute_script_without_stack_limit(script);
+    end_timer!(start);
+
+    assert!(exec_result.success);
+}
+
+#[test]
 fn test_hinted_groth16_verifier() {
     type E = Bn254;
     let k = 6;
@@ -103,6 +121,35 @@ fn test_hinted_groth16_verifier() {
     let proof = Groth16::<E>::prove(&pk, circuit, &mut rng).unwrap();
 
     let (hinted_groth16_verifier, hints) = Verifier::hinted_verify(&vec![c], &proof, &vk);
+
+    println!(
+        "hinted_groth16_verifier: {:?} bytes",
+        hinted_groth16_verifier.len()
+    );
+
+    let start = start_timer!(|| "collect_script");
+    let script = script! {
+        for hint in hints {
+            { hint.push() }
+        }
+        { hinted_groth16_verifier }
+    };
+    end_timer!(start);
+
+    println!("groth16::test_hinted_verify_proof = {} bytes", script.len());
+
+    let start = start_timer!(|| "execute_script");
+    let exec_result = execute_script_without_stack_limit(script);
+    end_timer!(start);
+
+    assert!(exec_result.success);
+}
+
+#[test]
+fn test_hinted_groth16_verifier_custom() {
+    let groth16_data = Groth16Data::new("src/chunker/data/proof.json", "src/chunker/data/public.json", "src/chunker/data/vk.json");
+
+    let (hinted_groth16_verifier, hints) = Verifier::hinted_verify(&groth16_data.public, &groth16_data.proof, &groth16_data.vk);
 
     println!(
         "hinted_groth16_verifier: {:?} bytes",

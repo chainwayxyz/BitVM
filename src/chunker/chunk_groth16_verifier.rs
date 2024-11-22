@@ -117,6 +117,7 @@ fn groth16_verify_to_segments<T: BCAssigner>(
 mod tests {
     use crate::chunker::assigner::*;
     use crate::chunker::chunk_groth16_verifier::groth16_verify_to_segments;
+    use crate::chunker::utils::Groth16Data;
     use crate::chunker::{common::*, elements::ElementTrait};
     use crate::execute_script_with_inputs;
     use crate::treepp::*;
@@ -206,6 +207,61 @@ mod tests {
 
             Ok(())
         }
+    }
+
+    #[test]
+    fn test_hinted_groth16_verifier_chunks_custom() {
+        let groth16_data = Groth16Data::new("src/chunker/data-sander/proof.json", "src/chunker/data-sander/public.json", "src/chunker/data-sander/vk.json");
+        let mut assigner = StatisticAssinger::new();
+        let segments = groth16_verify_to_segments(&mut assigner, &groth16_data.public, &groth16_data.proof, &groth16_data.vk);
+
+        for (i, segment) in tqdm::tqdm(segments.iter().enumerate()) {
+            let witness = segment.witness(&assigner);
+            let script = segment.script(&assigner);
+            let hash = Sha256::hash(script.clone().compile().as_bytes());
+            let size = script.len() + witness.iter().fold(0, |acc, x| acc + x.len());
+            assert!(size < 4_000_000, "[{}] script and witness len must be below 4mb", segment.name);
+            let res = execute_script_with_inputs(script, witness);
+            assert_eq!(res.final_stack.len(), 1, "[{}] there must be a single element at the end", segment.name);
+            assert_eq!(res.final_stack.get(0), Vec::<u8>::new(), "[{}] final element must be zero", segment.name);
+            assert!(res.stats.max_nb_stack_items < 1000, "[{}] the maximum number of stack elements must be below 1000 but it is {}", segment.name, res.stats.max_nb_stack_items);
+            println!("[{}] segment {} has hash {}, max stack size is {}, script size is {}", segment.name, i, hash, res.stats.max_nb_stack_items, size);
+        }
+        println!("number of segments: {}", segments.len());
+        println!("assign commitment size {}", assigner.commitment_count());
+    }
+
+    #[test]
+    fn test_hinted_groth16_verifier_chunks() {
+        let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
+        let a = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
+        let b = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
+        let c = a * b;
+        let circuit = DummyCircuit::<<Bn254 as Pairing>::ScalarField> {
+            a: Some(a),
+            b: Some(b),
+            num_variables: 10,
+            num_constraints: 1 << 6,
+        };
+        let (pk, vk) = Groth16::<Bn254>::setup(circuit, &mut rng).unwrap();
+        let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng).unwrap();
+        let mut assigner = StatisticAssinger::new();
+        let segments = groth16_verify_to_segments(&mut assigner, &vec![c], &proof, &vk);
+
+        for (i, segment) in tqdm::tqdm(segments.iter().enumerate()) {
+            let witness = segment.witness(&assigner);
+            let script = segment.script(&assigner);
+            let hash = Sha256::hash(script.clone().compile().as_bytes());
+            let size = script.len() + witness.iter().fold(0, |acc, x| acc + x.len());
+            assert!(size < 4_000_000, "[{}] script and witness len must be below 4mb", segment.name);
+            let res = execute_script_with_inputs(script, witness);
+            assert_eq!(res.final_stack.len(), 1, "[{}] there must be a single element at the end", segment.name);
+            assert_eq!(res.final_stack.get(0), Vec::<u8>::new(), "[{}] final element must be zero", segment.name);
+            assert!(res.stats.max_nb_stack_items < 1000, "[{}] the maximum number of stack elements must be below 1000 but it is {}", segment.name, res.stats.max_nb_stack_items);
+            println!("[{}] segment {} has hash {}, max stack size is {}, script size is {}", segment.name, i, hash, res.stats.max_nb_stack_items, size);
+        }
+        println!("number of segments: {}", segments.len());
+        println!("assign commitment size {}", assigner.commitment_count());
     }
 
     #[test]
