@@ -88,7 +88,7 @@ fn test_groth16_verifier_native() {
 
 #[test]
 fn test_groth16_verifier_native_custom() {
-    let groth16_data = Groth16Data::new("src/chunker/data-sander/proof.json", "src/chunker/data-sander/public.json", "src/chunker/data-sander/vk.json");
+    let groth16_data = Groth16Data::new("src/chunker/data/proof.json", "src/chunker/data/public.json", "src/chunker/data/vk.json");
 
     let start = start_timer!(|| "collect_script");
     let script = Verifier::verify_proof(&groth16_data.public, &groth16_data.proof, &groth16_data.vk);

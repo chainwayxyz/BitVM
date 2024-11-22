@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_hinted_groth16_verifier_chunks_custom() {
-        let groth16_data = Groth16Data::new("src/chunker/data-sander/proof.json", "src/chunker/data-sander/public.json", "src/chunker/data-sander/vk.json");
+        let groth16_data = Groth16Data::new("src/chunker/data/proof.json", "src/chunker/data/public.json", "src/chunker/data/vk.json");
         let mut assigner = StatisticAssinger::new();
         let segments = groth16_verify_to_segments(&mut assigner, &groth16_data.public, &groth16_data.proof, &groth16_data.vk);
 
