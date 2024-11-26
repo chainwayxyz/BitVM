@@ -85,16 +85,16 @@ pub fn collect_scalar_mul_coeff(
                 i_step
             };
             let tmp = t.clone();
-            let (double_coeff, step_p) = affine_double_line_coeff(&mut t, depth);
+            let (double_coeff, step_p) = if t.is_zero() {((ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO), ark_bn254::G1Affine::zero())} else {affine_double_line_coeff(&mut t, depth)};
             line_coeff.push(double_coeff);
             step_points.push(step_p);
             assert_eq!(tmp + step_p, tmp.mul_bigint([1 << depth]));
             assert_eq!(
-                step_p.y().unwrap() - double_coeff.0 * step_p.x().unwrap() + double_coeff.1,
+                step_p.y - double_coeff.0 * step_p.x + double_coeff.1,
                 ark_bn254::Fq::ZERO
             );
             assert_eq!(
-                tmp.y().unwrap() - double_coeff.0 * tmp.x().unwrap() + double_coeff.1,
+                tmp.y - double_coeff.0 * tmp.x + double_coeff.1,
                 ark_bn254::Fq::ZERO
             );
 
@@ -105,7 +105,8 @@ pub fn collect_scalar_mul_coeff(
             }
             trace.push(acc.into_affine());
 
-            line_coeff.push(affine_add_line_coeff(&mut t, p_mul[*query as usize]));
+            let add_coeffs = if p_mul[*query as usize].is_zero() {(ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO)} else {affine_add_line_coeff(&mut t, p_mul[*query as usize])};
+            line_coeff.push(add_coeffs);
             // FOR DEBUG
             acc += ark_bn254::G1Projective::from(p_mul[*query as usize]);
             trace.push(acc.into_affine());

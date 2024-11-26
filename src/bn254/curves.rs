@@ -1369,6 +1369,33 @@ impl G1Affine {
         }
     }
 
+    pub fn is_zero() -> Script {
+        script! {
+            { Fq::is_zero(0) }
+            OP_TOALTSTACK
+            { Fq::is_zero(0) }
+            OP_FROMALTSTACK
+            OP_BOOLAND
+        }
+    }
+
+    pub fn is_zero_keep_element() -> Script {
+        script! {
+            { Fq::is_zero_keep_element(0) }
+            OP_TOALTSTACK
+            { Fq::is_zero_keep_element(0) }
+            OP_FROMALTSTACK
+            OP_BOOLAND
+        }
+    }
+
+    pub fn drop() -> Script {
+        script! {
+            { Fq::drop() }
+            { Fq::drop() }
+        }
+    }
+
     pub fn push(element: ark_bn254::G1Affine) -> Script {
         script! {
             { Fq::push_u32_le(&BigUint::from(element.x).to_u32_digits()) }
@@ -1472,12 +1499,15 @@ impl G1Affine {
                 let point_after_double = trace_iter.next().unwrap();
                 let double_loop = script! {
                     // check before usage
-                    { G1Affine::push(*step) }
-                    { G1Affine::check_add(double_coeff.0, double_coeff.1) }
-                    // FOR DEBUG
-                    // { G1Affine::push(point_after_double.clone()) }
-                    // { G1Affine::equalverify() }
-                    // { G1Affine::push(point_after_double.clone()) }
+                    { G1Affine::is_zero_keep_element() }
+                    OP_NOTIF
+                        { G1Affine::push(*step) }
+                        { G1Affine::check_add(double_coeff.0, double_coeff.1) }
+                        // FOR DEBUG
+                        // { G1Affine::push(point_after_double.clone()) }
+                        // { G1Affine::equalverify() }
+                        // { G1Affine::push(point_after_double.clone()) }
+                    OP_ENDIF
                 };
                 loop_scripts.push(double_loop.clone());
             }
@@ -1504,7 +1534,12 @@ impl G1Affine {
                 { G1Affine::dfs_with_constant_mul(0, depth - 1, 0, &p_mul) }
                 // check before usage
                 if i > 0 {
-                    { G1Affine::check_add(add_coeff.0, add_coeff.1) }
+                    { G1Affine::is_zero_keep_element() }
+                    OP_IF
+                        { G1Affine::drop() }
+                    OP_ELSE
+                        { G1Affine::check_add(add_coeff.0, add_coeff.1) }
+                    OP_ENDIF
                 }
                 // FOR DEBUG
                 // { G1Affine::push(point_after_add.clone()) }
