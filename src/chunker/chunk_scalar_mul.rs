@@ -66,9 +66,10 @@ pub fn chunk_hinted_scalar_mul_by_constant<T: BCAssigner>(
                     OP_DEPTH OP_1SUB OP_ROLL // hints step.y
                 }
                 // check before usage
-                
                 { G1Affine::is_zero_keep_element() }
-                OP_NOTIF
+                OP_IF
+                    { G1Affine::drop() }
+                OP_ELSE
                     { double_loop_script }
                 OP_ENDIF
             };

@@ -1499,9 +1499,11 @@ impl G1Affine {
                 let point_after_double = trace_iter.next().unwrap();
                 let double_loop = script! {
                     // check before usage
+                    { G1Affine::push(*step) }
                     { G1Affine::is_zero_keep_element() }
-                    OP_NOTIF
-                        { G1Affine::push(*step) }
+                    OP_IF
+                        { G1Affine::drop() }
+                    OP_ELSE
                         { G1Affine::check_add(double_coeff.0, double_coeff.1) }
                         // FOR DEBUG
                         // { G1Affine::push(point_after_double.clone()) }
@@ -1607,9 +1609,11 @@ impl G1Affine {
                 let double_loop = script! {
                     // query bucket point through lookup table
                     // check before usage
-                    { G1Affine::is_zero_keep_element() }
-                    OP_NOTIF
                     { G1Affine::push_not_montgomery(*step) }
+                    { G1Affine::is_zero_keep_element() }
+                    OP_IF
+                        { G1Affine::drop() }
+                    OP_ELSE
                         { double_loop_script }
                     OP_ENDIF
                 };
