@@ -66,7 +66,11 @@ pub fn chunk_hinted_scalar_mul_by_constant<T: BCAssigner>(
                     OP_DEPTH OP_1SUB OP_ROLL // hints step.y
                 }
                 // check before usage
-                { double_loop_script }
+                
+                { G1Affine::is_zero_keep_element() }
+                OP_NOTIF
+                    { double_loop_script }
+                OP_ENDIF
             };
             loop_scripts.push(double_loop.clone());
             hints.push(Hint::Fq(step.x));
@@ -111,7 +115,12 @@ pub fn chunk_hinted_scalar_mul_by_constant<T: BCAssigner>(
             { G1Affine::dfs_with_constant_mul_not_montgomery(0, depth - 1, 0, &p_mul) }
             // check before usage
             if i > 0 {
-                { add_script }
+                { G1Affine::is_zero_keep_element() }
+                OP_IF
+                    { G1Affine::drop() }
+                OP_ELSE
+                    { add_script }
+                OP_ENDIF
             }
         };
         loop_scripts.push(add_loop.clone());
