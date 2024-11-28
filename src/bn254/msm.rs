@@ -16,6 +16,24 @@ pub fn affine_double_line_coeff(
     (affine_add_line_coeff(t, step_p), step_p)
 }
 
+pub fn affine_double_line_coeff2(
+    t: &mut ark_bn254::G1Affine,
+) -> (ark_bn254::Fq, ark_bn254::Fq) {
+    // alpha = 3 * t.x ^ 2 / 2 * t.y ^ 2
+    // bias = t.y - alpha * t.x
+    let alpha = (t.x.square() + t.x.square() + t.x.square()) / (t.y + t.y);
+    let bias = t.y - alpha * t.x;
+
+    // update T
+    // T.x = alpha^2 - 2 * t.x
+    // T.y = -bias - alpha * T.x
+    let tx = alpha.square() - t.x - t.x;
+    t.y = -bias - alpha * tx;
+    t.x = tx;
+
+    (alpha, -bias)
+}
+
 pub fn affine_add_line_coeff(
     t: &mut ark_bn254::G1Affine,
     p: ark_bn254::G1Affine,
@@ -84,28 +102,114 @@ pub fn collect_scalar_mul_coeff(
             } else {
                 i_step
             };
-            let tmp = t.clone();
-            let (double_coeff, step_p) = if t.is_zero() {((ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO), ark_bn254::G1Affine::zero())} else {affine_double_line_coeff(&mut t, depth)};
-            line_coeff.push(double_coeff);
-            step_points.push(step_p);
-            assert_eq!(tmp + step_p, tmp.mul_bigint([1 << depth]));
-            assert_eq!(
-                step_p.y - double_coeff.0 * step_p.x + double_coeff.1,
-                ark_bn254::Fq::ZERO
-            );
-            assert_eq!(
-                tmp.y - double_coeff.0 * tmp.x + double_coeff.1,
-                ark_bn254::Fq::ZERO
-            );
-
-            // FOR DEBUG
-            s <<= depth;
+            println!("start chunk");
+            println!("");
             for _ in 0..depth {
+                let tmp = t.clone();
+                println!("before");
+                println!("tmp.x: {:?}", tmp.x);
+                println!("tmp.y: {:?}", tmp.y);
+                println!("tmp.x(): {:?}", tmp.x());
+                println!("tmp.y(): {:?}", tmp.y());
+                println!("tmp.iszero: {:?}", tmp.is_zero());
+                println!("tmp.infinity: {:?}", tmp.infinity);
+                println!("tmp.oncurve: {:?}", tmp.is_on_curve());
+                println!("t.x: {:?}", t.x);
+                println!("t.y: {:?}", t.y);
+                println!("t.x(): {:?}", t.x());
+                println!("t.y(): {:?}", t.y());
+                println!("t.iszero: {:?}", t.is_zero());
+                println!("t.infinity: {:?}", t.infinity);
+                println!("t.oncurve: {:?}", t.is_on_curve());
+                println!("");
+                let double_coeff = if t.is_zero() {(ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO)} else {affine_double_line_coeff2(&mut t)};
+                println!("after");
+                println!("tmp.x: {:?}", tmp.x);
+                println!("tmp.y: {:?}", tmp.y);
+                println!("tmp.x(): {:?}", tmp.x());
+                println!("tmp.y(): {:?}", tmp.y());
+                println!("tmp.iszero: {:?}", tmp.is_zero());
+                println!("tmp.infinity: {:?}", tmp.infinity);
+                println!("tmp.oncurve: {:?}", tmp.is_on_curve());
+                println!("t.x: {:?}", t.x);
+                println!("t.y: {:?}", t.y);
+                println!("t.x(): {:?}", t.x());
+                println!("t.y(): {:?}", t.y());
+                println!("t.iszero: {:?}", t.is_zero());
+                println!("t.infinity: {:?}", t.infinity);
+                println!("t.oncurve: {:?}", t.is_on_curve());
+                println!("");
+                line_coeff.push(double_coeff);
+                step_points.push(tmp.clone());
+                assert_eq!(
+                    tmp.y().unwrap_or(ark_bn254::Fq::ZERO) - double_coeff.0 * tmp.x().unwrap_or(ark_bn254::Fq::ZERO) + double_coeff.1,
+                    ark_bn254::Fq::ZERO
+                );
                 acc.double_in_place();
+                trace.push(acc.into_affine());
+                s <<= 1;
             }
-            trace.push(acc.into_affine());
+            
+            // println!("before");
+            // println!("tmp.x: {:?}", tmp.x);
+            // println!("tmp.y: {:?}", tmp.y);
+            // println!("tmp.x(): {:?}", tmp.x());
+            // println!("tmp.y(): {:?}", tmp.y());
+            // println!("tmp.iszero: {:?}", tmp.is_zero());
+            // println!("tmp.infinity: {:?}", tmp.infinity);
+            // println!("tmp.oncurve: {:?}", tmp.is_on_curve());
+            // println!("t.x: {:?}", t.x);
+            // println!("t.y: {:?}", t.y);
+            // println!("t.x(): {:?}", t.x());
+            // println!("t.y(): {:?}", t.y());
+            // println!("t.iszero: {:?}", t.is_zero());
+            // println!("t.infinity: {:?}", t.infinity);
+            // println!("t.oncurve: {:?}", t.is_on_curve());
+            // println!("");
+            // let (double_coeff, step_p) = if t.is_zero() {((ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO), ark_bn254::G1Affine::zero())} else {affine_double_line_coeff(&mut t, depth)};
+            // println!("after");
+            // println!("tmp.x: {:?}", tmp.x);
+            // println!("tmp.y: {:?}", tmp.y);
+            // println!("tmp.x(): {:?}", tmp.x());
+            // println!("tmp.y(): {:?}", tmp.y());
+            // println!("tmp.iszero: {:?}", tmp.is_zero());
+            // println!("tmp.infinity: {:?}", tmp.infinity);
+            // println!("tmp.oncurve: {:?}", tmp.is_on_curve());
+            // println!("t.x: {:?}", t.x);
+            // println!("t.y: {:?}", t.y);
+            // println!("t.x(): {:?}", t.x());
+            // println!("t.y(): {:?}", t.y());
+            // println!("t.iszero: {:?}", t.is_zero());
+            // println!("t.infinity: {:?}", t.infinity);
+            // println!("t.oncurve: {:?}", t.is_on_curve());
+            // println!("");
+            // line_coeff.push(double_coeff);
+            // step_points.push(step_p);
+            // assert_eq!(tmp + step_p, tmp.mul_bigint([1 << depth]));
+            // assert_eq!(
+            //     step_p.y().unwrap_or(ark_bn254::Fq::ZERO) - double_coeff.0 * step_p.x().unwrap_or(ark_bn254::Fq::ZERO) + double_coeff.1,
+            //     ark_bn254::Fq::ZERO
+            // );
+            // assert_eq!(
+            //     tmp.y().unwrap_or(ark_bn254::Fq::ZERO) - double_coeff.0 * tmp.x().unwrap_or(ark_bn254::Fq::ZERO) + double_coeff.1,
+            //     ark_bn254::Fq::ZERO
+            // );
 
-            let add_coeffs = if p_mul[*query as usize].is_zero() {(ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO)} else {affine_add_line_coeff(&mut t, p_mul[*query as usize])};
+            // // FOR DEBUG
+            // s <<= depth;
+            // for _ in 0..depth {
+            //     acc.double_in_place();
+            // }
+            // trace.push(acc.into_affine());
+
+            let add_coeffs = if p_mul[*query as usize].is_zero() {
+                (ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO)
+            } else if t.is_zero() {
+                t = p_mul[*query as usize];
+                (ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO)
+            } else {
+                affine_add_line_coeff(&mut t, p_mul[*query as usize])
+            };
             line_coeff.push(add_coeffs);
             // FOR DEBUG
             acc += ark_bn254::G1Projective::from(p_mul[*query as usize]);

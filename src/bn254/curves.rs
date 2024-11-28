@@ -8,6 +8,7 @@ use crate::bn254::fq::Fq;
 use crate::bn254::fq2::Fq2;
 use crate::bn254::fr::Fr;
 use crate::bn254::utils::{fq2_push_not_montgomery, fq_push};
+use crate::chunker::utils::g1a_push;
 use crate::treepp::{script, Script};
 use std::cmp::min;
 use std::sync::OnceLock;
@@ -1362,6 +1363,38 @@ impl G1Affine {
         (script, hints)
     }
 
+    /// check whether a tuple coefficient (alpha, -bias) of a tangent line is satisfied with expected point T (affine)
+    /// two aspects:
+    ///     1. alpha * (2 * T.y) = 3 * T.x^2, make sure the alpha is the right ONE
+    ///     2. T.y - alpha * T.x - bias = 0, make sure the -bias is the right ONE
+    ///
+    /// input on stack:
+    ///     T.x (1 element)
+    ///     T.y (1 element)
+    ///
+    /// input of parameters:
+    ///     c3: alpha
+    ///     c4: -bias
+    ///
+    /// output:
+    ///     true or false (consumed on stack)
+    pub fn check_tangent_line(c3: ark_bn254::Fq, c4: ark_bn254::Fq) -> Script {
+        script! {                             // x, y
+            { Fq::copy(0) }                   // x, y, y
+            { Fq::double(0) }                 // x, y, 2y
+            { Fq::mul_by_constant(&c3) }      // x, y, alpha * (2 * y)
+            { Fq::copy(2) }                   // x, y, alpha * (2 * y), x
+            { Fq::square() }                  // x, y, alpha * (2 * y), x^2
+            { Fq::copy(0) }                   // x, y, alpha * (2 * y), x^2, x^2
+            { Fq::double(0) }                 // x, y, alpha * (2 * y), x^2, 2x^2
+            { Fq::add(1, 0) }                 // x, y, alpha * (2 * y), 3 * x^2
+            { Fq::neg(0) }                    // x, y, alpha * (2 * y), -3 * x^2
+            { Fq::add(1, 0) }                 // x, y, alpha * (2 * y) - 3 * x^2
+            { Fq::is_zero(0) } OP_VERIFY      // x, y
+            { G1Affine::check_line_through_point(c3, c4) }
+        }
+    }
+
     pub fn push_zero() -> Script {
         script! {
             { Fq::push_zero() }
@@ -1393,6 +1426,14 @@ impl G1Affine {
         script! {
             { Fq::drop() }
             { Fq::drop() }
+        }
+    }
+
+    pub fn roll(mut a: u32) -> Script {
+        a *= 2;
+        script! {
+            { Fq::roll(a + 1) }
+            { Fq::roll(a + 1) }
         }
     }
 
@@ -1494,24 +1535,35 @@ impl G1Affine {
 
             // double(step-size) point
             if i > 0 {
-                let double_coeff = coeff_iter.next().unwrap();
-                let step = step_p_iter.next().unwrap();
-                let point_after_double = trace_iter.next().unwrap();
-                let double_loop = script! {
-                    // check before usage
-                    { G1Affine::push(*step) }
-                    { G1Affine::is_zero_keep_element() }
-                    OP_IF
-                        { G1Affine::drop() }
-                    OP_ELSE
-                        { G1Affine::check_add(double_coeff.0, double_coeff.1) }
-                        // FOR DEBUG
-                        // { G1Affine::push(point_after_double.clone()) }
-                        // { G1Affine::equalverify() }
-                        // { G1Affine::push(point_after_double.clone()) }
-                    OP_ENDIF
-                };
-                loop_scripts.push(double_loop.clone());
+                // let mut double_coeffs = Vec::new();
+                // let mut steps = Vec::new();
+                // let mut point_after_doubles = Vec::new();
+                // for _ in 0..depth {
+                //     double_coeffs.push(coeff_iter.next().unwrap());
+                //     steps.push(step_p_iter.next().unwrap());
+                //     point_after_doubles.push(trace_iter.next().unwrap());
+                // }
+                for _ in 0..depth {
+                    let double_coeff = coeff_iter.next().unwrap();
+                    let step = step_p_iter.next().unwrap();
+                    let point_after_double = trace_iter.next().unwrap();
+                    let double_loop = script! {
+                        // check before usage
+                        { G1Affine::is_zero_keep_element() }
+                        OP_IF
+                            // { G1Affine::drop() }
+                        OP_ELSE
+                            { G1Affine::check_double(double_coeff.0, double_coeff.1) }
+                            // { G1Affine::push(point_after_double.clone()) }
+                            // { i } 31 31 0 OP_VERIFY
+                            // FOR DEBUG
+                            // { G1Affine::push(point_after_double.clone()) }
+                            // { G1Affine::equalverify() }
+                            // { G1Affine::push(point_after_double.clone()) }
+                        OP_ENDIF
+                    };
+                    loop_scripts.push(double_loop.clone());
+                }
             }
             // if i == i_step * 2 {
             //     break;
@@ -1540,7 +1592,21 @@ impl G1Affine {
                     OP_IF
                         { G1Affine::drop() }
                     OP_ELSE
-                        { G1Affine::check_add(add_coeff.0, add_coeff.1) }
+                        { G1Affine::roll(1) }
+                        { G1Affine::is_zero_keep_element() }
+                        // { G1Affine::push(p.mul_bigint([8]).into_affine()) }
+                        // { G1Affine::push(p_mul[8]) }
+                        // { G1Affine::push(point_after_add.clone()) }
+                        // { i } 31 31 31 31 31 0 OP_VERIFY
+                        OP_IF
+                            { G1Affine::drop() }
+                        OP_ELSE
+                            { G1Affine::check_add(add_coeff.0, add_coeff.1) }
+                        OP_ENDIF
+                        // { i } 31 31 31 31 31 0 OP_VERIFY
+                        // { G1Affine::check_add(add_coeff.0, add_coeff.1) }
+                        // { G1Affine::push_not_montgomery(point_after_add.clone()) }
+                        // { i } 31 31 31 0 OP_VERIFY
                     OP_ENDIF
                 }
                 // FOR DEBUG
@@ -1866,6 +1932,15 @@ impl G1Affine {
             { fq_push(c4) }
             { Fq::add(1, 0) }
             // [x', y']
+        }
+    }
+
+    pub fn check_double(c3: ark_bn254::Fq, c4: ark_bn254::Fq) -> Script {
+        script! {
+            { Fq::copy(1) }
+            { Fq::roll(1) }
+            { G1Affine::check_tangent_line(c3, c4) }
+            { G1Affine::double(c3, c4) }
         }
     }
 
