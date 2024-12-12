@@ -23,6 +23,7 @@ pub mod chunker;
 pub mod fflonk;
 pub mod groth16;
 pub mod hash;
+pub mod header_chain;
 pub mod pseudo;
 pub mod signatures;
 pub mod u32;
