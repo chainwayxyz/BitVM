@@ -3,29 +3,6 @@ use crate::treepp::{script, Script};
 use std::cmp::min;
 
 impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
-    pub fn convert_to_be_bits() -> Script {
-        script! {
-            for i in 0..Self::N_LIMBS - 1 {
-                { limb_to_be_bits(LIMB_SIZE) }
-                { LIMB_SIZE * (i + 1) } OP_ROLL
-            }
-            { limb_to_be_bits(N_BITS - LIMB_SIZE * (Self::N_LIMBS - 1)) }
-        }
-    }
-
-    pub fn convert_to_le_bits() -> Script {
-        script! {
-            for _ in 0..Self::N_LIMBS - 1 {
-                OP_TOALTSTACK
-            }
-            { limb_to_le_bits(N_BITS - LIMB_SIZE * (Self::N_LIMBS - 1)) }
-            for _ in 0..Self::N_LIMBS - 1 {
-                OP_FROMALTSTACK
-                { limb_to_le_bits(LIMB_SIZE) }
-            }
-        }
-    }
-
     pub fn convert_to_be_bits_toaltstack() -> Script {
         script! {
             { Self::N_LIMBS - 1 } OP_ROLL
@@ -390,107 +367,6 @@ mod test {
             0 { limb_to_le_bits(0) } 0 OP_EQUAL
         };
         run(script);
-    }
-
-    #[test]
-    fn test_ubigint_to_be_bits() {
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        for _ in 0..10 {
-            let a: BigUint = prng.sample(RandomBits::new(U254::N_BITS as u64));
-
-            let mut bits = vec![];
-            let mut cur = a.clone();
-            for _ in 0..U254::N_BITS {
-                bits.push(if cur.bit(0) { 1 } else { 0 });
-                cur.shr_assign(1);
-            }
-
-            let script = script! {
-                { U254::push_u32_le(&a.to_u32_digits()) }
-                { U254::convert_to_be_bits() }
-                for i in 0..U254::N_BITS {
-                    { bits[(U254::N_BITS - 1 - i) as usize] }
-                    OP_EQUALVERIFY
-                }
-                OP_TRUE
-            };
-            run(script);
-        }
-
-        for _ in 0..10 {
-            let a: BigUint = prng.sample(RandomBits::new(U64::N_BITS as u64));
-
-            let mut bits = vec![];
-            let mut cur = a.clone();
-            for _ in 0..U64::N_BITS {
-                bits.push(if cur.bit(0) { 1 } else { 0 });
-                cur.shr_assign(1);
-            }
-
-            let script = script! {
-                { U64::push_u32_le(&a.to_u32_digits()) }
-                { U64::convert_to_be_bits() }
-                for i in 0..U64::N_BITS {
-                    { bits[(U64::N_BITS - 1 - i) as usize] }
-                    OP_EQUALVERIFY
-                }
-                OP_TRUE
-            };
-
-            run(script);
-        }
-    }
-
-    #[test]
-    fn test_ubigint_to_le_bits() {
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        for _ in 0..10 {
-            let a: BigUint = prng.sample(RandomBits::new(U254::N_BITS as u64));
-
-            let mut bits = vec![];
-            let mut cur = a.clone();
-            for _ in 0..U254::N_BITS {
-                bits.push(if cur.bit(0) { 1 } else { 0 });
-                cur.shr_assign(1);
-            }
-
-            let script = script! {
-                { U254::push_u32_le(&a.to_u32_digits()) }
-                { U254::convert_to_le_bits() }
-                for i in 0..U254::N_BITS {
-                    { bits[i as usize] }
-                    OP_EQUALVERIFY
-                }
-                OP_TRUE
-            };
-
-            run(script);
-        }
-
-        for _ in 0..10 {
-            let a: BigUint = prng.sample(RandomBits::new(U64::N_BITS as u64));
-
-            let mut bits = vec![];
-            let mut cur = a.clone();
-            for _ in 0..U64::N_BITS {
-                bits.push(if cur.bit(0) { 1 } else { 0 });
-                cur.shr_assign(1);
-            }
-
-            let script = script! {
-                { U64::push_u32_le(&a.to_u32_digits()) }
-                { U64::convert_to_le_bits() }
-                for i in 0..U64::N_BITS {
-                    { bits[i as usize] }
-                    OP_EQUALVERIFY
-                }
-                OP_TRUE
-            };
-
-            run(script);
-        }
     }
 
     #[test]
