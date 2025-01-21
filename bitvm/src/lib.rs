@@ -2,6 +2,7 @@
 // Re-export what is needed to write treepp scripts
 pub mod treepp {
     pub use crate::execute_script;
+    pub use crate::execute_script_without_stack_limit;
     pub use crate::run;
     pub use bitcoin_script::{script, Script};
 }

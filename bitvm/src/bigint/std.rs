@@ -233,34 +233,6 @@ impl<const N_BITS: u32, const LIMB_SIZE: u32> BigIntImpl<N_BITS, LIMB_SIZE> {
         }
     }
 
-    pub fn is_one_keep_element(a: u32) -> Script {
-        let a = Self::N_LIMBS * a;
-        script! {
-            1
-            { a + 1 } OP_PICK
-            1 OP_EQUAL OP_BOOLAND
-            for i in 1..Self::N_LIMBS {
-                { a + i + 1 } OP_PICK
-                OP_NOT
-                OP_BOOLAND
-            }
-        }
-    }
-
-    pub fn is_one(a: u32) -> Script {
-        let a = Self::N_LIMBS * a;
-        script! {
-            1
-            { a + 1 } OP_ROLL
-            1 OP_EQUAL OP_BOOLAND
-            for _ in 1..Self::N_LIMBS {
-                { a + 1 } OP_ROLL
-                OP_NOT
-                OP_BOOLAND
-            }
-        }
-    }
-
     pub fn toaltstack() -> Script {
         script! {
             for _ in 0..Self::N_LIMBS {

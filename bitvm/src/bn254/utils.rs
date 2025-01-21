@@ -3,7 +3,6 @@ use crate::bn254::fq::bigint_to_u32_limbs;
 use crate::bn254::fq::Fq;
 use crate::bn254::fr::Fr;
 use crate::treepp::*;
-use ark_ff::BigInt;
 
 #[derive(Debug, Clone)]
 pub enum Hint {
@@ -38,21 +37,4 @@ impl Hint {
             },
         }
     }
-}
-
-pub fn fq_to_bits(fq: BigInt<4>, limb_size: usize) -> Vec<u32> {
-    let mut bits: Vec<bool> = ark_ff::BitIteratorBE::new(fq.as_ref()).skip(2).collect();
-    bits.reverse();
-
-    bits.chunks(limb_size)
-        .map(|chunk| {
-            let mut factor = 1;
-            let res = chunk.iter().fold(0, |acc, &x| {
-                let r = acc + if x { factor } else { 0 };
-                factor *= 2;
-                r
-            });
-            res
-        })
-        .collect()
 }

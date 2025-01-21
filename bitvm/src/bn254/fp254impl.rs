@@ -45,8 +45,49 @@ pub trait Fp254Impl {
     }
 
     #[inline]
+    fn toaltstack() -> Script {
+        U254::toaltstack()
+    }
+
+    #[inline]
+    fn fromaltstack() -> Script {
+        U254::fromaltstack()
+    }
+
+    #[inline]
     fn zip(a: u32, b: u32) -> Script {
         U254::zip(a, b)
+    }
+
+    #[inline]
+    fn push_modulus() -> Script {
+        U254::push_hex(Self::MODULUS)
+    }
+
+    #[inline]
+    fn push_zero() -> Script {
+        U254::push_zero()
+    }
+
+    #[inline]
+    fn push_one() -> Script {
+        U254::push_one()
+    }
+
+    #[inline]
+    fn push_dec(dec_string: &str) -> Script {
+        let v = BigUint::from_str_radix(dec_string, 10).unwrap();
+        script! {
+            { U254::push_u32_le(&v.to_u32_digits()) }
+        }
+    }
+
+    #[inline]
+    fn push_hex(hex_string: &str) -> Script {
+        let v = BigUint::from_str_radix(hex_string, 16).unwrap();
+        script! {
+            { U254::push_u32_le(&v.to_u32_digits()) }
+        }
     }
 
     #[inline]
@@ -71,55 +112,33 @@ pub trait Fp254Impl {
         U254::equalverify(a, b)
     }
 
-    #[inline]
-    fn push_dec(dec_string: &str) -> Script {
-        let v = BigUint::from_str_radix(dec_string, 10).unwrap();
+    fn is_zero(a: u32) -> Script {
+        U254::is_zero(a)
+    }
+
+    fn is_zero_keep_element(a: u32) -> Script {
+        U254::is_zero_keep_element(a)
+    }
+
+    fn is_field() -> Script {
         script! {
-            { U254::push_u32_le(&v.to_u32_digits()) }
+            // Each limb must not be negative
+            for i in 0..Self::N_LIMBS - 1 {
+                { i } OP_PICK
+                0 OP_GREATERTHANOREQUAL OP_TOALTSTACK
+            }
+            { Self::N_LIMBS - 1 } OP_PICK
+            0 OP_GREATERTHANOREQUAL
+            for _ in 0..Self::N_LIMBS - 1 {
+                OP_FROMALTSTACK OP_BOOLAND
+            }
+            OP_TOALTSTACK
+
+            { Self::push_modulus() }
+            { U254::lessthan(1, 0) }
+
+            OP_FROMALTSTACK OP_BOOLAND
         }
-    }
-
-    #[inline]
-    fn push_hex(hex_string: &str) -> Script {
-        let v = BigUint::from_str_radix(hex_string, 16).unwrap();
-        script! {
-            { U254::push_u32_le(&v.to_u32_digits()) }
-        }
-    }
-
-    #[inline]
-    fn convert_to_be_bits() -> Script {
-        U254::convert_to_be_bits()
-    }
-
-    #[inline]
-    fn convert_to_be_bits_toaltstack() -> Script {
-        U254::convert_to_be_bits_toaltstack()
-    }
-
-    #[inline]
-    fn convert_to_le_bits() -> Script {
-        U254::convert_to_le_bits()
-    }
-
-    #[inline]
-    fn convert_to_le_bits_toaltstack() -> Script {
-        U254::convert_to_le_bits_toaltstack()
-    }
-
-    #[inline]
-    fn push_modulus() -> Script {
-        U254::push_hex(Self::MODULUS)
-    }
-
-    #[inline]
-    fn push_zero() -> Script {
-        U254::push_zero()
-    }
-
-    #[inline]
-    fn push_one() -> Script {
-        U254::push_one()
     }
 
     // A + B mod M
@@ -231,61 +250,6 @@ pub trait Fp254Impl {
         script! {
             { Self::zip(a, b) }
             { add_script.clone() }
-        }
-    }
-
-    fn neg(a: u32) -> Script {
-        script! {
-            // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ A₁ A₀ ⋯
-            { Self::roll(a) }
-            { Self::is_zero_keep_element(0) }
-            OP_NOTIF
-                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ A₁ A₀
-                { Self::MODULUS_LIMBS[0] } OP_SWAP { 0x20000000 }
-                limb_sub_borrow OP_TOALTSTACK
-                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ A₁ 2²⁹ C₀⁻ | M₀-A₀ ⋯
-                OP_ROT OP_ADD
-                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ 2²⁹ C₀⁻+A₁
-                { Self::MODULUS_LIMBS[1] } OP_SWAP OP_ROT
-                limb_sub_borrow OP_TOALTSTACK
-                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ 2²⁹ C₁⁻ | M₁-(C₀⁻+A₁) ⋯
-                OP_ROT OP_ADD
-                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ 2²⁹ C₁⁻+A₂
-                { Self::MODULUS_LIMBS[2] } OP_SWAP OP_ROT
-                limb_sub_borrow OP_TOALTSTACK
-                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ 2²⁹ C₂⁻ | M₂-(C₁⁻+A₂) ⋯
-                OP_ROT OP_ADD
-                // ⋯ A₈ A₇ A₆ A₅ A₄ 2²⁹ C₂⁻+A₃
-                { Self::MODULUS_LIMBS[3] } OP_SWAP OP_ROT
-                limb_sub_borrow OP_TOALTSTACK
-                // ⋯ A₈ A₇ A₆ A₅ A₄ 2²⁹ C₃⁻ | M₃-(C₂⁻+A₃) ⋯
-                OP_ROT OP_ADD
-                // ⋯ A₈ A₇ A₆ A₅ 2²⁹ C₃⁻+A₄
-                { Self::MODULUS_LIMBS[4] } OP_SWAP OP_ROT
-                limb_sub_borrow OP_TOALTSTACK
-                // ⋯ A₈ A₇ A₆ A₅ 2²⁹ C₄⁻ | M₄-(C₃⁻+A₄) ⋯
-                OP_ROT OP_ADD
-                // ⋯ A₈ A₇ A₆ 2²⁹ C₄⁻+A₅
-                { Self::MODULUS_LIMBS[5] } OP_SWAP OP_ROT
-                limb_sub_borrow OP_TOALTSTACK
-                // ⋯ A₈ A₇ A₆ 2²⁹ C₅⁻ | M₅-(C₄⁻+A₅) ⋯
-                OP_ROT OP_ADD
-                // ⋯ A₈ A₇ 2²⁹ C₅⁻+A₆
-                { Self::MODULUS_LIMBS[6] } OP_SWAP OP_ROT
-                limb_sub_borrow OP_TOALTSTACK
-                // ⋯ A₈ A₇ 2²⁹ C₆⁻ | M₆-(C₅⁻+A₆) ⋯
-                OP_ROT OP_ADD
-                // ⋯ A₈ 2²⁹ C₆⁻+A₇
-                { Self::MODULUS_LIMBS[7] } OP_SWAP OP_ROT
-                limb_sub_borrow OP_TOALTSTACK
-                // ⋯ A₈ 2²⁹ C₇⁻ | M₇-(C₆⁻+A₇) ⋯
-                OP_NIP OP_ADD
-                // ⋯ C₇⁻+A₈
-                { Self::MODULUS_LIMBS[8] } OP_SWAP OP_SUB
-                // ⋯ M₈-(C₇⁻+A₈)
-                OP_FROMALTSTACK OP_FROMALTSTACK OP_FROMALTSTACK OP_FROMALTSTACK
-                OP_FROMALTSTACK OP_FROMALTSTACK OP_FROMALTSTACK OP_FROMALTSTACK
-            OP_ENDIF
         }
     }
 
@@ -499,6 +463,91 @@ pub trait Fp254Impl {
         }
     }
 
+    fn div2() -> Script {
+        script! {
+            { U254::div2rem() }
+            OP_IF
+                { U254::push_hex(Self::P_PLUS_ONE_DIV2) }
+                { Self::add(1, 0) }
+            OP_ENDIF
+        }
+    }
+
+    fn div3() -> Script {
+        script! {
+            { U254::div3rem() }
+            OP_DUP
+            0 OP_GREATERTHAN
+            OP_IF
+                OP_1SUB
+                OP_IF
+                    { U254::push_hex(Self::P_PLUS_TWO_DIV3) }
+                    { Self::add(1, 0) }
+                OP_ELSE
+                    { U254::push_hex(Self::TWO_P_PLUS_ONE_DIV3) }
+                    { Self::add(1, 0) }
+                OP_ENDIF
+            OP_ELSE
+                OP_DROP
+            OP_ENDIF
+        }
+    }
+
+    fn neg(a: u32) -> Script {
+        script! {
+            // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ A₁ A₀ ⋯
+            { Self::roll(a) }
+            { Self::is_zero_keep_element(0) }
+            OP_NOTIF
+                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ A₁ A₀
+                { Self::MODULUS_LIMBS[0] } OP_SWAP { 0x20000000 }
+                limb_sub_borrow OP_TOALTSTACK
+                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ A₁ 2²⁹ C₀⁻ | M₀-A₀ ⋯
+                OP_ROT OP_ADD
+                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ 2²⁹ C₀⁻+A₁
+                { Self::MODULUS_LIMBS[1] } OP_SWAP OP_ROT
+                limb_sub_borrow OP_TOALTSTACK
+                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ A₂ 2²⁹ C₁⁻ | M₁-(C₀⁻+A₁) ⋯
+                OP_ROT OP_ADD
+                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ 2²⁹ C₁⁻+A₂
+                { Self::MODULUS_LIMBS[2] } OP_SWAP OP_ROT
+                limb_sub_borrow OP_TOALTSTACK
+                // ⋯ A₈ A₇ A₆ A₅ A₄ A₃ 2²⁹ C₂⁻ | M₂-(C₁⁻+A₂) ⋯
+                OP_ROT OP_ADD
+                // ⋯ A₈ A₇ A₆ A₅ A₄ 2²⁹ C₂⁻+A₃
+                { Self::MODULUS_LIMBS[3] } OP_SWAP OP_ROT
+                limb_sub_borrow OP_TOALTSTACK
+                // ⋯ A₈ A₇ A₆ A₅ A₄ 2²⁹ C₃⁻ | M₃-(C₂⁻+A₃) ⋯
+                OP_ROT OP_ADD
+                // ⋯ A₈ A₇ A₆ A₅ 2²⁹ C₃⁻+A₄
+                { Self::MODULUS_LIMBS[4] } OP_SWAP OP_ROT
+                limb_sub_borrow OP_TOALTSTACK
+                // ⋯ A₈ A₇ A₆ A₅ 2²⁹ C₄⁻ | M₄-(C₃⁻+A₄) ⋯
+                OP_ROT OP_ADD
+                // ⋯ A₈ A₇ A₆ 2²⁹ C₄⁻+A₅
+                { Self::MODULUS_LIMBS[5] } OP_SWAP OP_ROT
+                limb_sub_borrow OP_TOALTSTACK
+                // ⋯ A₈ A₇ A₆ 2²⁹ C₅⁻ | M₅-(C₄⁻+A₅) ⋯
+                OP_ROT OP_ADD
+                // ⋯ A₈ A₇ 2²⁹ C₅⁻+A₆
+                { Self::MODULUS_LIMBS[6] } OP_SWAP OP_ROT
+                limb_sub_borrow OP_TOALTSTACK
+                // ⋯ A₈ A₇ 2²⁹ C₆⁻ | M₆-(C₅⁻+A₆) ⋯
+                OP_ROT OP_ADD
+                // ⋯ A₈ 2²⁹ C₆⁻+A₇
+                { Self::MODULUS_LIMBS[7] } OP_SWAP OP_ROT
+                limb_sub_borrow OP_TOALTSTACK
+                // ⋯ A₈ 2²⁹ C₇⁻ | M₇-(C₆⁻+A₇) ⋯
+                OP_NIP OP_ADD
+                // ⋯ C₇⁻+A₈
+                { Self::MODULUS_LIMBS[8] } OP_SWAP OP_SUB
+                // ⋯ M₈-(C₇⁻+A₈)
+                OP_FROMALTSTACK OP_FROMALTSTACK OP_FROMALTSTACK OP_FROMALTSTACK
+                OP_FROMALTSTACK OP_FROMALTSTACK OP_FROMALTSTACK OP_FROMALTSTACK
+            OP_ENDIF
+        }
+    }
+
     fn hinted_mul(
         mut a_depth: u32,
         mut a: ark_bn254::Fq,
@@ -531,28 +580,6 @@ pub trait Fp254Impl {
         (script, hints)
     }
 
-    // TODO: Optimize by using the constant feature
-    fn hinted_mul_by_constant(a: ark_bn254::Fq, constant: &ark_bn254::Fq) -> (Script, Vec<Hint>) {
-        let mut hints = Vec::new();
-        let x = BigInt::from_str(&a.to_string()).unwrap();
-        let y = BigInt::from_str(&constant.to_string()).unwrap();
-        let modulus = &Fq::modulus_as_bigint();
-        let q = (x * y) / modulus;
-
-        let script = script! {
-            for _ in 0..Self::N_LIMBS {
-                OP_DEPTH OP_1SUB OP_ROLL // hints
-            }
-            // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
-            { Fq::roll(1) }
-            { Fq::push(*constant) }
-            { Fq::tmul() }
-        };
-        hints.push(Hint::BigIntegerTmulLC1(q));
-
-        (script, hints)
-    }
-
     fn hinted_mul_keep_element(
         mut a_depth: u32,
         mut a: ark_bn254::Fq,
@@ -578,6 +605,28 @@ pub trait Fp254Impl {
             // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
             { Fq::copy(a_depth + 1) }
             { Fq::copy(b_depth + 2) }
+            { Fq::tmul() }
+        };
+        hints.push(Hint::BigIntegerTmulLC1(q));
+
+        (script, hints)
+    }
+
+    // TODO: Optimize by using the constant feature
+    fn hinted_mul_by_constant(a: ark_bn254::Fq, constant: &ark_bn254::Fq) -> (Script, Vec<Hint>) {
+        let mut hints = Vec::new();
+        let x = BigInt::from_str(&a.to_string()).unwrap();
+        let y = BigInt::from_str(&constant.to_string()).unwrap();
+        let modulus = &Fq::modulus_as_bigint();
+        let q = (x * y) / modulus;
+
+        let script = script! {
+            for _ in 0..Self::N_LIMBS {
+                OP_DEPTH OP_1SUB OP_ROLL // hints
+            }
+            // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
+            { Fq::roll(1) }
+            { Fq::push(*constant) }
             { Fq::tmul() }
         };
         hints.push(Hint::BigIntegerTmulLC1(q));
@@ -665,49 +714,6 @@ pub trait Fp254Impl {
         (script, hints)
     }
 
-    fn is_zero(a: u32) -> Script {
-        U254::is_zero(a)
-    }
-
-    fn is_zero_keep_element(a: u32) -> Script {
-        U254::is_zero_keep_element(a)
-    }
-
-    fn is_one() -> Script {
-        script! {
-            { Self::push_one() }
-            { Self::equal(1, 0) }
-        }
-    }
-
-    fn is_one_keep_element(a: u32) -> Script {
-        script! {
-            { Self::copy(a) }
-            { Self::is_one() }
-        }
-    }
-
-    fn is_field() -> Script {
-        script! {
-            // Each limb must not be negative
-            for i in 0..Self::N_LIMBS - 1 {
-                { i } OP_PICK
-                0 OP_GREATERTHANOREQUAL OP_TOALTSTACK
-            }
-            { Self::N_LIMBS - 1 } OP_PICK
-            0 OP_GREATERTHANOREQUAL
-            for _ in 0..Self::N_LIMBS - 1 {
-                OP_FROMALTSTACK OP_BOOLAND
-            }
-            OP_TOALTSTACK
-
-            { Self::push_modulus() }
-            { U254::lessthan(1, 0) }
-
-            OP_FROMALTSTACK OP_BOOLAND
-        }
-    }
-
     // TODO: Optimize using the sqaure feature
     fn hinted_square(a: ark_bn254::Fq) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
@@ -756,36 +762,6 @@ pub trait Fp254Impl {
         hints.push(Hint::BigIntegerTmulLC1(q));
 
         (script, hints)
-    }
-
-    fn div2() -> Script {
-        script! {
-            { U254::div2rem() }
-            OP_IF
-                { U254::push_hex(Self::P_PLUS_ONE_DIV2) }
-                { Self::add(1, 0) }
-            OP_ENDIF
-        }
-    }
-
-    fn div3() -> Script {
-        script! {
-            { U254::div3rem() }
-            OP_DUP
-            0 OP_GREATERTHAN
-            OP_IF
-                OP_1SUB
-                OP_IF
-                    { U254::push_hex(Self::P_PLUS_TWO_DIV3) }
-                    { Self::add(1, 0) }
-                OP_ELSE
-                    { U254::push_hex(Self::TWO_P_PLUS_ONE_DIV3) }
-                    { Self::add(1, 0) }
-                OP_ENDIF
-            OP_ELSE
-                OP_DROP
-            OP_ENDIF
-        }
     }
 
     fn convert_to_be_u4() -> Script {
@@ -889,11 +865,23 @@ pub trait Fp254Impl {
         }
     }
 
-    fn toaltstack() -> Script {
-        U254::toaltstack()
+    #[inline]
+    fn convert_to_be_bits() -> Script {
+        U254::convert_to_be_bits()
     }
 
-    fn fromaltstack() -> Script {
-        U254::fromaltstack()
+    #[inline]
+    fn convert_to_be_bits_toaltstack() -> Script {
+        U254::convert_to_be_bits_toaltstack()
+    }
+
+    #[inline]
+    fn convert_to_le_bits() -> Script {
+        U254::convert_to_le_bits()
+    }
+
+    #[inline]
+    fn convert_to_le_bits_toaltstack() -> Script {
+        U254::convert_to_le_bits_toaltstack()
     }
 }

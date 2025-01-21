@@ -432,6 +432,84 @@ mod test {
     }
 
     #[test]
+    fn test_is_zero() {
+        println!("Fq.is_zero: {} bytes", Fq::is_zero(0).len());
+        println!(
+            "Fq.is_zero_keep_element: {} bytes",
+            Fq::is_zero_keep_element(0).len()
+        );
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        for _ in 0..10 {
+            let a = ark_bn254::Fq::rand(&mut prng);
+
+            let script = script! {
+                // Push three Fq elements
+                { Fq::push_zero() }
+                { Fq::push_u32_le(&BigUint::from(a).to_u32_digits()) }
+                { Fq::push_u32_le(&BigUint::from(a).to_u32_digits()) }
+
+                // The first element should not be zero
+                { Fq::is_zero_keep_element(0) }
+                OP_NOT
+                OP_TOALTSTACK
+
+                // The third element should be zero
+                { Fq::is_zero_keep_element(2) }
+                OP_TOALTSTACK
+
+                // Drop all three elements
+                { Fq::drop() }
+                { Fq::drop() }
+                { Fq::drop() }
+
+                // Both results should be true
+                OP_FROMALTSTACK
+                OP_FROMALTSTACK
+                OP_BOOLAND
+                { Fq::push_zero() }
+                { Fq::is_zero(0) }
+                OP_BOOLAND
+            };
+            run(script);
+        }
+    }
+
+    #[test]
+    fn test_is_field() {
+        let m = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+
+        println!("Fq.is_field: {} bytes", Fq::is_field().len());
+
+        for _ in 0..10 {
+            let a: BigUint = prng.sample(RandomBits::new(254));
+            let a = a.rem(&m);
+
+            let script = script! {
+                { Fq::push_u32_le(&a.to_u32_digits()) }
+                { Fq::is_field() }
+            };
+            run(script);
+        }
+
+        let script = script! {
+            { Fq::push_modulus() } OP_1 OP_ADD
+            { Fq::is_field() }
+            OP_NOT
+        };
+        run(script);
+
+        let script = script! {
+            { Fq::push_modulus() } OP_1 OP_SUB
+            OP_NEGATE
+            { Fq::is_field() }
+            OP_NOT
+        };
+        run(script);
+    }
+
+    #[test]
     fn test_add() {
         println!("Fq.add: {} bytes", Fq::add(0, 1).len());
 
@@ -510,27 +588,6 @@ mod test {
     }
 
     #[test]
-    fn test_neg() {
-        println!("Fq.neg: {} bytes", Fq::neg(0).len());
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        for _ in 0..10 {
-            let a: BigUint = prng.sample(RandomBits::new(254));
-
-            let script = script! {
-                { Fq::push_u32_le(&a.to_u32_digits()) }
-                { Fq::copy(0) }
-                { Fq::neg(0) }
-                { Fq::add(0, 1) }
-                { Fq::push_zero() }
-                { Fq::equalverify(1, 0) }
-                OP_TRUE
-            };
-            run(script);
-        }
-    }
-
-    #[test]
     fn test_div2() {
         println!("Fq.div2: {} bytes", Fq::div2().len());
         let mut prng = ChaCha20Rng::seed_from_u64(0);
@@ -572,110 +629,24 @@ mod test {
     }
 
     #[test]
-    fn test_is_one() {
-        println!("Fq.is_one: {} bytes", Fq::is_one().len());
-        println!(
-            "Fq.is_one_keep_element: {} bytes",
-            Fq::is_one_keep_element(0).len()
-        );
-        let script = script! {
-            { Fq::push_one() }
-            { Fq::is_one_keep_element(0) }
-            OP_TOALTSTACK
-            { Fq::is_one() }
-            OP_FROMALTSTACK
-            OP_BOOLAND
-        };
-        let exec_result = execute_script(script);
-        assert!(exec_result.success);
-    }
-
-    #[test]
-    fn test_is_zero() {
-        println!("Fq.is_zero: {} bytes", Fq::is_zero(0).len());
-        println!(
-            "Fq.is_zero_keep_element: {} bytes",
-            Fq::is_zero_keep_element(0).len()
-        );
+    fn test_neg() {
+        println!("Fq.neg: {} bytes", Fq::neg(0).len());
         let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        for _ in 0..10 {
-            let a = ark_bn254::Fq::rand(&mut prng);
-
-            let script = script! {
-                // Push three Fq elements
-                { Fq::push_zero() }
-                { Fq::push_u32_le(&BigUint::from(a).to_u32_digits()) }
-                { Fq::push_u32_le(&BigUint::from(a).to_u32_digits()) }
-
-                // The first element should not be zero
-                { Fq::is_zero_keep_element(0) }
-                OP_NOT
-                OP_TOALTSTACK
-
-                // The third element should be zero
-                { Fq::is_zero_keep_element(2) }
-                OP_TOALTSTACK
-
-                // Drop all three elements
-                { Fq::drop() }
-                { Fq::drop() }
-                { Fq::drop() }
-
-                // Both results should be true
-                OP_FROMALTSTACK
-                OP_FROMALTSTACK
-                OP_BOOLAND
-                { Fq::push_zero() }
-                { Fq::is_zero(0) }
-                OP_BOOLAND
-            };
-            run(script);
-        }
-    }
-
-    #[test]
-    fn test_is_field() {
-        let m = BigUint::from_str_radix(Fq::MODULUS, 16).unwrap();
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        println!("Fq.is_field: {} bytes", Fq::is_field().len());
 
         for _ in 0..10 {
             let a: BigUint = prng.sample(RandomBits::new(254));
-            let a = a.rem(&m);
 
             let script = script! {
                 { Fq::push_u32_le(&a.to_u32_digits()) }
-                { Fq::is_field() }
+                { Fq::copy(0) }
+                { Fq::neg(0) }
+                { Fq::add(0, 1) }
+                { Fq::push_zero() }
+                { Fq::equalverify(1, 0) }
+                OP_TRUE
             };
             run(script);
         }
-
-        let script = script! {
-            { Fq::push_modulus() } OP_1 OP_ADD
-            { Fq::is_field() }
-            OP_NOT
-        };
-        run(script);
-
-        let script = script! {
-            { Fq::push_modulus() } OP_1 OP_SUB
-            OP_NEGATE
-            { Fq::is_field() }
-            OP_NOT
-        };
-        run(script);
-    }
-
-    #[allow(unused)]
-    fn rand_bools<const SIZE: usize>(seed: u64) -> [bool; SIZE] {
-        let mut bools = [true; SIZE];
-        let mut prng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(seed);
-        for i in 0..SIZE {
-            bools[i] = prng.gen_bool(0.5);
-        }
-        bools
     }
 
     #[test]
