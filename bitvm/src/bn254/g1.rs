@@ -585,7 +585,7 @@ impl G1Affine {
     }
 
 
-
+    /// mergence of hinted_check_chord_line and hinted_add
     pub fn hinted_check_add(
         t: ark_bn254::G1Affine,
         q: ark_bn254::G1Affine,
@@ -723,6 +723,7 @@ impl G1Affine {
         (script, hints)
     }
 
+    /// mergence of hinted_check_tangent_line and hinted_double
     pub fn hinted_check_double(t: ark_bn254::G1Affine) -> (Script, Vec<Hint>) {
         let mut hints = vec![];
 
@@ -765,6 +766,7 @@ impl G1Affine {
         (script, hints)
     }
 
+    /// push 0 and 0 to stack
     pub fn identity() -> Script {
         script! {
             { Fq::push_zero() }
@@ -772,24 +774,24 @@ impl G1Affine {
         }
     }
 
+    /// check if pair on the top of the stack is on curve (y^2=x^3+3)
     pub fn hinted_is_on_curve(x: ark_bn254::Fq, y: ark_bn254::Fq) -> (Script, Vec<Hint>) {
+                let (y_sq, y_sq_hint) = Fq::hinted_square(y);
         let (x_sq, x_sq_hint) = Fq::hinted_square(x);
         let (x_cu, x_cu_hint) = Fq::hinted_mul(0, x, 1, x*x);
-        let (y_sq, y_sq_hint) = Fq::hinted_square(y);
 
         let mut hints = Vec::new();
+        hints.extend(y_sq_hint);
         hints.extend(x_sq_hint);
         hints.extend(x_cu_hint);
-        hints.extend(y_sq_hint);
         let scr = script! {
+            { y_sq }
             { Fq::copy(1) }
             { x_sq }
             { Fq::roll(2) }
             { x_cu }
             { Fq::push_hex("3") }
             { Fq::add(1, 0) }
-            { Fq::roll(1) }
-            { y_sq }
             { Fq::equal(1, 0) }
         };
         (scr, hints)

@@ -14,6 +14,8 @@ impl Fp254Impl for Fq {
         "30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47";
 
     // p = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
+
+    // u29x9 representation of modulus
     const MODULUS_LIMBS: [u32; Self::N_LIMBS as usize] = [
         0x187cfd47, 0x10460b6, 0x1c72a34f, 0x2d522d0, 0x1585d978, 0x2db40c0, 0xa6e141, 0xe5c2634,
         0x30644e,
@@ -67,6 +69,7 @@ impl Fq {
     }
 }
 
+// transforms Bigint to u32xLIMBSIZE form 
 pub fn bigint_to_u32_limbs(n: BigInt, n_bits: u32) -> Vec<u32> {
     const LIMB_SIZE: u64 = 32;
     let mut limbs = vec![];

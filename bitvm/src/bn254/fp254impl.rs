@@ -74,6 +74,7 @@ pub trait Fp254Impl {
     }
 
     #[inline]
+    /// push number in reverse order 
     fn push_u32_le(v: &[u32]) -> Script {
         script! {
             { U254::push_u32_le(&BigUint::from_slice(v).to_u32_digits()) }
@@ -81,6 +82,7 @@ pub trait Fp254Impl {
     }
 
     #[inline]
+    /// read number in reverse order 
     fn read_u32_le(witness: Vec<Vec<u8>>) -> Vec<u32> {
         U254::read_u32_le(witness)
     }
@@ -111,14 +113,17 @@ pub trait Fp254Impl {
         U254::equalverify(a, b)
     }
 
+    /// pop the top element and push 1 if it is equal to zero else 0 
     fn is_zero(a: u32) -> Script {
         U254::is_zero(a)
     }
 
+    /// push 1 if the top element is equal to zero else 0 
     fn is_zero_keep_element(a: u32) -> Script {
         U254::is_zero_keep_element(a)
     }
 
+    // pop the top element and push 1 if it is equal to one else 0 
     fn is_one() -> Script {
         script! {
             { Self::push_one() }
@@ -126,6 +131,7 @@ pub trait Fp254Impl {
         }
     }
 
+    /// push 1 if the top element is equal to one else 0 
     fn is_one_keep_element(a: u32) -> Script {
         script! {
             { Self::copy(a) }
@@ -133,6 +139,7 @@ pub trait Fp254Impl {
         }
     }
 
+    /// checks if the number is a valid element of a certain field (checks limbs to be nonnegative and number to be smaller than modulus)
     fn is_field() -> Script {
         script! {
             // Each limb must not be negative
@@ -530,6 +537,7 @@ pub trait Fp254Impl {
         }
     }
 
+    /// pop the top element and push half of it
     fn div2() -> Script {
         script! {
             { U254::div2rem() }
@@ -540,6 +548,7 @@ pub trait Fp254Impl {
         }
     }
 
+    // pop the top element and push one third of it
     fn div3() -> Script {
         script! {
             { U254::div3rem() }
@@ -559,7 +568,7 @@ pub trait Fp254Impl {
             OP_ENDIF
         }
     }
-
+    /// pop elements at positions a_depth and b_depth and push the product of them by using tmul and calculate hints  
     fn hinted_mul(
         mut a_depth: u32,
         mut a: ark_bn254::Fq,
@@ -593,6 +602,7 @@ pub trait Fp254Impl {
     }
 
     // TODO: Optimize by using the constant feature
+    /// pop the top element and push constant multiple of it
     fn hinted_mul_by_constant(a: ark_bn254::Fq, constant: &ark_bn254::Fq) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
         let x = BigInt::from_str(&a.to_string()).unwrap();
@@ -613,7 +623,7 @@ pub trait Fp254Impl {
 
         (script, hints)
     }
-
+    // push the product of elements at positions a_depth and b_depth by using tmul and calculate hints  
     fn hinted_mul_keep_element(
         mut a_depth: u32,
         mut a: ark_bn254::Fq,
@@ -647,6 +657,8 @@ pub trait Fp254Impl {
     }
 
     #[allow(clippy::too_many_arguments)]
+
+    /// pop the elements in positions a_depth b_depth c_depth d_depth and push ac+bd (a is the number in the position a_depth) to stack and calculate hints
     fn hinted_mul_lc2(
         a_depth: u32,
         a: ark_bn254::Fq,
@@ -687,6 +699,7 @@ pub trait Fp254Impl {
     }
     
     #[allow(clippy::too_many_arguments)]
+    // push ac+bd (where a is the number in the position a_depth) to stack and calculate hints
     fn hinted_mul_lc2_keep_elements(
         a_depth: u32,
         a: ark_bn254::Fq,
@@ -727,6 +740,7 @@ pub trait Fp254Impl {
     }
 
     // TODO: Optimize using the sqaure feature
+    /// pop the top element and push square of it by using tmul and calculate hints  
     fn hinted_square(a: ark_bn254::Fq) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
         let x = &BigInt::from_str(&a.to_string()).unwrap();
@@ -745,7 +759,7 @@ pub trait Fp254Impl {
 
         (script, hints)
     }
-
+    ///expect inverse as hint bottom of the stack and push it to stack
     fn hinted_inv(a: ark_bn254::Fq) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
         let x = &BigInt::from_str(&a.to_string()).unwrap();
