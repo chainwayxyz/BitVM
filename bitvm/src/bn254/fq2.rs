@@ -158,6 +158,7 @@ impl Fq2 {
         }
     }
 
+    /// pop the elements which are in the positions a_depth and b_depth then push a*b to stack and calculate hints
     pub fn hinted_mul(mut a_depth: u32, mut a: ark_bn254::Fq2, mut b_depth: u32, mut b: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         if a_depth < b_depth {
             (a_depth, b_depth) = (b_depth, a_depth);
@@ -188,6 +189,7 @@ impl Fq2 {
         (script, hints)
     }
 
+    /// pop the element on top then push its constant multiple to stack and calculate hints
     pub fn hinted_mul_by_constant(a: ark_bn254::Fq2, constant: &ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 
@@ -246,6 +248,7 @@ impl Fq2 {
         (script, hints)
     }
 
+    /// apply frobenius map
     pub fn hinted_frobenius_map(i: usize, a: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         Fq::hinted_mul_by_constant(a.c1, &ark_bn254::Fq2Config::FROBENIUS_COEFF_FP2_C1[i % ark_bn254::Fq2Config::FROBENIUS_COEFF_FP2_C1.len()])
     }

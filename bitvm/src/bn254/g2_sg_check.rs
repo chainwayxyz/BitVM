@@ -31,6 +31,7 @@ fn split_scalar(window: usize, scalar: u64) -> Vec<Vec<u8>> {
     scalar_bits
 }
 
+
 fn hinted_check_double_and_add(t: ark_bn254::G2Affine, q: ark_bn254::G2Affine, bits: Vec<u8>) -> (Script, Vec<Hint>) {
     let mut hints: Vec<Hint> = vec![];
     let mut acc = t.clone();

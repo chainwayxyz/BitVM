@@ -116,6 +116,7 @@ impl Fq6 {
         }
     }
 
+    /// pop the top fq2 element and push (9+u) times of it (where u^2+1=0). 
     pub fn mul_fq2_by_nonresidue() -> Script {
         script! {
             { Fq2::copy(0) }
@@ -131,6 +132,7 @@ impl Fq6 {
         }
     }
 
+    /// pop the elements which are in the positions a_depth and b_depth then push a*b to stack and calculate hints
     pub fn hinted_mul(mut a_depth: u32, mut a: ark_bn254::Fq6, mut b_depth: u32, mut b: ark_bn254::Fq6) -> (Script, Vec<Hint>) {
         // The degree-6 extension on BN254 Fq2 is under the polynomial y^3 - x - 9
         // Toom-Cook-3 from https://eprint.iacr.org/2006/471.pdf
@@ -304,6 +306,7 @@ impl Fq6 {
     //    p.c2   (2 elements)
     //    c0  (2 elements)
     //    c1  (2 elements)
+    /// pop the top element and push the sparse multiple of it which is in the form (c0,c1,0,0,0,0)
     pub fn hinted_mul_by_01(p: ark_bn254::Fq6, c0: ark_bn254::Fq2, c1: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 
@@ -387,6 +390,7 @@ impl Fq6 {
 
     }
 
+    /// pop the element on top then push its constant multiple to stack and calculate hints    
     pub fn hinted_mul_by_fp2_constant(a: ark_bn254::Fq6, constant: &ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 
@@ -412,6 +416,7 @@ impl Fq6 {
         (script, hints)
     }
 
+    /// apply frobenius map
     pub fn hinted_frobenius_map(i: usize, a: ark_bn254::Fq6) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 

@@ -99,6 +99,7 @@ impl Fq12 {
         }
     }
 
+    /// pop the top fq6 and push the v times of it to stack (where v^3=9+u) and u^2+1=0)
     pub fn mul_fq6_by_nonresidue() -> Script {
         script! {
             { Fq6::mul_fq2_by_nonresidue() }
@@ -107,6 +108,7 @@ impl Fq12 {
         }
     }
 
+    /// pop the elements which are in the positions a_depth and b_depth then push a*b to stack and calculate hints
     pub fn hinted_mul(
         mut a_depth: u32,
         mut a: ark_bn254::Fq12,
@@ -154,6 +156,7 @@ impl Fq12 {
     //   c3  (2 elements)
     //   c4  (2 elements)
     // where c0 is a trival value ONE, so we can ignore it
+    /// pop the top element and push the sparse multiple of it which is in the form (1,0,0,c3,c4,0)
     pub fn hinted_mul_by_34(
         p: ark_bn254::Fq12,
         c3: ark_bn254::Fq2,
@@ -219,6 +222,7 @@ impl Fq12 {
         (script, hints)
     }
 
+    /// Square the top Fq12 element
     pub fn hinted_square(a: ark_bn254::Fq12) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 
@@ -257,6 +261,7 @@ impl Fq12 {
         (script, hints)
     }
 
+    /// apply frobenius map
     pub fn hinted_frobenius_map(i: usize, a: ark_bn254::Fq12) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 

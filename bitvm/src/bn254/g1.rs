@@ -164,6 +164,7 @@ impl G1Affine {
         }
     }
 
+
     pub fn dfs_with_constant_mul(
         index: u32,
         depth: u32,
@@ -284,6 +285,7 @@ impl G1Affine {
         )
     }
 
+    /// pop the element on top then push its constant multiple to stack and calculate hints    
     fn hinted_fr_mul_by_constant(a: ark_bn254::Fr, constant: &ark_bn254::Fr) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
         let x = BigInt::from_str(&a.to_string()).unwrap();
@@ -303,7 +305,7 @@ impl G1Affine {
         (script, hints)
     }
 
-    
+    /// Decomposes a scalar s into k1, k2, s.t. s = k1 + lambda k2 and calculate hints 
     fn hinted_scalar_decomposition(k: ark_bn254::Fr) -> (Script, Vec<Hint>) {
         const LAMBDA: ark_bn254::Fr = MontFp!("21888242871839275217838484774961031246154997185409878258781734729429964517155");
         let (_, (_, k1)) = Self::calculate_scalar_decomposition(k);

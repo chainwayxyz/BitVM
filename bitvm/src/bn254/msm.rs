@@ -5,6 +5,9 @@ use crate::treepp::*;
 use ark_ec::{AdditiveGroup, AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, Field, PrimeField};
 
+
+/// https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication 
+// alpha is the slope of the tangent line (lambda in the link) bias is the constant term of the tangent line
 pub fn affine_double_line_coeff(
     t: &mut ark_bn254::G1Affine,
 ) -> (ark_bn254::Fq, ark_bn254::Fq) {
@@ -22,7 +25,8 @@ pub fn affine_double_line_coeff(
 
     (alpha, -bias)
 }
-
+/// https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication 
+// alpha is the slope of the line dpassing through points t and p (lambda in the link) bias is the constant term of that line
 pub fn affine_add_line_coeff(
     t: &mut ark_bn254::G1Affine,
     p: ark_bn254::G1Affine,
@@ -42,6 +46,7 @@ pub fn affine_add_line_coeff(
     (alpha, -bias)
 }
 
+/// Performs scalar multiplication on an elliptic curve point and returns line coefficients, step points, and a trace of intermediate points.
 pub fn collect_scalar_mul_coeff(
     base: ark_bn254::G1Affine,
     scalar: ark_bn254::Fr,
@@ -172,6 +177,7 @@ pub fn prepare_msm_input(
     (inner_coeffs, outer_coeffs)
 }
 
+/// perform multiscalar multiplication for bases coming from vk and public inputs.
 pub fn hinted_msm_with_constant_bases_affine(
     bases: &[ark_bn254::G1Affine],
     scalars: &[ark_bn254::Fr],
