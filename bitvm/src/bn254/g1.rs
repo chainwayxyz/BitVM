@@ -768,7 +768,8 @@ impl G1Affine {
         (script, hints)
     }
 
-    /// push 0 and 0 to stack
+    /// Since the points of curve y^2=x^3+3 are represented as affine coordinates , it is not possible to represent the infinity point as affine coodinates
+    /// but in codebase the infinity point is respresented as (0 ,0) even though it does not satisfy the curve equation. This function is a helper to check if the point is infinity.
     pub fn identity() -> Script {
         script! {
             { Fq::push_zero() }
