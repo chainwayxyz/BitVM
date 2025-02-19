@@ -541,7 +541,7 @@ pub trait Fp254Impl {
         }
     }
 
-    /// Pops the top element and pushs half of it.
+    /// Pops the top element and pushes half of it.
     fn div2() -> Script {
         script! {
             { U254::div2rem() }
@@ -552,7 +552,7 @@ pub trait Fp254Impl {
         }
     }
 
-    /// Pops the top element and pushs one third of it.
+    /// Pops the top element and pushes one third of it.
     fn div3() -> Script {
         script! {
             { U254::div3rem() }
@@ -573,7 +573,7 @@ pub trait Fp254Impl {
         }
     }
 
-    /// Pops elements at positions a_depth and b_depth and pushs the product of them by using tmul and calculates hints.  
+    /// Pops elements at positions a_depth and b_depth and pushes the product of them by using tmul and calculates hints.  
     fn hinted_mul(
         mut a_depth: u32,
         mut a: ark_bn254::Fq,
@@ -607,7 +607,7 @@ pub trait Fp254Impl {
     }
 
     // TODO: Optimize by using the constant feature
-    /// Pops the top element and pushs constant multiple of it and calculates hints.
+    /// Pops the top element and pushes constant multiple of it and calculates hints.
     fn hinted_mul_by_constant(a: ark_bn254::Fq, constant: &ark_bn254::Fq) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
         let x = BigInt::from_str(&a.to_string()).unwrap();
@@ -629,7 +629,7 @@ pub trait Fp254Impl {
         (script, hints)
     }
 
-    /// Pushs the product of elements at positions a_depth and b_depth by using tmul and calculates hints.
+    /// Pushes the product of elements at positions a_depth and b_depth by using tmul and calculates hints.
     fn hinted_mul_keep_element(
         mut a_depth: u32,
         mut a: ark_bn254::Fq,
@@ -746,7 +746,7 @@ pub trait Fp254Impl {
     }
 
     // TODO: Optimize using the sqaure feature
-    /// Pops the top element and pushs square of it by using tmul and calculates hints.
+    /// Pops the top element and pushes square of it by using tmul and calculates hints.
     fn hinted_square(a: ark_bn254::Fq) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
         let x = &BigInt::from_str(&a.to_string()).unwrap();

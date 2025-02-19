@@ -69,7 +69,7 @@ impl Fq {
     }
 }
 
-// transforms Bigint to u32xLIMBSIZE form 
+/// Transforms Bigint to u32xLIMBSIZE form 
 pub fn bigint_to_u32_limbs(n: BigInt, n_bits: u32) -> Vec<u32> {
     const LIMB_SIZE: u64 = 32;
     let mut limbs = vec![];

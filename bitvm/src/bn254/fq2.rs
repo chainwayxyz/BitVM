@@ -5,7 +5,12 @@ use crate::bn254::utils::Hint;
 use ark_ff::Fp2Config;
 use num_bigint::BigUint;
 
+/// Fq2 element a+bu is represented as a b on the stack. (b is close to the top of the stack) u^2=-1.
+/// Accessing an `fq2` is implemented by accessing its first `fq` element on the stack.
+/// For example, to add the first two `fq2` elements, use `add(0, 2)` instead of `add(0, 1)`.
+
 pub struct Fq2;
+
 
 impl Fq2 {
     pub fn copy(a: u32) -> Script {
@@ -92,7 +97,8 @@ impl Fq2 {
             OP_BOOLAND
         }
     }
-    
+
+    /// Pops the fq2 elements at positions a and b , adds them and pushes the result.
     pub fn add(mut a: u32, mut b: u32) -> Script {
         if a < b {
             (a, b) = (b, a);
@@ -104,6 +110,7 @@ impl Fq2 {
         }
     }
 
+    /// Pops the fq2 elements at positions a and b , substracts them and pushes the result. 
     pub fn sub(a: u32, b: u32) -> Script {
         if a > b {
             script! {
@@ -117,14 +124,14 @@ impl Fq2 {
             }
         }
     }
-
+    /// Pops the fq2 element at position a, pushes the double of it.
     pub fn double(a: u32) -> Script {
         script! {
             { Fq::double(a + 1) }
             { Fq::double(a + 1) }
         }
     }
-
+    /// Pops the fq2 element at position a, pushes the triple of it.
     pub fn triple(a: u32) -> Script {
         script! {
             { Fq2::copy(a) }
@@ -132,7 +139,7 @@ impl Fq2 {
             { Fq2::add(2, 0) }
         }
     }
-
+    /// Pops the top fq2 element and pushes half of it.
     pub fn div2() -> Script {
         script! {
             { Fq::roll(1) }
@@ -141,7 +148,7 @@ impl Fq2 {
             { Fq::div2() }
         }
     }
-
+    /// Pops the top fq2 element and pushes one third of it.
     pub fn div3() -> Script {
         script! {
             { Fq::roll(1) }
@@ -150,7 +157,7 @@ impl Fq2 {
             { Fq::div3() }
         }
     }
-
+    /// Pops the fq2 element at position a and pushes its negation.
     pub fn neg(a: u32) -> Script {
         script! {
             { Fq::neg(a + 1) }
@@ -158,7 +165,7 @@ impl Fq2 {
         }
     }
 
-    /// pop the elements which are in the positions a_depth and b_depth then push a*b to stack and calculate hints
+    /// Pops the fq2 elements at positions a_depth and b_depth then pushes a*b to stack and calculates hints.
     pub fn hinted_mul(mut a_depth: u32, mut a: ark_bn254::Fq2, mut b_depth: u32, mut b: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         if a_depth < b_depth {
             (a_depth, b_depth) = (b_depth, a_depth);
@@ -189,7 +196,7 @@ impl Fq2 {
         (script, hints)
     }
 
-    /// pop the element on top then push its constant multiple to stack and calculate hints
+    /// Pops the top fq2 element and pushes constant multiple of it and calculates hints.
     pub fn hinted_mul_by_constant(a: ark_bn254::Fq2, constant: &ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 
@@ -219,7 +226,7 @@ impl Fq2 {
         (script, hints)
     }
 
-    /// Square the top Fq2 element
+    /// Pops the top fq2 element, pushes the square of it and calculate hints.
     pub fn hinted_square(a: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
         let (hinted_script1, hint1) = Fq::hinted_mul_keep_element(1, a.c0, 0, a.c1);
@@ -248,7 +255,7 @@ impl Fq2 {
         (script, hints)
     }
 
-    /// apply frobenius map
+    /// Applies frobenius map
     pub fn hinted_frobenius_map(i: usize, a: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         Fq::hinted_mul_by_constant(a.c1, &ark_bn254::Fq2Config::FROBENIUS_COEFF_FP2_C1[i % ark_bn254::Fq2Config::FROBENIUS_COEFF_FP2_C1.len()])
     }

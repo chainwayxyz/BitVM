@@ -7,6 +7,9 @@ use crate::treepp::{script, Script};
 use ark_ff::{Field, Fp12Config};
 use num_bigint::BigUint;
 
+/// Fq12 element a+bw is represented as a b c on the stack. (c is close to the top of the stack) w^2=v
+/// Accessing an `fq12` is implemented by accessing its first `fq6` element on the stack.
+/// For example, to add the first two `fq6` elements, use `add(0, 2)` instead of `add(0, 1)`.
 pub struct Fq12;
 
 impl Fq12 {
@@ -67,7 +70,7 @@ impl Fq12 {
             }
         }
     }
-
+    /// Pops the fq12 elements at positions a and b , adds them and pushes the result.
     pub fn add(mut a: u32, mut b: u32) -> Script {
         if a < b {
             (a, b) = (b, a);
@@ -78,6 +81,7 @@ impl Fq12 {
         }
     }
 
+    /// Pops the fq6 elements at positions a and b , substracts them and pushes the result.
     pub fn sub(a: u32, b: u32) -> Script {
         if a > b {
             script! {
@@ -92,6 +96,7 @@ impl Fq12 {
         }
     }
 
+    /// Pops the fq12 element at position a, pushes the double of it.
     pub fn double(a: u32) -> Script {
         script! {
             { Fq6::double(a + 6) }
@@ -99,7 +104,7 @@ impl Fq12 {
         }
     }
 
-    /// pop the top fq6 and push the v times of it to stack (where v^3=9+u) and u^2+1=0)
+    /// Pops the top fq6 element, multiplies it with v and pushes the result. (v^3=9+u and  u^2+1=0)
     pub fn mul_fq6_by_nonresidue() -> Script {
         script! {
             { Fq6::mul_fq2_by_nonresidue() }
@@ -108,7 +113,7 @@ impl Fq12 {
         }
     }
 
-    /// pop the elements which are in the positions a_depth and b_depth then push a*b to stack and calculate hints
+    /// Pops the fq12 elements at positions a_depth and b_depth then pushes a*b to stack and calculates hints.
     pub fn hinted_mul(
         mut a_depth: u32,
         mut a: ark_bn254::Fq12,
@@ -156,7 +161,7 @@ impl Fq12 {
     //   c3  (2 elements)
     //   c4  (2 elements)
     // where c0 is a trival value ONE, so we can ignore it
-    /// pop the top element and push the sparse multiple of it which is in the form (1,0,0,c3,c4,0)
+    /// Pops the top fq6 element, multiplies it with a sparese fq6 which is in the form (1,0,0,c3,c4,0), pushes the result and calculate hints.
     pub fn hinted_mul_by_34(
         p: ark_bn254::Fq12,
         c3: ark_bn254::Fq2,
@@ -222,7 +227,7 @@ impl Fq12 {
         (script, hints)
     }
 
-    /// Square the top Fq12 element
+    /// Pops the top fq12 element, pushes the square of it and calculate hints.
     pub fn hinted_square(a: ark_bn254::Fq12) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 
@@ -261,7 +266,7 @@ impl Fq12 {
         (script, hints)
     }
 
-    /// apply frobenius map
+    /// Applies frobenius map
     pub fn hinted_frobenius_map(i: usize, a: ark_bn254::Fq12) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 

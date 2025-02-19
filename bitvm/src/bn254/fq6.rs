@@ -6,6 +6,10 @@ use crate::bn254::utils::Hint;
 use ark_ff::{Field, Fp6Config};
 use num_bigint::BigUint;
 
+
+/// Fq6 element a+bv+cv^2 is represented as a b c on the stack. (c is close to the top of the stack) v^3=9+u.
+/// Accessing an `fq6` is implemented by accessing its first `fq2` element on the stack.
+/// For example, to add the first two `fq6` elements, use `add(0, 3)` instead of `add(0, 1)`.
 pub struct Fq6;
 
 impl Fq6 {
@@ -73,6 +77,7 @@ impl Fq6 {
         }
     }
 
+    /// Pops the fq6 elements at positions a and b , adds them and pushes the result.
     pub fn add(mut a: u32, mut b: u32) -> Script {
         if a < b {
             (a, b) = (b, a);
@@ -84,6 +89,7 @@ impl Fq6 {
         }
     }
 
+    /// Pops the fq6 elements at positions a and b , substracts them and pushes the result.
     pub fn sub(a: u32, b: u32) -> Script {
         if a > b {
             script! {
@@ -99,7 +105,7 @@ impl Fq6 {
             }
         }
     }
-
+    /// Pops the fq6 element at position a, pushes the double of it.
     pub fn double(a: u32) -> Script {
         script! {
             { Fq2::double(a + 4) }
@@ -107,7 +113,7 @@ impl Fq6 {
             { Fq2::double(a + 4) }
         }
     }
-
+    /// Pops the fq6 element at position a and pushes its negation.
     pub fn neg(a: u32) -> Script {
         script! {
             { Fq2::neg(a + 4) }
@@ -116,23 +122,24 @@ impl Fq6 {
         }
     }
 
-    /// pop the top fq2 element and push (9+u) times of it (where u^2+1=0). 
+    /// Pops the top fq2 element, multiplies it with 9+u and pushes the result. (u^2+1=0)
     pub fn mul_fq2_by_nonresidue() -> Script {
-        script! {
-            { Fq2::copy(0) }
-            { Fq2::double(0) }
-            { Fq2::double(0) }
-            { Fq2::double(0) }
-            { Fq::copy(3) }
-            { Fq::add(2, 0) }
-            { Fq::copy(2) }
-            { Fq::sub(1, 0) }
-            { Fq::add(2, 1) }
-            { Fq::add(2, 0) }
+        script! {                       // a b 
+            { Fq2::copy(0) }            // a b a b 
+            { Fq2::double(0) }          // a b 2a 2b
+            { Fq2::double(0) }          // a b 4a 4b
+            { Fq2::double(0) }          // a b 8a 8b
+            { Fq::copy(3) }             // a b 8a 8b a
+            { Fq::add(2, 0) }           // a b 8b 9a
+            { Fq::copy(2) }             // a b 8b 9a b
+            { Fq::sub(1, 0) }           // a b 8b 9a-b
+            { Fq::add(2, 1) }           // a 9a-b 9b
+            { Fq::add(2, 0) }           // 9a-b 9b+a  
+                                        // (a+bu)*(9+u)=(9a-b)+(9b+a)u
         }
     }
 
-    /// pop the elements which are in the positions a_depth and b_depth then push a*b to stack and calculate hints
+    /// Pops the fq6 elements at positions a_depth and b_depth then pushes a*b to stack and calculates hints.
     pub fn hinted_mul(mut a_depth: u32, mut a: ark_bn254::Fq6, mut b_depth: u32, mut b: ark_bn254::Fq6) -> (Script, Vec<Hint>) {
         // The degree-6 extension on BN254 Fq2 is under the polynomial y^3 - x - 9
         // Toom-Cook-3 from https://eprint.iacr.org/2006/471.pdf
@@ -306,7 +313,8 @@ impl Fq6 {
     //    p.c2   (2 elements)
     //    c0  (2 elements)
     //    c1  (2 elements)
-    /// pop the top element and push the sparse multiple of it which is in the form (c0,c1,0,0,0,0)
+    /// Pops the top fq6 element, multiplies it with a sparese fq6 which is in the form (c0,c1,0) , 
+    /// pushes the result and calculate hints.
     pub fn hinted_mul_by_01(p: ark_bn254::Fq6, c0: ark_bn254::Fq2, c1: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 
@@ -390,7 +398,7 @@ impl Fq6 {
 
     }
 
-    /// pop the element on top then push its constant multiple to stack and calculate hints    
+    /// Pops the top fq6 element and pushes constant multiple of it and calculates hints.
     pub fn hinted_mul_by_fp2_constant(a: ark_bn254::Fq6, constant: &ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 
@@ -416,7 +424,7 @@ impl Fq6 {
         (script, hints)
     }
 
-    /// apply frobenius map
+    /// Applies frobenius map.
     pub fn hinted_frobenius_map(i: usize, a: ark_bn254::Fq6) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
 
