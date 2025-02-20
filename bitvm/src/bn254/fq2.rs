@@ -5,7 +5,7 @@ use crate::bn254::utils::Hint;
 use ark_ff::Fp2Config;
 use num_bigint::BigUint;
 
-/// Fq2 element a+bu is represented as a b on the stack. (b is close to the top of the stack) u^2=-1.
+/// Fq2 element a+bu is represented as a b on the stack where a and b are fq elements. (b is close to the top of the stack) u^2=-1.
 /// Accessing an `fq2` is implemented by accessing its first `fq` element on the stack.
 /// For example, to add the first two `fq2` elements, use `add(0, 2)` instead of `add(0, 1)`.
 

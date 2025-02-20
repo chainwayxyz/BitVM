@@ -7,9 +7,9 @@ use ark_ff::{Field, Fp6Config};
 use num_bigint::BigUint;
 
 
-/// Fq6 element a+bv+cv^2 is represented as a b c on the stack. (c is close to the top of the stack) v^3=9+u.
-/// Accessing an `fq6` is implemented by accessing its first `fq2` element on the stack.
-/// For example, to add the first two `fq6` elements, use `add(0, 3)` instead of `add(0, 1)`.
+/// Fq6 element a+bv+cv^2 is represented as a b c on the stack where a b c are fq2 elements.  (c is close to the top of the stack) v^3=9+u.
+/// Accessing an `fq6` is implemented by accessing its first `fq` element on the stack.
+/// For example, to add the first two `fq6` elements, use `add(0, 6)` instead of `add(0, 1)`.
 pub struct Fq6;
 
 impl Fq6 {
