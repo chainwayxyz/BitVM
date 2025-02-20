@@ -7,9 +7,9 @@ use crate::treepp::{script, Script};
 use ark_ff::{Field, Fp12Config};
 use num_bigint::BigUint;
 
-/// Fq12 element a+bw is represented as a b c on the stack. (c is close to the top of the stack) w^2=v
+/// Fq12 element a+bw is represented as a b on the stack. (b is close to the top of the stack) w^2=v
 /// Accessing an `fq12` is implemented by accessing its first `fq6` element on the stack.
-/// For example, to add the first two `fq6` elements, use `add(0, 2)` instead of `add(0, 1)`.
+/// For example, to add the first two `fq6` elements, use `add(0, 12)` instead of `add(0, 1)`.
 pub struct Fq12;
 
 impl Fq12 {
