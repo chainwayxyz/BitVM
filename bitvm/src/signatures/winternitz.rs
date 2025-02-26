@@ -134,7 +134,7 @@ pub trait Converter {
 /// - Pick the algorithms you want to use, i.e. `BinarysearchVerifier` and `ToBytesConverter`
 /// - Construct your struct: `let o = Winternitz::<BinarysearchVerifier, ToBytesConverter>::new()`
 /// - Identify your message parameters:` let p = Parameters::new(message_block_count, block_length)` or `let p = Parameters::new_by_bit_length(number_of_bits_of_the_message, block_length)`
-/// - Use the methods for the necessary operations, for example: `o.sign(&p, ...)`, `o.checksig_verify(&p, ...)`, `o.checksig_verify_remove_message(&p, ...)`
+/// - Use the methods for the necessary operations, for example: `o.sign(&p, ...)`, `o.checksig_verify(&p, ...)`, `o.checksig_verify_and_clear_stack(&p, ...)`
 pub struct Winternitz<VERIFIER: Verifier, CONVERTER: Converter> {
     phantom0: PhantomData<VERIFIER>, 
     phantom1: PhantomData<CONVERTER>,
@@ -183,11 +183,10 @@ impl<VERIFIER: Verifier, CONVERTER: Converter> Winternitz<VERIFIER, CONVERTER> {
         script! {
             { VERIFIER::verify_digits(ps, public_key) }
             { self.verify_checksum(ps) }
-            { CONVERTER::get_script(ps) }
-            for _ in 0..(CONVERTER::length_of_final_message(ps) / 2) {
+            for _ in 0..(ps.message_length) / 2 {
                 OP_2DROP
             }
-            if CONVERTER::length_of_final_message(ps) % 2 == 1 {
+            if ps.message_length % 2 == 1 {
                 OP_DROP
             }
         }
