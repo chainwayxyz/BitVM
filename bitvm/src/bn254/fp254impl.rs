@@ -7,9 +7,10 @@ use crate::treepp::*;
 use ark_ff::PrimeField;
 use bitcoin_script::script;
 use num_bigint::{BigInt, BigUint};
-use num_traits::Num;
+use num_traits::{ConstZero, Num};
 use std::str::FromStr;
 use std::sync::OnceLock;
+use num_traits::Zero;
 
 #[allow(clippy::declare_interior_mutable_const)]
 pub trait Fp254Impl {
@@ -596,7 +597,13 @@ pub trait Fp254Impl {
     fn hinted_mul_by_constant(a: ark_bn254::Fq, constant: &ark_bn254::Fq) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
         let x = BigInt::from_str(&a.to_string()).unwrap();
-        let y = BigInt::from_str(&constant.to_string()).unwrap();
+        println!("constant: {:#?}", constant);
+        let y: BigInt;
+        if constant.is_zero() {
+            y = BigInt::ZERO;
+        } else {
+            y = BigInt::from_str(&constant.to_string()).unwrap();
+        };
         let modulus = &Fq::modulus_as_bigint();
         let q = (x * y) / modulus;
 
