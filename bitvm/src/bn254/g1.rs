@@ -1,5 +1,5 @@
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{AdditiveGroup, BigInteger, Field, One, PrimeField};
+use ark_ff::{BigInteger, Field, One, PrimeField};
 use num_bigint::{BigInt, BigUint, Sign};
 use std::cmp::min;
 use std::ops::{AddAssign, Div, Neg, Rem};

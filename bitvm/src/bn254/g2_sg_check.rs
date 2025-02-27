@@ -1,7 +1,7 @@
 use std::{ops::Neg, str::FromStr};
 
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{AdditiveGroup, Field};
+use ark_ff::Field;
 use bitcoin_script::script;
 use num_bigint::BigUint;
 use crate::treepp::Script;
@@ -236,7 +236,7 @@ fn hinted_mul_by_char_on_q(q: ark_bn254::G2Affine) -> (ark_bn254::G2Affine, Scri
         "10307601595873709700152284273816112264069230130616436755625194854815875713954",
     )
     .unwrap();
-    let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems([
+    let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems(&[
         ark_bn254::Fq::from(beta_12x.clone()),
         ark_bn254::Fq::from(beta_12y.clone()),
     ])
@@ -249,7 +249,7 @@ fn hinted_mul_by_char_on_q(q: ark_bn254::G2Affine) -> (ark_bn254::G2Affine, Scri
         "3505843767911556378687030309984248845540243509899259641013678093033130930403",
     )
     .unwrap();
-    let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems([
+    let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems(&[
         ark_bn254::Fq::from(beta_13x.clone()),
         ark_bn254::Fq::from(beta_13y.clone()),
     ])
@@ -381,7 +381,7 @@ pub(crate) fn is_in_g2_subgroup(q: ark_bn254::G2Affine, window: usize) -> Vec<(a
 #[cfg(test)]
 mod test {
     use ark_ec::CurveGroup;
-    use ark_ff::{AdditiveGroup, Field, UniformRand};
+    use ark_ff::{Field, UniformRand};
     use bitcoin_script::script;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;

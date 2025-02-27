@@ -418,7 +418,6 @@ mod test {
     use crate::chunker::common::extract_witness_from_stack;
     use ark_ff::Field;
     use ark_std::UniformRand;
-    use ark_ff::AdditiveGroup;
     use core::ops::{Add, Mul, Rem, Sub};
     use num_bigint::{BigInt, BigUint, RandBigInt, RandomBits};
     use num_traits::{Num, Signed};

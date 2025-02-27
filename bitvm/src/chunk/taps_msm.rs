@@ -10,7 +10,7 @@ use crate::{
     treepp::*,
 };
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{AdditiveGroup, Field, PrimeField};
+use ark_ff::{Field, PrimeField};
 
 use super::wrap_hasher::hash_messages;
 use super::elements::{ ElementType};

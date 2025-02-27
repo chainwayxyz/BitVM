@@ -8,7 +8,7 @@ use crate::bn254::fq2::Fq2;
 use crate::bn254::g2::*;
 use crate::treepp::*;
 use ark_ec::bn::BnConfig;
-use ark_ff::{AdditiveGroup, Field};
+use ark_ff::Field;
 use num_bigint::BigUint;
 use num_traits::One;
 use std::{ops::Neg, str::FromStr};
@@ -242,7 +242,7 @@ impl Pairing {
                     "10307601595873709700152284273816112264069230130616436755625194854815875713954",
                 )
                 .unwrap();
-                let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems([
+                let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems(&[
                     ark_bn254::Fq::from(beta_12x.clone()),
                     ark_bn254::Fq::from(beta_12y.clone()),
                 ])
@@ -255,7 +255,7 @@ impl Pairing {
                     "3505843767911556378687030309984248845540243509899259641013678093033130930403",
                 )
                 .unwrap();
-                let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems([
+                let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems(&[
                     ark_bn254::Fq::from(beta_13x.clone()),
                     ark_bn254::Fq::from(beta_13y.clone()),
                 ])
@@ -328,7 +328,7 @@ impl Pairing {
                 )
                 .unwrap();
                 let beta_22y = BigUint::from_str("0").unwrap();
-                let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems([
+                let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems(&[
                     ark_bn254::Fq::from(beta_22x.clone()),
                     ark_bn254::Fq::from(beta_22y.clone()),
                 ])

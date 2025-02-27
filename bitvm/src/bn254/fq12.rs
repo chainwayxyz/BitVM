@@ -289,7 +289,7 @@ mod test {
     use crate::bn254::fq12::Fq12;
     use crate::bn254::fq2::Fq2;
     use crate::treepp::*;
-    use ark_ff::AdditiveGroup;
+    
     use ark_ff::Field;
     use ark_std::UniformRand;
     use core::ops::Mul;

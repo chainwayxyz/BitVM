@@ -5,7 +5,7 @@ use super::elements::{
 use super::{assigner::BCAssigner, segment::Segment};
 use crate::bn254::{ell_coeffs::EllCoeff, fp254impl::Fp254Impl, fq::Fq, fq12::Fq12, fq2::Fq2};
 use crate::treepp::*;
-use ark_ff::{AdditiveGroup, Field};
+use ark_ff::Field;
 
 #[allow(clippy::too_many_arguments)]
 pub fn chunk_evaluate_line_wrapper<T: BCAssigner>(

@@ -368,7 +368,7 @@ mod test {
     use crate::bn254::fp254impl::Fp254Impl;
     use crate::bn254::fr::Fr;
     use crate::treepp::*;
-    use ark_ff::AdditiveGroup;
+    use ark_ff::Field;
     use ark_std::UniformRand;
     use core::ops::{Add, Rem, Sub};
     use num_bigint::{BigUint, RandomBits};

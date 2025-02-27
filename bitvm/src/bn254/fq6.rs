@@ -4,7 +4,7 @@ use crate::bn254::fq12::Fq12;
 use crate::bn254::fq2::Fq2;
 use crate::treepp::{script, Script};
 use crate::bn254::utils::Hint;
-use ark_ff::{AdditiveGroup, Field, Fp6Config};
+use ark_ff::{Field, Fp6Config};
 use num_bigint::BigUint;
 
 pub struct Fq6;
@@ -568,7 +568,6 @@ mod test {
     use core::ops::Mul;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    use ark_ff::AdditiveGroup;
 
     #[test]
     fn test_bn254_fq6_add() {

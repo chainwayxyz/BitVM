@@ -6,7 +6,7 @@ use crate::bn254::ell_coeffs::EllCoeff;
 use crate::bn254::ell_coeffs::G2Prepared;
 use crate::treepp::{script, Script};
 use super::utils::Hint;
-use ark_ff::{AdditiveGroup, Field};
+use ark_ff::Field;
 use num_bigint::BigUint;
 use std::str::FromStr;
 use ark_ec::bn::BnConfig;
@@ -139,7 +139,7 @@ impl G2Affine {
         )
         .unwrap();
         let beta_22y = BigUint::from_str("0").unwrap();
-        let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems([
+        let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems(&[
             ark_bn254::Fq::from(beta_22x.clone()),
             ark_bn254::Fq::from(beta_22y.clone()),
         ])
@@ -170,7 +170,7 @@ impl G2Affine {
             "10307601595873709700152284273816112264069230130616436755625194854815875713954",
         )
         .unwrap();
-        let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems([
+        let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems(&[
             ark_bn254::Fq::from(beta_12x.clone()),
             ark_bn254::Fq::from(beta_12y.clone()),
         ])
@@ -183,7 +183,7 @@ impl G2Affine {
             "3505843767911556378687030309984248845540243509899259641013678093033130930403",
         )
         .unwrap();
-        let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems([
+        let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems(&[
             ark_bn254::Fq::from(beta_13x.clone()),
             ark_bn254::Fq::from(beta_13y.clone()),
         ])
@@ -229,7 +229,7 @@ impl G2Affine {
         )
         .unwrap();
         let beta_32y = BigUint::from_str("2236595495967245188281701248203181795121068902605861227855261137820944008926").unwrap();
-        let beta_32 = ark_bn254::Fq2::from_base_prime_field_elems([
+        let beta_32 = ark_bn254::Fq2::from_base_prime_field_elems(&[
             ark_bn254::Fq::from(beta_32x.clone()),
             ark_bn254::Fq::from(beta_32y.clone()),
         ])
@@ -240,7 +240,7 @@ impl G2Affine {
         )
         .unwrap();
         let beta_33y = BigUint::from_str("18382399103927718843559375435273026243156067647398564021675359801612095278180").unwrap();
-        let beta_33 = ark_bn254::Fq2::from_base_prime_field_elems([
+        let beta_33 = ark_bn254::Fq2::from_base_prime_field_elems(&[
             ark_bn254::Fq::from(beta_33x.clone()),
             ark_bn254::Fq::from(beta_33y.clone()),
         ])
@@ -769,7 +769,7 @@ mod test {
     use ark_std::UniformRand;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    use ark_ff::AdditiveGroup;
+    
     use num_traits::One;
 
     #[test]

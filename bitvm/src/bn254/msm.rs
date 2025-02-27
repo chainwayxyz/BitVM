@@ -2,8 +2,9 @@ use super::utils::Hint;
 use crate::bn254::fp254impl::Fp254Impl;
 use crate::bn254::{g1::G1Affine, fr::Fr};
 use crate::treepp::*;
-use ark_ec::{AdditiveGroup, AffineRepr, CurveGroup};
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, Field, PrimeField};
+use ark_ec::Group;
 
 pub fn affine_double_line_coeff(
     t: &mut ark_bn254::G1Affine,
@@ -97,7 +98,7 @@ pub fn collect_scalar_mul_coeff(
                 line_coeff.push(double_coeff);
                 step_points.push(tmp);
                 assert_eq!(
-                    tmp.y().unwrap_or(ark_bn254::Fq::ZERO) - double_coeff.0 * tmp.x().unwrap_or(ark_bn254::Fq::ZERO) + double_coeff.1,
+                    *tmp.y().unwrap_or(&ark_bn254::Fq::ZERO) - double_coeff.0 * tmp.x().unwrap_or(&ark_bn254::Fq::ZERO) + double_coeff.1,
                     ark_bn254::Fq::ZERO
                 );
                 acc.double_in_place();

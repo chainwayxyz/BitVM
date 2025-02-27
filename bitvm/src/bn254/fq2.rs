@@ -304,7 +304,6 @@ mod test {
     use core::ops::{Add, Mul};
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    use ark_ff::AdditiveGroup;
 
     #[test]
     fn test_bn254_fq2_add() {

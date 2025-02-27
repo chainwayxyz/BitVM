@@ -10,7 +10,7 @@ use crate::{
     treepp::*,
 };
 use ark_ec::{AffineRepr, CurveGroup}; 
-use ark_ff::{AdditiveGroup, Field, Fp12Config, PrimeField};
+use ark_ff::{Field, Fp12Config, PrimeField};
 use num_bigint::BigUint;
 use std::ops::Neg;
 use std::str::FromStr;
@@ -31,7 +31,7 @@ pub(crate) fn frob_q_power(q: ark_bn254::G2Affine, ate: i8) -> ark_bn254::G2Affi
         "10307601595873709700152284273816112264069230130616436755625194854815875713954",
     )
     .unwrap();
-    let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems([
+    let beta_12 = ark_bn254::Fq2::from_base_prime_field_elems(&[
         ark_bn254::Fq::from(beta_12x.clone()),
         ark_bn254::Fq::from(beta_12y.clone()),
     ])
@@ -44,7 +44,7 @@ pub(crate) fn frob_q_power(q: ark_bn254::G2Affine, ate: i8) -> ark_bn254::G2Affi
         "3505843767911556378687030309984248845540243509899259641013678093033130930403",
     )
     .unwrap();
-    let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems([
+    let beta_13 = ark_bn254::Fq2::from_base_prime_field_elems(&[
         ark_bn254::Fq::from(beta_13x.clone()),
         ark_bn254::Fq::from(beta_13y.clone()),
     ])
@@ -55,7 +55,7 @@ pub(crate) fn frob_q_power(q: ark_bn254::G2Affine, ate: i8) -> ark_bn254::G2Affi
     )
     .unwrap();
     let beta_22y = BigUint::from_str("0").unwrap();
-    let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems([
+    let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems(&[
         ark_bn254::Fq::from(beta_22x.clone()),
         ark_bn254::Fq::from(beta_22y.clone()),
     ])
@@ -67,7 +67,7 @@ pub(crate) fn frob_q_power(q: ark_bn254::G2Affine, ate: i8) -> ark_bn254::G2Affi
     )
     .unwrap();
     let beta_32y = BigUint::from_str("2236595495967245188281701248203181795121068902605861227855261137820944008926").unwrap();
-    let beta_32 = ark_bn254::Fq2::from_base_prime_field_elems([
+    let beta_32 = ark_bn254::Fq2::from_base_prime_field_elems(&[
         ark_bn254::Fq::from(beta_32x.clone()),
         ark_bn254::Fq::from(beta_32y.clone()),
     ])
@@ -79,7 +79,7 @@ pub(crate) fn frob_q_power(q: ark_bn254::G2Affine, ate: i8) -> ark_bn254::G2Affi
     )
     .unwrap();
     let beta_33y = BigUint::from_str("18382399103927718843559375435273026243156067647398564021675359801612095278180").unwrap();
-    let beta_33 = ark_bn254::Fq2::from_base_prime_field_elems([
+    let beta_33 = ark_bn254::Fq2::from_base_prime_field_elems(&[
         ark_bn254::Fq::from(beta_33x.clone()),
         ark_bn254::Fq::from(beta_33y.clone()),
     ])
@@ -864,9 +864,9 @@ pub(crate) fn chunk_init_t4(ts: [ark_ff::BigInt<4>; 4]) -> (ElemG2Eval, bool, Sc
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
-
+    use ark_ff::BigInteger;
     use ark_ec::AffineRepr;
-    use ark_ff::{AdditiveGroup, BigInt, Field, MontFp, UniformRand};
+    use ark_ff::{BigInt, Field, MontFp, UniformRand};
     use bitcoin_script::script;
     use num_bigint::BigUint;
     use rand::SeedableRng;
@@ -939,7 +939,7 @@ mod test {
         )
         .unwrap();
         let beta_22y = BigUint::from_str("0").unwrap();
-        let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems([
+        let beta_22 = ark_bn254::Fq2::from_base_prime_field_elems(&[
             ark_bn254::Fq::from(beta_22x.clone()),
             ark_bn254::Fq::from(beta_22y.clone()),
         ])
@@ -1034,7 +1034,12 @@ mod test {
         let temp_q1 = ark_bn254::G2Affine::rand(&mut prng);
         let q1: [BigInt::<4>; 4] = [temp_q1.x.c0.into(), temp_q1.x.c1.into(), temp_q1.y.c0.into(), temp_q1.y.c1.into()];
         let q2 = [ark_ff::BigInt::<4>::zero(), ark_ff::BigInt::<4>::zero(), ark_ff::BigInt::<4>::zero(), ark_ff::BigInt::<4>::zero()];
-        let q3 = [ark_ff::BigInt::<4>::one() << 255, ark_ff::BigInt::<4>::one() << 255, ark_ff::BigInt::<4>::one() << 255, ark_ff::BigInt::<4>::one() << 255];
+        let mut q3 = [ark_ff::BigInt::<4>::one(); 4];
+        for i in 0..4 {
+            for _ in 0..255 {
+                q3[i].muln(2);
+            }
+        }
         let q4 = [ark_ff::BigInt::<4>::one(), ark_ff::BigInt::<4>::one(), ark_ff::BigInt::<4>::zero(), ark_ff::BigInt::<4>::zero()];
 
         let test_set = vec![(q1, false), (q2, true), (q3, true), (q4, true)];

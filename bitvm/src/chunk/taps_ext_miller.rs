@@ -11,7 +11,7 @@ use crate::{
     bn254::{fp254impl::Fp254Impl, fq::Fq},
     treepp::*,
 };
-use ark_ff::{AdditiveGroup, Field, PrimeField};
+use ark_ff::{Field, PrimeField};
 use bitcoin::opcodes::all::{OP_BOOLAND, OP_FROMALTSTACK, OP_TOALTSTACK};
 use core::ops::Neg;
 

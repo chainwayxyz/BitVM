@@ -16,11 +16,11 @@ bitcoin-scriptexec = { git = "https://github.com/BitVM/rust-bitcoin-scriptexec" 
 serde = { version = "1.0.197", features = ["derive"] }
 # num-bigint = "0.4.4"
 num-traits = "0.2.18"
-ark-bn254 = { git = "https://github.com/chainwayxyz/algebra/", branch = "new-ate-loop", features = ["curve"], default-features = false }
-ark-ff = { git = "https://github.com/chainwayxyz/algebra/", branch = "new-ate-loop" }
-ark-ec = { git = "https://github.com/chainwayxyz/algebra/", branch = "new-ate-loop" }
-ark-groth16 = { git = "https://github.com/arkworks-rs/groth16" }
-ark-serialize = { git = "https://github.com/chainwayxyz/algebra/", branch = "new-ate-loop" }
+ark-bn254 = { git = "https://github.com/arkworks-rs/curves/", branch = "releases" }
+ark-ff = { git = "https://github.com/chainwayxyz/algebra/", branch = "ozan/sync-0.4.0" }
+ark-ec = { git = "https://github.com/chainwayxyz/algebra/", branch = "ozan/sync-0.4.0" }
+ark-groth16 = { git = "https://github.com/arkworks-rs/groth16", branch = "releases" }
+ark-serialize = { git = "https://github.com/chainwayxyz/algebra/", branch = "ozan/sync-0.4.0" }
 sha2 = "0.10.8"
 tokio = { version = "1.37.0", features = ["full"] }
 esplora-client = { git = "https://github.com/BitVM/rust-esplora-client" }
@@ -60,13 +60,11 @@ opt-level = 3
 lto = true
 
 [patch.crates-io]
-ark-ff = { git = "https://github.com/chainwayxyz/algebra/", branch = "new-ate-loop" }
-ark-ec = { git = "https://github.com/chainwayxyz/algebra/", branch = "new-ate-loop" }
-ark-poly = { git = "https://github.com/chainwayxyz/algebra/", branch = "new-ate-loop" }
-ark-serialize = { git = "https://github.com/chainwayxyz/algebra/", branch = "new-ate-loop" }
-ark-bn254 = { git = "https://github.com/chainwayxyz/algebra/", branch = "new-ate-loop", features = ["curve"], default-features = false }
+ark-ff = { git = "https://github.com/chainwayxyz/algebra/", branch = "ozan/sync-0.4.0" }
+ark-ec = { git = "https://github.com/chainwayxyz/algebra/", branch = "ozan/sync-0.4.0" }
+ark-poly = { git = "https://github.com/chainwayxyz/algebra/", branch = "ozan/sync-0.4.0" }
+ark-serialize = { git = "https://github.com/chainwayxyz/algebra/", branch = "ozan/sync-0.4.0" }
 ark-r1cs-std = { git = "https://github.com/arkworks-rs/r1cs-std/" }
 ark-crypto-primitives = { git = "https://github.com/arkworks-rs/crypto-primitives/" }
 ark-relations = { git = "https://github.com/arkworks-rs/snark/" }
 ark-snark = { git = "https://github.com/arkworks-rs/snark/" }
-ark-groth16 = { git = "https://github.com/arkworks-rs/groth16" }

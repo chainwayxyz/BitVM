@@ -6,7 +6,6 @@ use ark_ec::bn::{BnConfig, TwistType};
 use ark_ec::short_weierstrass::Affine;
 use ark_ec::short_weierstrass::SWCurveConfig;
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::AdditiveGroup;
 use ark_ff::Field;
 use num_traits::One;
 
@@ -280,7 +279,6 @@ mod tests {
     use num_traits::One;
 
     use super::G2HomProjective;
-    use ark_ff::AdditiveGroup;
 
     #[test]
     fn test_double_in_place() {

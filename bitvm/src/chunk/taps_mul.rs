@@ -1,4 +1,4 @@
-use ark_ff::{AdditiveGroup, Field};
+use ark_ff::Field;
 use crate::bn254::fq6::Fq6;
 use crate::bn254::g2::{hinted_ell_by_constant_affine};
 use crate::bn254::utils::{Hint};
@@ -383,7 +383,7 @@ pub(crate) fn chunk_dense_dense_mul(a: ark_bn254::Fq6, b:ark_bn254::Fq6) -> (ark
 #[cfg(test)]
 mod test {
 
-    use ark_ff::{AdditiveGroup, Field, Fp12Config, UniformRand};
+    use ark_ff::{Field, Fp12Config, UniformRand};
     use bitcoin_script::script;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;

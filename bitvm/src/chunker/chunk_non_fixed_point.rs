@@ -7,7 +7,7 @@ use crate::bn254::g2::{collect_line_coeffs, hinted_affine_add_line, hinted_affin
 use crate::chunker::elements::ElementTrait;
 use crate::treepp::*;
 use ark_ec::bn::BnConfig;
-use ark_ff::{AdditiveGroup, Field};
+use ark_ff::Field;
 use num_bigint::BigUint;
 use num_traits::One;
 use std::{ops::Neg, str::FromStr};

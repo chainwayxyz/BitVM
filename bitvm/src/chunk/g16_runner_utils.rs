@@ -4,7 +4,7 @@
 use crate::{bn254::{fp254impl::Fp254Impl, fr::Fr, utils::Hint}, chunk::taps_msm::chunk_msm};
 
 use super::{elements::{DataType, ElemG2Eval, ElementType}, taps_ext_miller::*, taps_msm::chunk_hash_p, taps_mul::{chunk_dense_dense_mul, chunk_fq12_square}, taps_point_ops::{chunk_init_t4, chunk_point_ops_and_multiply_line_evals_step_1, chunk_point_ops_and_multiply_line_evals_step_2}};
-use ark_ff::{AdditiveGroup, Field};
+use ark_ff::Field;
 use bitcoin_script::script;
 
 
