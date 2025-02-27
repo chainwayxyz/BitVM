@@ -1,3 +1,5 @@
+pub mod circuit_output_hash;
+
 use crate::treepp::*;
 use crate::signatures::wots_api::{wots160, wots256};
 
