@@ -718,7 +718,7 @@ dependencies = [
 [[package]]
 name = "ark-ec"
 version = "0.4.0"
-source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#39fc6648dbd253903eec0cb30934608e3ac3e702"
+source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#fa7808729b2ba70d7cef3793f72fadfaceda785d"
 dependencies = [
  "ark-ff 0.4.0",
  "ark-poly",
@@ -753,7 +753,7 @@ dependencies = [
 [[package]]
 name = "ark-ff"
 version = "0.4.0"
-source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#39fc6648dbd253903eec0cb30934608e3ac3e702"
+source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#fa7808729b2ba70d7cef3793f72fadfaceda785d"
 dependencies = [
  "ark-ff-asm 0.4.0",
  "ark-ff-macros 0.4.0",
@@ -783,7 +783,7 @@ dependencies = [
 [[package]]
 name = "ark-ff-asm"
 version = "0.4.0"
-source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#39fc6648dbd253903eec0cb30934608e3ac3e702"
+source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#fa7808729b2ba70d7cef3793f72fadfaceda785d"
 dependencies = [
  "quote",
  "syn 1.0.109",
@@ -804,7 +804,7 @@ dependencies = [
 [[package]]
 name = "ark-ff-macros"
 version = "0.4.0"
-source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#39fc6648dbd253903eec0cb30934608e3ac3e702"
+source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#fa7808729b2ba70d7cef3793f72fadfaceda785d"
 dependencies = [
  "num-bigint",
  "num-traits",
@@ -831,7 +831,7 @@ dependencies = [
 [[package]]
 name = "ark-poly"
 version = "0.4.0"
-source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#39fc6648dbd253903eec0cb30934608e3ac3e702"
+source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#fa7808729b2ba70d7cef3793f72fadfaceda785d"
 dependencies = [
  "ark-ff 0.4.0",
  "ark-serialize 0.4.0",
@@ -866,7 +866,7 @@ dependencies = [
 [[package]]
 name = "ark-serialize"
 version = "0.4.0"
-source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#39fc6648dbd253903eec0cb30934608e3ac3e702"
+source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#fa7808729b2ba70d7cef3793f72fadfaceda785d"
 dependencies = [
  "ark-serialize-derive",
  "ark-std 0.4.0",
@@ -877,7 +877,7 @@ dependencies = [
 [[package]]
 name = "ark-serialize-derive"
 version = "0.4.0"
-source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#39fc6648dbd253903eec0cb30934608e3ac3e702"
+source = "git+https://github.com/chainwayxyz/algebra/?branch=ozan%2Fsync-0.4.0#fa7808729b2ba70d7cef3793f72fadfaceda785d"
 dependencies = [
  "proc-macro2",
  "quote",
