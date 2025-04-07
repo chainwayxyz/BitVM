@@ -49,7 +49,7 @@ Below is a list of the components and their purpose.
   Groth16 uses BN254 to verify proof, the script is currently around 1 GB.
   Some hints are precomputed in this part, which is related to the paper "On Proving Pairings".
 
-- [**Chunker**](bitvm/src/chunker/):
+- [**Chunk**](bitvm/src/chunk/):
   Splits Groth16 into chunks.
   These chunks make sure two principles:
 
@@ -139,6 +139,13 @@ The BitVM CLI application can be invoked with various commands. The general synt
 - -v, --verifier <SECRET_KEY>: Secret key for the verifier.
 - -w, --withdrawer <SECRET_KEY>: Secret key for the withdrawer.
 - -k, --vk <KEY>: Zero-knowledge proof verifying key.
+
+#### Get Funding Amounts (useful in testing):
+1. Description: Get minimum required amounts for the funding UTXOs (to be used in testing).
+2. Usage:
+```bash
+./target/release/bridge get-funding-amounts
+```
 
 #### Get Operator Address:
 1. Description: Retrieve the address spendable by the registered operator key.

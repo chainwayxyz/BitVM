@@ -320,7 +320,7 @@ dependencies = [
  "dashmap",
  "futures",
  "futures-utils-wasm",
- "lru",
+ "lru 0.12.5",
  "pin-project",
  "reqwest 0.12.12",
  "serde",
@@ -763,7 +763,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e0c292754729c8a190e50414fd1a37093c786c709899f29c9f7daccecfa855e"
 dependencies = [
  "ahash",
- "ark-crypto-primitives-macros 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ark-crypto-primitives-macros",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-relations 0.5.1",
@@ -780,41 +780,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "ark-crypto-primitives"
-version = "0.5.0"
-source = "git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0#c71d09d85c99aded77be076d6626707224f90a7c"
-dependencies = [
- "ahash",
- "ark-crypto-primitives-macros 0.5.0 (git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0)",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-relations 0.5.1",
- "ark-serialize 0.5.0",
- "ark-snark 0.5.1",
- "ark-std 0.5.0",
- "blake2",
- "derivative",
- "digest 0.10.7",
- "fnv",
- "merlin",
- "sha2",
-]
-
-[[package]]
 name = "ark-crypto-primitives-macros"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7e89fe77d1f0f4fe5b96dfc940923d88d17b6a773808124f21e764dfb063c6a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.99",
-]
-
-[[package]]
-name = "ark-crypto-primitives-macros"
-version = "0.5.0"
-source = "git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0#c71d09d85c99aded77be076d6626707224f90a7c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1008,7 +977,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88f1d0f3a534bb54188b8dcc104307db6c56cdae574ddc3212aec0625740fc7e"
 dependencies = [
- "ark-crypto-primitives 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ark-crypto-primitives 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-poly 0.5.0",
@@ -1474,7 +1443,7 @@ dependencies = [
  "hmac",
  "http 0.2.12",
  "http-body 0.4.6",
- "lru",
+ "lru 0.12.5",
  "once_cell",
  "percent-encoding",
  "regex-lite",
@@ -1845,14 +1814,11 @@ checksum = "0b47c4ab7a93edb0c7198c5535ed9b52b63095f4e9b45279c6736cec4b856baf"
 
 [[package]]
 name = "bitcoin-script"
-version = "0.3.0"
-source = "git+https://github.com/BitVM/rust-bitcoin-script#cda22ff17ba3e471f76fa1caa0995f20058ac2a3"
+version = "0.4.0"
+source = "git+https://github.com/BitVM/rust-bitcoin-script#519088c7e5e89769910dabcb1b663fa48a21a645"
 dependencies = [
- "bincode",
  "bitcoin",
- "lazy_static",
  "script-macro",
- "serde",
  "stdext",
 ]
 
@@ -1933,7 +1899,7 @@ name = "bitvm"
 version = "0.1.0"
 dependencies = [
  "ark-bn254 0.5.0",
- "ark-crypto-primitives 0.5.0 (git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0)",
+ "ark-crypto-primitives 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16 0.5.0",
@@ -1946,7 +1912,6 @@ dependencies = [
  "bitcoin-scriptexec",
  "blake3",
  "colored",
- "hex",
  "itertools 0.13.0",
  "num-bigint 0.4.6",
  "num-traits",
@@ -2063,7 +2028,7 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "ark-bn254 0.5.0",
- "ark-crypto-primitives 0.5.0 (git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0)",
+ "ark-crypto-primitives 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16 0.5.0",
@@ -2083,9 +2048,9 @@ dependencies = [
  "dotenv",
  "esplora-client",
  "futures",
- "hex",
  "human_bytes",
  "itertools 0.13.0",
+ "lru 0.13.0",
  "musig2",
  "num-traits",
  "openssh",
@@ -3127,7 +3092,6 @@ dependencies = [
  "borsh",
  "crypto-bigint 0.5.5",
  "header-chain",
- "hex",
  "hex-literal",
  "risc0-zkvm",
  "serde",
@@ -3490,7 +3454,6 @@ dependencies = [
  "bitcoin",
  "borsh",
  "crypto-bigint 0.5.5",
- "hex",
  "hex-literal",
  "risc0-zkvm",
  "serde",
@@ -4202,6 +4165,15 @@ name = "lru"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
+dependencies = [
+ "hashbrown 0.15.2",
+]
+
+[[package]]
+name = "lru"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "227748d55f2f0ab4735d87fd623798cb6b664512fe979705f829c9f81c934465"
 dependencies = [
  "hashbrown 0.15.2",
 ]
@@ -5047,7 +5019,7 @@ dependencies = [
  "crypto-bigint 0.5.2",
  "final-spv",
  "header-chain",
- "hex",
+ "hex-conservative",
  "hex-literal",
  "num-bigint 0.4.6",
  "num-traits",
@@ -5944,12 +5916,10 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "script-macro"
-version = "0.3.0"
-source = "git+https://github.com/BitVM/rust-bitcoin-script#cda22ff17ba3e471f76fa1caa0995f20058ac2a3"
+version = "0.4.0"
+source = "git+https://github.com/BitVM/rust-bitcoin-script#519088c7e5e89769910dabcb1b663fa48a21a645"
 dependencies = [
  "bitcoin",
- "hex",
- "lazy_static",
  "proc-macro-error",
  "proc-macro2",
  "quote",
