@@ -782,10 +782,10 @@ dependencies = [
 [[package]]
 name = "ark-crypto-primitives"
 version = "0.5.0"
-source = "git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0#c71d09d85c99aded77be076d6626707224f90a7c"
+source = "git+https://github.com/arkworks-rs/crypto-primitives?tag=v0.5.0#b9414b6e89f541f40ee2489abcc2ee998821fc03"
 dependencies = [
  "ahash",
- "ark-crypto-primitives-macros 0.5.0 (git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0)",
+ "ark-crypto-primitives-macros 0.5.0 (git+https://github.com/arkworks-rs/crypto-primitives?tag=v0.5.0)",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-relations 0.5.1",
@@ -814,7 +814,7 @@ dependencies = [
 [[package]]
 name = "ark-crypto-primitives-macros"
 version = "0.5.0"
-source = "git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0#c71d09d85c99aded77be076d6626707224f90a7c"
+source = "git+https://github.com/arkworks-rs/crypto-primitives?tag=v0.5.0#b9414b6e89f541f40ee2489abcc2ee998821fc03"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1933,7 +1933,7 @@ name = "bitvm"
 version = "0.1.0"
 dependencies = [
  "ark-bn254 0.5.0",
- "ark-crypto-primitives 0.5.0 (git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0)",
+ "ark-crypto-primitives 0.5.0 (git+https://github.com/arkworks-rs/crypto-primitives?tag=v0.5.0)",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16 0.5.0",
@@ -2063,7 +2063,7 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "ark-bn254 0.5.0",
- "ark-crypto-primitives 0.5.0 (git+https://github.com/arkworks-rs/crypto-primitives?branch=release-0.5.0)",
+ "ark-crypto-primitives 0.5.0 (git+https://github.com/arkworks-rs/crypto-primitives?tag=v0.5.0)",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16 0.5.0",
