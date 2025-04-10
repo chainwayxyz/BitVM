@@ -21,11 +21,3 @@ pub fn hash_pair(left: [u8; 32], right: [u8; 32]) -> [u8; 32] {
     hasher.update(right);
     hasher.finalize().into()
 }
-
-pub fn u8_32_to_u32_8(bytes: [u8; 32]) -> [u32; 8] {
-    let mut result = [0u32; 8];
-    for i in 0..8 {
-        result[i] = u32::from_le_bytes(bytes[i * 4..(i + 1) * 4].try_into().unwrap());
-    }
-    result
-}

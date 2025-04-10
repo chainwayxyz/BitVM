@@ -1,6 +1,5 @@
 use final_circuit::FinalCircuitInput;
 use risc0_zkvm::guest::env;
-use utils::u8_32_to_u32_8;
 use zkvm::ZkvmGuest;
 
 pub mod final_circuit;
@@ -12,22 +11,22 @@ pub mod zkvm;
 pub use risc0_zkvm;
 
 /// The method ID for the header chain circuit.
-const HEADER_CHAIN_GUEST_ID: [u8; 32] = {
+const HEADER_CHAIN_GUEST_ID: [u32; 8] = {
     match option_env!("BITCOIN_NETWORK") {
         Some(network) if matches!(network.as_bytes(), b"mainnet") => {
-            hex_literal::hex!("a764839f5d78b6027146a178338b86c45600828bdc05993c457dd689021b4ebf")
+            [2676188327, 45512797, 2023835249, 3297151795, 2340552790, 1016661468, 2312535365, 3209566978]
         }
         Some(network) if matches!(network.as_bytes(), b"testnet4") => {
-            hex_literal::hex!("3f0e327745831156507c290d7e71ea24829a4c1af0020bac2ed4df9ab1d314f0")
+            [1999769151, 1443988293, 220822608, 619344254, 441227906, 2886402800, 2598360110, 4027896753]
         }
         Some(network) if matches!(network.as_bytes(), b"signet") => {
-            hex_literal::hex!("c20d2289319ef9bd0ccb210bda359e3cbd4cab4e08747f9f87b3639c898aac0c")
+            [2300710338, 3187252785, 186764044, 1017001434, 1319849149, 2675930120, 2623779719, 212634249]
         }
         Some(network) if matches!(network.as_bytes(), b"regtest") => {
-            hex_literal::hex!("bc2b6560aeb587f7dca25c067d72badaadade5ec360b4006bcc76e99c4c6838f")
+            [1617243068, 4152866222, 106734300, 3669652093, 3974475181, 104860470, 2574174140, 2407777988]
         }
         None => {
-            hex_literal::hex!("a764839f5d78b6027146a178338b86c45600828bdc05993c457dd689021b4ebf")
+            [2676188327, 45512797, 2023835249, 3297151795, 2340552790, 1016661468, 2312535365, 3209566978]
         }
         _ => panic!("Invalid network type"),
     }
@@ -37,8 +36,7 @@ const HEADER_CHAIN_GUEST_ID: [u8; 32] = {
 pub fn final_circuit(guest: &impl ZkvmGuest) {
     let start = env::cycle_count();
     let input: FinalCircuitInput = guest.read_from_host::<FinalCircuitInput>();
-    let header_chain_guest_id = u8_32_to_u32_8(HEADER_CHAIN_GUEST_ID);
-    guest.verify(header_chain_guest_id, &input.block_header_circuit_output);
+    guest.verify(HEADER_CHAIN_GUEST_ID, &input.block_header_circuit_output);
     input.spv.verify(
         input
             .block_header_circuit_output

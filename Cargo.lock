@@ -3441,6 +3441,7 @@ dependencies = [
 name = "header-chain-circuit"
 version = "0.1.0"
 dependencies = [
+ "risc0-binfmt",
  "risc0-build",
 ]
 

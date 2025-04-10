@@ -1,4 +1,5 @@
 use risc0_build::{embed_methods_with_options, DockerOptionsBuilder, GuestOptionsBuilder};
+use risc0_binfmt::compute_image_id;
 use std::{collections::HashMap, env, fs, path::Path};
 
 fn main() {
@@ -174,4 +175,26 @@ fn copy_binary_to_elfs_folder(network: String) {
         ),
         Err(e) => println!("cargo:warning=Failed to copy binary: {}", e),
     }
+
+    // Convert network String into &str
+    let elf_bytes: &[u8] = match network.as_str() {
+        "mainnet" => include_bytes!("../../prover/elfs/mainnet-header-chain-guest.bin"),
+        "testnet4" => include_bytes!("../../prover/elfs/testnet4-header-chain-guest.bin"),
+        "signet" => include_bytes!("../../prover/elfs/signet-header-chain-guest.bin"),
+        "regtest" => include_bytes!("../../prover/elfs/regtest-header-chain-guest.bin"),
+        _ => {
+            println!("cargo:warning=Invalid network specified, defaulting to mainnet");
+            include_bytes!("../../prover/elfs/mainnet-header-chain-guest.bin")
+        }
+    };
+
+    let method_id = compute_image_id(&elf_bytes).unwrap();
+    println!(
+        "cargo:warning=Computed method ID: {:x?}",
+        method_id
+    );
+    println!(
+        "cargo:warning=Computed method ID words: {:?}",
+        method_id.as_words()
+    );
 }
