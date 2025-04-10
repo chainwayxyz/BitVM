@@ -36,6 +36,7 @@ fuzzing = []
 
 [dev-dependencies]
 serde_json.workspace = true
+hex.workspace = true
 
 [profile.dev]
 opt-level = 3
