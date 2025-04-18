@@ -146,7 +146,7 @@ fn copy_binary_to_elfs_folder(network: String) {
     let base_dir = current_dir.join("../..");
 
     // Create elfs directory if it doesn't exist
-    let elfs_dir = base_dir.join("prover/elfs");
+    let elfs_dir = base_dir.join("bitvm-prover/elfs");
     if !elfs_dir.exists() {
         fs::create_dir_all(&elfs_dir).expect("Failed to create elfs directory");
         println!("cargo:warning=Created elfs directory at {:?}", elfs_dir);
