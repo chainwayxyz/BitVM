@@ -16,21 +16,19 @@ use std::{env, fs};
 
 pub mod docker;
 
+pub const MAINNET_HEADER_CHAIN_GUEST_ELF: &[u8] = include_bytes!("../elfs/mainnet-header-chain-guest.bin");
+pub const TESTNET4_HEADER_CHAIN_GUEST_ELF: &[u8] = include_bytes!("../elfs/testnet4-header-chain-guest.bin");
+pub const SIGNET_HEADER_CHAIN_GUEST_ELF: &[u8] = include_bytes!("../elfs/signet-header-chain-guest.bin");
+pub const REGTEST_HEADER_CHAIN_GUEST_ELF: &[u8] = include_bytes!("../elfs/regtest-header-chain-guest.bin");
+
+// This is public so these ELFs can be used in other crates
 const HEADER_CHAIN_GUEST_ELF: &[u8] = {
     match option_env!("BITCOIN_NETWORK") {
-        Some(network) if matches!(network.as_bytes(), b"mainnet") => {
-            include_bytes!("../elfs/mainnet-header-chain-guest.bin")
-        }
-        Some(network) if matches!(network.as_bytes(), b"testnet4") => {
-            include_bytes!("../elfs/testnet4-header-chain-guest.bin")
-        }
-        Some(network) if matches!(network.as_bytes(), b"signet") => {
-            include_bytes!("../elfs/signet-header-chain-guest.bin")
-        }
-        Some(network) if matches!(network.as_bytes(), b"regtest") => {
-            include_bytes!("../elfs/regtest-header-chain-guest.bin")
-        }
-        None => include_bytes!("../elfs/mainnet-header-chain-guest.bin"),
+        Some(network) if matches!(network.as_bytes(), b"mainnet") => MAINNET_HEADER_CHAIN_GUEST_ELF,
+        Some(network) if matches!(network.as_bytes(), b"testnet4") => TESTNET4_HEADER_CHAIN_GUEST_ELF,
+        Some(network) if matches!(network.as_bytes(), b"signet") => SIGNET_HEADER_CHAIN_GUEST_ELF,
+        Some(network) if matches!(network.as_bytes(), b"regtest") => REGTEST_HEADER_CHAIN_GUEST_ELF,
+        None => MAINNET_HEADER_CHAIN_GUEST_ELF,
         _ => panic!("Invalid path or ELF file"),
     }
 };
