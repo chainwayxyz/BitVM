@@ -8,7 +8,7 @@ members = [
     "header-chain/header-chain-guest",
     "final-spv",
     "final-spv/final-spv-guest",
-    "prover",
+    "bitvm-prover",
 ]
 
 default-members = [
