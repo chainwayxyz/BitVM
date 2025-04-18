@@ -178,13 +178,13 @@ fn copy_binary_to_elfs_folder(network: String) {
 
     // Convert network String into &str
     let elf_bytes: &[u8] = match network.as_str() {
-        "mainnet" => include_bytes!("../../prover/elfs/mainnet-header-chain-guest.bin"),
-        "testnet4" => include_bytes!("../../prover/elfs/testnet4-header-chain-guest.bin"),
-        "signet" => include_bytes!("../../prover/elfs/signet-header-chain-guest.bin"),
-        "regtest" => include_bytes!("../../prover/elfs/regtest-header-chain-guest.bin"),
+        "mainnet" => include_bytes!("../../bitvm-prover/elfs/mainnet-header-chain-guest.bin"),
+        "testnet4" => include_bytes!("../../bitvm-prover/elfs/testnet4-header-chain-guest.bin"),
+        "signet" => include_bytes!("../../bitvm-prover/elfs/signet-header-chain-guest.bin"),
+        "regtest" => include_bytes!("../../bitvm-prover/elfs/regtest-header-chain-guest.bin"),
         _ => {
             println!("cargo:warning=Invalid network specified, defaulting to mainnet");
-            include_bytes!("../../prover/elfs/mainnet-header-chain-guest.bin")
+            include_bytes!("../../bitvm-prover/elfs/mainnet-header-chain-guest.bin")
         }
     };
 
