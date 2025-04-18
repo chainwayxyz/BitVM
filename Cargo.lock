@@ -1865,6 +1865,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitvm-prover"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "blake3",
+ "borsh",
+ "crypto-bigint 0.5.2",
+ "final-spv",
+ "header-chain",
+ "hex-conservative",
+ "hex-literal",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "risc0-binfmt",
+ "risc0-circuit-recursion",
+ "risc0-groth16",
+ "risc0-zkp",
+ "risc0-zkvm",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "blake2"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5100,30 +5124,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.99",
-]
-
-[[package]]
-name = "prover"
-version = "0.1.0"
-dependencies = [
- "bitcoin",
- "blake3",
- "borsh",
- "crypto-bigint 0.5.2",
- "final-spv",
- "header-chain",
- "hex-conservative",
- "hex-literal",
- "num-bigint 0.4.6",
- "num-traits",
- "risc0-binfmt",
- "risc0-circuit-recursion",
- "risc0-groth16",
- "risc0-zkp",
- "risc0-zkvm",
- "serde_json",
- "sha2",
- "tempfile",
 ]
 
 [[package]]
