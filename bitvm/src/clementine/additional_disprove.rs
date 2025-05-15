@@ -25,9 +25,12 @@ const NO_ACKNOWLEDGMENT_VALUE: ChallengeHashType = [0u8; 20]; // for not acknowl
 const WINTERNITZ_BLOCK_LEN: u32 = 4;
 const BLAKE3_OUTPUT_LEN: u32 = 32; // should be equal to G16_PUBLIC_INPUT_LEN
 
-/// Start of the PAYOUT_TX_BLOCKHASH's checksig's opcodes, precalculated for optimization \
-/// If any changes are made to the creating script functions, this should be changed to with the corresponding calculation function inside the tests
-const PRECALCULATED_REPLACEMENT_INDEX: usize = 17452;
+/// If any changes are made to the creating script functions, these should be changed to with the corresponding calculation function inside the tests
+
+/// Start of the PAYOUT_TX_BLOCKHASH's checksig's opcodes, precalculated for optimization
+const PRECALCULATED_REPLACEMENT_INDEX_0: usize = 17452;
+/// Start of the DEPOSIT_CONSTANT's pushing opcodes, precalculated for optimization
+const PRECALCULATED_REPLACEMENT_INDEX_1: usize = 89793;
 
 /// The Winternitz output reverses the message, and BLAKE3 swaps the nibbles.
 /// This script reorders the nibbles of a Winternitz `checksig_verify` output (message) so that it is in the necessary format for BLAKE3.
@@ -124,12 +127,12 @@ fn get_witness_with_signatures(
 ///    ]
 ///    ```
 ///     
-///     The `payout_tx_blockhash_pk` can be replaced with another public key, using the returned index and the function `replace_payout_tx_blockhash`
+///     The `payout_tx_blockhash_pk` and `deposit_constant` can be replaced with other values, using the function `replace_payout_tx_blockhash`
 ///
 /// ## Arguments
 ///
 /// * `combined_method_id_constant` - Combined Method ID, in bytes
-/// * `deposit_constant` - Deposit Constant, in bytes
+/// * `deposit_constant` - Deposit Constant, in bytes, this constant is later replacable by other functions
 /// * `g16_public_input_pk` - Winternitz Public key for Groth16 Public Input used in BitVM
 /// * `payout_tx_blockhash_pk` - Winternitz Public key for Payout Transaction Blockhash, this public key is later replacable by other functions
 /// * `latest_blockhash_pk` - Winternitz Public key for Latest Blockhash
@@ -138,15 +141,12 @@ fn get_witness_with_signatures(
 ///
 /// ## Returns
 ///
-/// A tuple containing:
 /// * `Vec<u8>` - The compiled Bitcoin script as a byte vector.
-/// * `usize` - The replacement index for payout_tx_blockhash_pk's signature verification
 ///
 /// ## Notes
 ///
 /// - Checking the number of arguments might be necessary, in order to block malicious attempts
 /// - To use 'wots_api.rs' public keys, it is enough to cast them to vectors
-/// - If another script is pushed to the start of the returned script, returned replacement index needs to be increased by the length of such script, to be used with `replace_payout_tx_blockhash`
 pub fn create_additional_replacable_disprove_script(
     combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
     deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
@@ -155,11 +155,11 @@ pub fn create_additional_replacable_disprove_script(
     latest_blockhash_pk: PublicKey,
     challenge_sending_watchtowers_pk: PublicKey,
     mut operator_challenge_ack_hashes: [ChallengeHashType; WATHCTOWER_COUNT],
-) -> (Vec<u8>, usize) {
+) -> Vec<u8> {
     change_the_order_of_operator_challenge_acks_according_to_blake3_stack(
         &mut operator_challenge_ack_hashes,
     );
-    let pre_replacement = script! {
+    let mut pre_payout_tx_blockhash = script! {
         // I'm not checking the number of arguments currently, but I maybe should? Think about this
 
         { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((G16_PUBLIC_INPUT_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &g16_public_input_pk) }
@@ -210,9 +210,9 @@ pub fn create_additional_replacable_disprove_script(
         for _ in 0..(LATEST_BLOCKHASH_LEN * 2) {
             OP_TOALTSTACK
         }
-    };
-    ( script! {
-        { pre_replacement }
+    }.compile().to_bytes();
+
+    let pre_deposit_constant = script! {
         { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((PAYOUT_TX_BLOCKHASH_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &payout_tx_blockhash_pk) } // This will be replaced
         { reorder_winternitz_output_for_blake3(PAYOUT_TX_BLOCKHASH_LEN * 2) } //Winternitz reverses the message
 
@@ -229,6 +229,9 @@ pub fn create_additional_replacable_disprove_script(
         for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
             OP_TOALTSTACK
         }
+    }.compile().to_bytes();
+
+    let rest_of_the_script = script! {
         for x in bytes_to_nibbles(deposit_constant.to_vec()) {
             { x }
         }
@@ -262,22 +265,27 @@ pub fn create_additional_replacable_disprove_script(
                 OP_TOALTSTACK
             }
         }
-    }.compile().to_bytes(), PRECALCULATED_REPLACEMENT_INDEX)
+    }
+    .compile()
+    .to_bytes();
+    pre_payout_tx_blockhash.extend(pre_deposit_constant);
+    pre_payout_tx_blockhash.extend(rest_of_the_script);
+    return pre_payout_tx_blockhash;
 }
 
-/// Exactly the same as `create_additional_replacable_disprove_script`, but creates the script without expecting `payout_tx_blockhash_pk' as an argument, with a dummy value
+/// Exactly the same as `create_additional_replacable_disprove_script`, but creates the script without expecting `payout_tx_blockhash_pk' and `deposit_constant` as an argument, with dummy elements
 pub fn create_additional_replacable_disprove_script_with_dummy(
     combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
-    deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
+    /* deposit_constant: [u8; DEPOSIT_CONSTANT_LEN], */
     g16_public_input_pk: PublicKey,
     /* payout_tx_blockhash_pk: PublicKey, */
     latest_blockhash_pk: PublicKey,
     challenge_sending_watchtowers_pk: PublicKey,
     operator_challenge_ack_hashes: [ChallengeHashType; WATHCTOWER_COUNT],
-) -> (Vec<u8>, usize) {
+) -> Vec<u8> {
     create_additional_replacable_disprove_script(
         combined_method_id_constant,
-        deposit_constant,
+        [0u8; DEPOSIT_CONSTANT_LEN],
         g16_public_input_pk,
         generate_public_key(
             &Parameters::new_by_bit_length(PAYOUT_TX_BLOCKHASH_LEN as u32 * 8, 4),
@@ -335,29 +343,28 @@ pub fn validate_assertions_for_additional_script(
     }
 }
 
-/// Replaces the Payout Transaction Blockhash Public Key for the given script
+/// Replaces the payout Transaction blockhash public Key and deposit constant for the given script
 ///
 /// This function modifies the provided script by replacing the `checksig_verify` of the Payout Transaction Blockhash
 ///
 /// ## Arguments
 ///
 /// * `replacable_script` - Compiled additional disprove script
-/// * `replacement_index` - The index within the script where the replacement should occur. Should be modified after the creation if the additional script is pushed after another script
-/// * `payout_tx_blockhash_pk` - The replacement Public Key for Payout Transaction Blockhash
+/// * `payout_tx_blockhash_pk` - The replacement public key for payout transaction blockhash
+/// * `deposit_constant` - The replacement deposit constant
 ///
 /// ## Returns
 ///
 /// * `Vec<u8>` - The modified script with the updated payout transaction blockhash verification.  
 ///
 /// ## Note
-/// - MIGHT NOT BE SAFE, DUE TO THE REPLACEMENT INDEX CHANGING WITH WITNESS OPTIMIZATIONS, but seems fine for now
 /// - To use `wots_api.rs` public keys, it is enough to cast them to vectors
 pub fn replace_payout_tx_blockhash(
     mut replacable_script: Vec<u8>,
-    replacement_index: usize,
     payout_tx_blockhash_pk: PublicKey,
+    deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
 ) -> Vec<u8> {
-    let replacement = WINTERNITZ_VERIFIER
+    let payout_tx_replacement = WINTERNITZ_VERIFIER
         .checksig_verify(
             &Parameters::new_by_bit_length(
                 (PAYOUT_TX_BLOCKHASH_LEN * 8) as u32,
@@ -367,8 +374,18 @@ pub fn replace_payout_tx_blockhash(
         )
         .compile()
         .to_bytes();
-    for i in 0..replacement.len() {
-        replacable_script[replacement_index + i] = replacement[i];
+    let deposit_constant_replacement = script! {
+        for x in bytes_to_nibbles(deposit_constant.to_vec()) {
+            { x }
+        }
+    }
+    .compile()
+    .to_bytes();
+    for i in 0..payout_tx_replacement.len() {
+        replacable_script[PRECALCULATED_REPLACEMENT_INDEX_0 + i] = payout_tx_replacement[i];
+    }
+    for i in 0..deposit_constant_replacement.len() {
+        replacable_script[PRECALCULATED_REPLACEMENT_INDEX_1 + i] = deposit_constant_replacement[i];
     }
     replacable_script
 }
@@ -438,21 +455,20 @@ mod tests {
         lists.iter().flat_map(|list| list.iter().cloned()).collect()
     }
 
-    /// This function changes with the `create_additional_replacable_disprove_script`and calculates the starting index of the payout_tx_blockhash to make it a constant value
-    fn calculate_additional_replacable_disprove_script_replacement_index(
+    /// This function changes with the `create_additional_replacable_disprove_script` (just copy pasted from it) and calculates the starting index of replacements
+    fn calculate_additional_replacable_disprove_script_replacement_indices(
         _: [u8; COMBINED_METHOD_ID_LEN],
         _: [u8; DEPOSIT_CONSTANT_LEN],
         g16_public_input_pk: PublicKey,
-        _: PublicKey,
+        payout_tx_blockhash_pk: PublicKey,
         latest_blockhash_pk: PublicKey,
         challenge_sending_watchtowers_pk: PublicKey,
         mut operator_challenge_ack_hashes: [ChallengeHashType; WATHCTOWER_COUNT],
-    ) -> usize {
+    ) -> (usize, usize) {
         change_the_order_of_operator_challenge_acks_according_to_blake3_stack(
             &mut operator_challenge_ack_hashes,
         );
-
-        let pre_replacement = script! {
+        let pre_payout_tx_blockhash = script! {
             // I'm not checking the number of arguments currently, but I maybe should? Think about this
 
             { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((G16_PUBLIC_INPUT_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &g16_public_input_pk) }
@@ -503,8 +519,71 @@ mod tests {
             for _ in 0..(LATEST_BLOCKHASH_LEN * 2) {
                 OP_TOALTSTACK
             }
-        };
-        pre_replacement.compile().len()
+        }.compile().to_bytes();
+
+        let pre_deposit_constant = script! {
+            { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((PAYOUT_TX_BLOCKHASH_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &payout_tx_blockhash_pk) } // This will be replaced
+            { reorder_winternitz_output_for_blake3(PAYOUT_TX_BLOCKHASH_LEN * 2) } //Winternitz reverses the message
+
+            for _ in 0..(LATEST_BLOCKHASH_LEN * 2) {
+                OP_FROMALTSTACK
+            }
+            OP_FROMALTSTACK // preimage check result
+            for _ in 0..(CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) {
+                OP_FROMALTSTACK
+            }
+            { roll_constant(CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } //send preimage result to the back
+            OP_TOALTSTACK
+            { blake3_u4_script((PAYOUT_TX_BLOCKHASH_LEN + LATEST_BLOCKHASH_LEN + CHALLENGE_SENDING_WATCHTOWERS_LEN) as u32) }
+            for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
+                OP_TOALTSTACK
+            }
+        }.compile().to_bytes();
+
+        /*
+        let rest_of_the_script = script! {
+            for x in bytes_to_nibbles(deposit_constant.to_vec()) {
+                { x }
+            }
+            for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
+                OP_FROMALTSTACK
+            }
+            { blake3_u4_script(DEPOSIT_CONSTANT_LEN as u32 + BLAKE3_OUTPUT_LEN) }
+            for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
+                OP_TOALTSTACK
+            }
+            for x in bytes_to_nibbles(combined_method_id_constant.to_vec()) {
+                { x }
+            }
+            for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
+                OP_FROMALTSTACK
+            }
+            { blake3_u4_script(COMBINED_METHOD_ID_LEN as u32 + BLAKE3_OUTPUT_LEN) }
+            OP_FROMALTSTACK // preimage check result
+            for _ in 0..(G16_PUBLIC_INPUT_LEN * 2) {
+                OP_FROMALTSTACK
+            }
+            { roll_constant(G16_PUBLIC_INPUT_LEN * 2) } //send preimage result to the back
+            OP_TOALTSTACK
+            // This can be done in reverse more efficiently, but meh. For later revisions
+            for i in (0..(G16_PUBLIC_INPUT_LEN * 2)).rev() {
+                { roll_constant(i + 1) }
+                OP_NUMNOTEQUAL // Both in range, so should be fine
+                OP_FROMALTSTACK
+                OP_BOOLOR
+                if i != 0 {
+                    OP_TOALTSTACK
+                }
+            }
+        }
+
+        .compile()
+        .to_bytes();
+        */
+        (
+            pre_payout_tx_blockhash.len(),
+            pre_payout_tx_blockhash.len() + pre_deposit_constant.len(),
+        )
     }
     struct SignerData {
         combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
@@ -597,7 +676,7 @@ mod tests {
         p
     }
 
-    fn create_script_with_public_data(public_data: &PublicData) -> (Vec<u8>, usize) {
+    fn create_script_with_public_data(public_data: &PublicData) -> Vec<u8> {
         create_additional_replacable_disprove_script(
             public_data.combined_method_id_constant,
             public_data.deposit_constant,
@@ -611,10 +690,10 @@ mod tests {
 
     fn create_script_with_public_data_and_dummy_tx_blockhash_pk(
         public_data: &PublicData,
-    ) -> (Vec<u8>, usize) {
+    ) -> Vec<u8> {
         create_additional_replacable_disprove_script_with_dummy(
             public_data.combined_method_id_constant,
-            public_data.deposit_constant,
+            /* public_data.deposit_constant , */
             public_data.g16_public_input_pk.clone(),
             /* public_data.payout_tx_blockhash_pk.clone(), */
             public_data.latest_blockhash_pk.clone(),
@@ -623,8 +702,8 @@ mod tests {
         )
     }
 
-    fn calculate_replacement_length_with_public_data(public_data: &PublicData) -> usize {
-        calculate_additional_replacable_disprove_script_replacement_index(
+    fn calculate_replacement_indices_with_public_data(public_data: &PublicData) -> (usize, usize) {
+        calculate_additional_replacable_disprove_script_replacement_indices(
             public_data.combined_method_id_constant,
             public_data.deposit_constant,
             public_data.g16_public_input_pk.clone(),
@@ -838,7 +917,7 @@ mod tests {
         for seed in 0..100 {
             let signer_data = random_signer_data(seed);
             let public_data = get_public_data_from_signer(&signer_data);
-            let (s, _) = create_script_with_public_data(&public_data);
+            let s = create_script_with_public_data(&public_data);
             non_malicious_test_validate(s.clone(), &signer_data);
             malicious_revealed_preimage_validate(s.clone(), &signer_data);
             malicious_gibberish_g16_data_validate(s.clone(), &signer_data);
@@ -846,15 +925,15 @@ mod tests {
     }
 
     #[test]
-    fn test_constant_replacement_index() {
-        // This shouldn't change,  but just in case
+    fn test_constant_replacement_indices() {
+        // This shouldn't change, but just in case
         for seed in 0..100 {
             let signer_data = random_signer_data(seed);
             let public_data = get_public_data_from_signer(&signer_data);
-            let actual = calculate_replacement_length_with_public_data(&public_data);
+            let (actual0, actual1) = calculate_replacement_indices_with_public_data(&public_data);
             assert!(
-                actual == PRECALCULATED_REPLACEMENT_INDEX,
-                "Precalculated length is wrong, it should be {actual}, (generated with {seed})"
+                actual0 == PRECALCULATED_REPLACEMENT_INDEX_0 && actual1 == PRECALCULATED_REPLACEMENT_INDEX_1,
+                "Precalculated lengths are wrong, they should be ({actual0}, {actual1}), (generated with seed: {seed})"
             );
         }
     }
@@ -864,12 +943,10 @@ mod tests {
         for seed in 0..100 {
             let mut signer_data = random_signer_data(seed);
             let public_data = get_public_data_from_signer(&signer_data);
-            let (mut s, replacement_index) =
-                create_script_with_public_data_and_dummy_tx_blockhash_pk(&public_data);
+            let mut s = create_script_with_public_data_and_dummy_tx_blockhash_pk(&public_data);
             signer_data.payout_tx_blockhash_sk = generate_winternitz_secret_key();
             s = replace_payout_tx_blockhash(
                 s,
-                replacement_index,
                 generate_public_key(
                     &Parameters::new_by_bit_length(
                         PAYOUT_TX_BLOCKHASH_LEN as u32 * 8,
@@ -877,6 +954,7 @@ mod tests {
                     ),
                     &signer_data.payout_tx_blockhash_sk,
                 ),
+                signer_data.deposit_constant,
             );
             non_malicious_test_validate(s.clone(), &signer_data);
             malicious_revealed_preimage_validate(s.clone(), &signer_data);
