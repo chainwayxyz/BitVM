@@ -359,7 +359,7 @@ pub fn validate_assertions_for_additional_script(
 ///
 /// ## Note
 /// - To use `wots_api.rs` public keys, it is enough to cast them to vectors
-pub fn replace_payout_tx_blockhash(
+pub fn replace_placeholders_in_script(
     mut replacable_script: Vec<u8>,
     payout_tx_blockhash_pk: PublicKey,
     deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
