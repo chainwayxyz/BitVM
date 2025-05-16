@@ -19,8 +19,8 @@ const DEPOSIT_CONSTANT_LEN: usize = 32;
 const G16_PUBLIC_INPUT_LEN: usize = 32;
 const PAYOUT_TX_BLOCKHASH_LEN: usize = 20;
 const LATEST_BLOCKHASH_LEN: usize = 20;
-const CHALLENGE_SENDING_WATCHTOWERS_LEN: usize = 20; // this * 8 watchtowers assumed to exist, if there are %8 != 0 wathctowers, we can change the code
-const WATHCTOWER_COUNT: usize = CHALLENGE_SENDING_WATCHTOWERS_LEN * 8;
+const MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN: usize = 20;
+const MAX_WATCHTOWER_COUNT: usize = MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 8;
 const NO_ACKNOWLEDGMENT_VALUE: ChallengeHashType = [0u8; 20]; // for not acknowledged preimages, might not be safe
 const WINTERNITZ_BLOCK_LEN: u32 = 4;
 const BLAKE3_OUTPUT_LEN: u32 = 32; // should be equal to G16_PUBLIC_INPUT_LEN
@@ -52,9 +52,9 @@ fn reorder_winternitz_output_for_blake3(len: usize) -> Script {
 /// To accommodate for this change for any operator_challenge_ack related value, ordering of each 8 consecutive elements are changed
 /// i.e. from a_0, a_1, a_2, a_3, a_4, a_5, a_6, a_7, to a_4, a_5, a_6, a_7, a_0, a_1, a_2, a_3
 fn change_the_order_of_operator_challenge_acks_according_to_blake3_stack<T>(
-    operator_challenge_ack: &mut [T; WATHCTOWER_COUNT],
+    operator_challenge_ack: &mut [T; MAX_WATCHTOWER_COUNT],
 ) {
-    for i in (0..WATHCTOWER_COUNT).step_by(8) {
+    for i in (0..MAX_WATCHTOWER_COUNT).step_by(8) {
         let (first_half, second_half) = operator_challenge_ack.split_at_mut(i + 4);
         first_half[i..i + 4].swap_with_slice(&mut second_half[..4]);
     }
@@ -66,13 +66,18 @@ fn get_witness_with_signatures(
     payout_tx_blockhash_signature: Witness,
     latest_blockhash_signature: Witness,
     challenge_sending_watchtowers_signature: Witness,
-    mut operator_challenge_ack_preimages: [Option<ChallengeHashType>; WATHCTOWER_COUNT], // None's are turned into random values
+    operator_challenge_ack_preimages: Vec<Option<ChallengeHashType>>, // None's are turned into random values
 ) -> Witness {
+    let mut operator_challenge_ack_preimages_arr: [Option<ChallengeHashType>;
+        MAX_WATCHTOWER_COUNT] = [None; MAX_WATCHTOWER_COUNT];
+    for i in 0..operator_challenge_ack_preimages.len() {
+        operator_challenge_ack_preimages_arr[i] = operator_challenge_ack_preimages[i];
+    }
     change_the_order_of_operator_challenge_acks_according_to_blake3_stack(
-        &mut operator_challenge_ack_preimages,
+        &mut operator_challenge_ack_preimages_arr,
     );
-    let operator_challenge_ack_preimages_push_values: [ChallengeHashType; WATHCTOWER_COUNT] =
-        operator_challenge_ack_preimages
+    let operator_challenge_ack_preimages_push_values: [ChallengeHashType; MAX_WATCHTOWER_COUNT] =
+        operator_challenge_ack_preimages_arr
             .iter()
             .map(|preimage| preimage.clone().unwrap_or(NO_ACKNOWLEDGMENT_VALUE))
             .collect::<Vec<_>>()
@@ -137,6 +142,7 @@ fn get_witness_with_signatures(
 /// * `payout_tx_blockhash_pk` - Winternitz Public key for Payout Transaction Blockhash, this public key is later replacable by other functions
 /// * `latest_blockhash_pk` - Winternitz Public key for Latest Blockhash
 /// * `challenge_sending_watchtowers_pk` - Winternitz Public key for the array of challenge sending watchtowers; in this array, watchtowers are numerated in the order of the numbers and their least significant bit
+///   (Even if the number of watchtowers is less than 160, this public key should be for a 20 byte array, and 0's should be used for non existent ones)
 /// * `operator_challenge_ack_hashes` - Operator's acknowledgement hashes for each watchtower, i.e. result of OP_HASH160'd preimages
 ///
 /// ## Returns
@@ -154,10 +160,20 @@ pub fn create_additional_replacable_disprove_script(
     payout_tx_blockhash_pk: PublicKey,
     latest_blockhash_pk: PublicKey,
     challenge_sending_watchtowers_pk: PublicKey,
-    mut operator_challenge_ack_hashes: [ChallengeHashType; WATHCTOWER_COUNT],
+    operator_challenge_ack_hashes: Vec<ChallengeHashType>,
 ) -> Vec<u8> {
+    assert!(
+        operator_challenge_ack_hashes.len() <= MAX_WATCHTOWER_COUNT,
+        "Number of Watchtowers is more than allowed"
+    );
+    let mut operator_challenge_ack_hashes_arr: [ChallengeHashType; MAX_WATCHTOWER_COUNT] =
+        [ChallengeHashType::default(); MAX_WATCHTOWER_COUNT];
+
+    for i in 0..operator_challenge_ack_hashes.len() {
+        operator_challenge_ack_hashes_arr[i] = operator_challenge_ack_hashes[i].clone();
+    }
     change_the_order_of_operator_challenge_acks_according_to_blake3_stack(
-        &mut operator_challenge_ack_hashes,
+        &mut operator_challenge_ack_hashes_arr,
     );
     let mut pre_payout_tx_blockhash = script! {
         // I'm not checking the number of arguments currently, but I maybe should? Think about this
@@ -168,13 +184,13 @@ pub fn create_additional_replacable_disprove_script(
         for _ in 0..(G16_PUBLIC_INPUT_LEN * 2) {
             OP_TOALTSTACK
         }
-        { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((CHALLENGE_SENDING_WATCHTOWERS_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &challenge_sending_watchtowers_pk) }
-        { reorder_winternitz_output_for_blake3(CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } //Winternitz reverses the message
+        { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &challenge_sending_watchtowers_pk) }
+        { reorder_winternitz_output_for_blake3(MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } //Winternitz reverses the message
 
         { 0 } // If all of the hashes are valid, this should stay as zero
         OP_TOALTSTACK
 
-        for (i, chunk) in operator_challenge_ack_hashes.chunks(4).enumerate().rev() {
+        for (i, chunk) in operator_challenge_ack_hashes_arr.chunks(4).enumerate().rev() {
             OP_DUP OP_FROMALTSTACK OP_SWAP OP_TOALTSTACK OP_TOALTSTACK
             for b in (0..4).rev() {
                 if b != 0 {
@@ -220,12 +236,12 @@ pub fn create_additional_replacable_disprove_script(
             OP_FROMALTSTACK
         }
         OP_FROMALTSTACK // preimage check result
-        for _ in 0..(CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) {
+        for _ in 0..(MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) {
             OP_FROMALTSTACK
         }
-        { roll_constant(CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } //send preimage result to the back
+        { roll_constant(MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } //send preimage result to the back
         OP_TOALTSTACK
-        { blake3_u4_script((PAYOUT_TX_BLOCKHASH_LEN + LATEST_BLOCKHASH_LEN + CHALLENGE_SENDING_WATCHTOWERS_LEN) as u32) }
+        { blake3_u4_script((PAYOUT_TX_BLOCKHASH_LEN + LATEST_BLOCKHASH_LEN + MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN) as u32) }
         for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
             OP_TOALTSTACK
         }
@@ -281,7 +297,7 @@ pub fn create_additional_replacable_disprove_script_with_dummy(
     /* payout_tx_blockhash_pk: PublicKey, */
     latest_blockhash_pk: PublicKey,
     challenge_sending_watchtowers_pk: PublicKey,
-    operator_challenge_ack_hashes: [ChallengeHashType; WATHCTOWER_COUNT],
+    operator_challenge_ack_hashes: Vec<ChallengeHashType>,
 ) -> Vec<u8> {
     create_additional_replacable_disprove_script(
         combined_method_id_constant,
@@ -327,8 +343,12 @@ pub fn validate_assertions_for_additional_script(
     payout_tx_blockhash_signature: Witness,
     latest_blockhash_signature: Witness,
     challenge_sending_watchtowers_signature: Witness,
-    operator_challenge_ack_preimages: [Option<ChallengeHashType>; WATHCTOWER_COUNT], // None's are turned into random values
+    operator_challenge_ack_preimages: Vec<Option<ChallengeHashType>>, // None's are turned into random values
 ) -> Option<Witness> {
+    assert!(
+        operator_challenge_ack_preimages.len() <= MAX_WATCHTOWER_COUNT,
+        "Number of Watchtowers is more than allowed"
+    );
     let w = get_witness_with_signatures(
         g16_public_input_signature,
         payout_tx_blockhash_signature,
@@ -404,7 +424,7 @@ mod tests {
         g16_public_input: [u8; G16_PUBLIC_INPUT_LEN],
         payout_tx_blockhash: [u8; PAYOUT_TX_BLOCKHASH_LEN],
         latest_blockhash: [u8; PAYOUT_TX_BLOCKHASH_LEN],
-        challenge_sending_watchtowers: [u8; CHALLENGE_SENDING_WATCHTOWERS_LEN],
+        challenge_sending_watchtowers: [u8; MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN],
         g16_public_input_sk: SecretKey,
         payout_tx_blockhash_sk: SecretKey,
         latest_blockhash_sk: SecretKey,
@@ -437,7 +457,7 @@ mod tests {
             ),
             WINTERNITZ_VERIFIER.sign(
                 &Parameters::new_by_bit_length(
-                    (CHALLENGE_SENDING_WATCHTOWERS_LEN * 8) as u32,
+                    (MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 8) as u32,
                     WINTERNITZ_BLOCK_LEN,
                 ),
                 &challenge_sending_watchtowers_sk,
@@ -463,10 +483,20 @@ mod tests {
         payout_tx_blockhash_pk: PublicKey,
         latest_blockhash_pk: PublicKey,
         challenge_sending_watchtowers_pk: PublicKey,
-        mut operator_challenge_ack_hashes: [ChallengeHashType; WATHCTOWER_COUNT],
+        operator_challenge_ack_hashes: Vec<ChallengeHashType>,
     ) -> (usize, usize) {
+        assert!(
+            operator_challenge_ack_hashes.len() <= MAX_WATCHTOWER_COUNT,
+            "Number of Watchtowers is more than allowed"
+        );
+        let mut operator_challenge_ack_hashes_arr: [ChallengeHashType; MAX_WATCHTOWER_COUNT] =
+            [ChallengeHashType::default(); MAX_WATCHTOWER_COUNT];
+
+        for i in 0..operator_challenge_ack_hashes.len() {
+            operator_challenge_ack_hashes_arr[i] = operator_challenge_ack_hashes[i].clone();
+        }
         change_the_order_of_operator_challenge_acks_according_to_blake3_stack(
-            &mut operator_challenge_ack_hashes,
+            &mut operator_challenge_ack_hashes_arr,
         );
         let pre_payout_tx_blockhash = script! {
             // I'm not checking the number of arguments currently, but I maybe should? Think about this
@@ -477,13 +507,13 @@ mod tests {
             for _ in 0..(G16_PUBLIC_INPUT_LEN * 2) {
                 OP_TOALTSTACK
             }
-            { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((CHALLENGE_SENDING_WATCHTOWERS_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &challenge_sending_watchtowers_pk) }
-            { reorder_winternitz_output_for_blake3(CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } //Winternitz reverses the message
+            { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &challenge_sending_watchtowers_pk) }
+            { reorder_winternitz_output_for_blake3(MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } //Winternitz reverses the message
 
             { 0 } // If all of the hashes are valid, this should stay as zero
             OP_TOALTSTACK
 
-            for (i, chunk) in operator_challenge_ack_hashes.chunks(4).enumerate().rev() {
+            for (i, chunk) in operator_challenge_ack_hashes_arr.chunks(4).enumerate().rev() {
                 OP_DUP OP_FROMALTSTACK OP_SWAP OP_TOALTSTACK OP_TOALTSTACK
                 for b in (0..4).rev() {
                     if b != 0 {
@@ -529,57 +559,17 @@ mod tests {
                 OP_FROMALTSTACK
             }
             OP_FROMALTSTACK // preimage check result
-            for _ in 0..(CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) {
+            for _ in 0..(MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) {
                 OP_FROMALTSTACK
             }
-            { roll_constant(CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } //send preimage result to the back
+            { roll_constant(MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } //send preimage result to the back
             OP_TOALTSTACK
-            { blake3_u4_script((PAYOUT_TX_BLOCKHASH_LEN + LATEST_BLOCKHASH_LEN + CHALLENGE_SENDING_WATCHTOWERS_LEN) as u32) }
+            { blake3_u4_script((PAYOUT_TX_BLOCKHASH_LEN + LATEST_BLOCKHASH_LEN + MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN) as u32) }
             for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
                 OP_TOALTSTACK
             }
         }.compile().to_bytes();
 
-        /*
-        let rest_of_the_script = script! {
-            for x in bytes_to_nibbles(deposit_constant.to_vec()) {
-                { x }
-            }
-            for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
-                OP_FROMALTSTACK
-            }
-            { blake3_u4_script(DEPOSIT_CONSTANT_LEN as u32 + BLAKE3_OUTPUT_LEN) }
-            for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
-                OP_TOALTSTACK
-            }
-            for x in bytes_to_nibbles(combined_method_id_constant.to_vec()) {
-                { x }
-            }
-            for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
-                OP_FROMALTSTACK
-            }
-            { blake3_u4_script(COMBINED_METHOD_ID_LEN as u32 + BLAKE3_OUTPUT_LEN) }
-            OP_FROMALTSTACK // preimage check result
-            for _ in 0..(G16_PUBLIC_INPUT_LEN * 2) {
-                OP_FROMALTSTACK
-            }
-            { roll_constant(G16_PUBLIC_INPUT_LEN * 2) } //send preimage result to the back
-            OP_TOALTSTACK
-            // This can be done in reverse more efficiently, but meh. For later revisions
-            for i in (0..(G16_PUBLIC_INPUT_LEN * 2)).rev() {
-                { roll_constant(i + 1) }
-                OP_NUMNOTEQUAL // Both in range, so should be fine
-                OP_FROMALTSTACK
-                OP_BOOLOR
-                if i != 0 {
-                    OP_TOALTSTACK
-                }
-            }
-        }
-
-        .compile()
-        .to_bytes();
-        */
         (
             pre_payout_tx_blockhash.len(),
             pre_payout_tx_blockhash.len() + pre_deposit_constant.len(),
@@ -591,8 +581,8 @@ mod tests {
         g16_public_input: [u8; G16_PUBLIC_INPUT_LEN],
         payout_tx_blockhash: [u8; PAYOUT_TX_BLOCKHASH_LEN],
         latest_blockhash: [u8; PAYOUT_TX_BLOCKHASH_LEN],
-        challenge_sending_watchtowers: [u8; CHALLENGE_SENDING_WATCHTOWERS_LEN],
-        operator_challenge_ack_preimages: [ChallengeHashType; WATHCTOWER_COUNT],
+        challenge_sending_watchtowers: [u8; MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN],
+        operator_challenge_ack_preimages: Vec<ChallengeHashType>,
         g16_public_input_sk: SecretKey,
         payout_tx_blockhash_sk: SecretKey,
         latest_blockhash_sk: SecretKey,
@@ -605,7 +595,7 @@ mod tests {
         payout_tx_blockhash_pk: PublicKey,
         latest_blockhash_pk: PublicKey,
         challenge_sending_watchtowers_pk: PublicKey,
-        operator_challenge_ack_hashes: [ChallengeHashType; WATHCTOWER_COUNT],
+        operator_challenge_ack_hashes: Vec<ChallengeHashType>,
     }
 
     fn random_signer_data(seed: u64) -> SignerData {
@@ -616,8 +606,10 @@ mod tests {
             g16_public_input: [0; G16_PUBLIC_INPUT_LEN], //calculate later
             payout_tx_blockhash: rng.gen::<[u8; PAYOUT_TX_BLOCKHASH_LEN]>(),
             latest_blockhash: rng.gen::<[u8; PAYOUT_TX_BLOCKHASH_LEN]>(),
-            challenge_sending_watchtowers: rng.gen::<[u8; CHALLENGE_SENDING_WATCHTOWERS_LEN]>(),
-            operator_challenge_ack_preimages: std::array::from_fn(|_| rng.gen()),
+            challenge_sending_watchtowers: rng.gen::<[u8; MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN]>(), // Exceeding bits can be one, there is no problem
+            operator_challenge_ack_preimages: (0..rng.gen_range(1..=MAX_WATCHTOWER_COUNT))
+                .map(|_| rng.gen::<ChallengeHashType>())
+                .collect(),
             g16_public_input_sk: generate_winternitz_secret_key(),
             payout_tx_blockhash_sk: generate_winternitz_secret_key(),
             latest_blockhash_sk: generate_winternitz_secret_key(),
@@ -661,14 +653,17 @@ mod tests {
             ),
             challenge_sending_watchtowers_pk: generate_public_key(
                 &Parameters::new_by_bit_length(
-                    (CHALLENGE_SENDING_WATCHTOWERS_LEN * 8) as u32,
+                    (MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 8) as u32,
                     WINTERNITZ_BLOCK_LEN,
                 ),
                 &signer_data.challenge_sending_watchtowers_sk,
             ),
-            operator_challenge_ack_hashes: [[0u8; 20]; WATHCTOWER_COUNT],
+            operator_challenge_ack_hashes: vec![
+                [0u8; 20];
+                signer_data.operator_challenge_ack_preimages.len()
+            ],
         };
-        for i in 0..WATHCTOWER_COUNT {
+        for i in 0..signer_data.operator_challenge_ack_preimages.len() {
             p.operator_challenge_ack_hashes[i] =
                 *hash160::Hash::hash(signer_data.operator_challenge_ack_preimages[i].as_ref())
                     .as_byte_array()
@@ -684,7 +679,7 @@ mod tests {
             public_data.payout_tx_blockhash_pk.clone(),
             public_data.latest_blockhash_pk.clone(),
             public_data.challenge_sending_watchtowers_pk.clone(),
-            public_data.operator_challenge_ack_hashes,
+            public_data.operator_challenge_ack_hashes.clone(),
         )
     }
 
@@ -698,7 +693,7 @@ mod tests {
             /* public_data.payout_tx_blockhash_pk.clone(), */
             public_data.latest_blockhash_pk.clone(),
             public_data.challenge_sending_watchtowers_pk.clone(),
-            public_data.operator_challenge_ack_hashes,
+            public_data.operator_challenge_ack_hashes.clone(),
         )
     }
 
@@ -710,13 +705,13 @@ mod tests {
             public_data.payout_tx_blockhash_pk.clone(),
             public_data.latest_blockhash_pk.clone(),
             public_data.challenge_sending_watchtowers_pk.clone(),
-            public_data.operator_challenge_ack_hashes,
+            public_data.operator_challenge_ack_hashes.clone(),
         )
     }
 
     fn non_malicious_test_validate(script: Vec<u8>, signer_data: &SignerData) {
-        let mut preimages: [Option<ChallengeHashType>; WATHCTOWER_COUNT] =
-            std::array::from_fn(|_| None);
+        let mut preimages: Vec<Option<ChallengeHashType>> =
+            vec![None; signer_data.operator_challenge_ack_preimages.len()];
         for (i, preimage) in preimages.iter_mut().enumerate() {
             if (signer_data.challenge_sending_watchtowers[i / 8] >> (i % 8)) % 2 == 1 {
                 *preimage = Some(signer_data.operator_challenge_ack_preimages[i]);
@@ -750,8 +745,8 @@ mod tests {
     }
 
     fn malicious_revealed_preimage_validate(script: Vec<u8>, signer_data: &SignerData) {
-        let mut preimages: [Option<ChallengeHashType>; WATHCTOWER_COUNT] =
-            std::array::from_fn(|_| None);
+        let mut preimages: Vec<Option<ChallengeHashType>> =
+            vec![None; signer_data.operator_challenge_ack_preimages.len()];
         let mut first = true;
         for (i, preimage) in preimages.iter_mut().enumerate() {
             if (signer_data.challenge_sending_watchtowers[i / 8] >> (i % 8)) % 2 == 1 {
@@ -760,6 +755,9 @@ mod tests {
                 first = false;
                 *preimage = Some(signer_data.operator_challenge_ack_preimages[i]);
             }
+        }
+        if first {
+            return;
         }
         let (
             g16_public_input_signature,
@@ -789,8 +787,8 @@ mod tests {
     }
 
     fn malicious_gibberish_g16_data_validate(script: Vec<u8>, signer_data: &SignerData) {
-        let mut preimages: [Option<ChallengeHashType>; WATHCTOWER_COUNT] =
-            std::array::from_fn(|_| None);
+        let mut preimages: Vec<Option<ChallengeHashType>> =
+            vec![None; signer_data.operator_challenge_ack_preimages.len()];
         for (i, preimage) in preimages.iter_mut().enumerate() {
             if (signer_data.challenge_sending_watchtowers[i / 8] >> (i % 8)) % 2 == 1 {
                 *preimage = Some(signer_data.operator_challenge_ack_preimages[i]);
@@ -836,7 +834,7 @@ mod tests {
             for x in bytes_to_nibbles(signer_data.challenge_sending_watchtowers.to_vec()) {
                 { x }
             }
-            { blake3_u4_script((PAYOUT_TX_BLOCKHASH_LEN + LATEST_BLOCKHASH_LEN + CHALLENGE_SENDING_WATCHTOWERS_LEN) as u32) }
+            { blake3_u4_script((PAYOUT_TX_BLOCKHASH_LEN + LATEST_BLOCKHASH_LEN + MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN) as u32) }
             for _ in 0..(BLAKE3_OUTPUT_LEN * 2) {
                 OP_TOALTSTACK
             }
@@ -874,7 +872,7 @@ mod tests {
         let signer_data = random_signer_data(37);
         let public_data = get_public_data_from_signer(&signer_data);
         execute_script(script! {
-            for i in 0..WATHCTOWER_COUNT {
+            for i in 0..signer_data.operator_challenge_ack_preimages.len() {
                 { signer_data.operator_challenge_ack_preimages[i].to_vec() }
                 OP_HASH160
                 { public_data.operator_challenge_ack_hashes[i].to_vec() }
@@ -945,7 +943,7 @@ mod tests {
             let public_data = get_public_data_from_signer(&signer_data);
             let mut s = create_script_with_public_data_and_dummy_tx_blockhash_pk(&public_data);
             signer_data.payout_tx_blockhash_sk = generate_winternitz_secret_key();
-            s = replace_payout_tx_blockhash(
+            s = replace_placeholders_in_script(
                 s,
                 generate_public_key(
                     &Parameters::new_by_bit_length(
