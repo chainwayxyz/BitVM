@@ -148,12 +148,11 @@ fn main_script_wrapper(
 
         { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((G16_PUBLIC_INPUT_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &g16_public_input_pk) }
         { reorder_winternitz_output_for_blake3(G16_PUBLIC_INPUT_LEN * 2) }
-        
         for _ in 0..(G16_PUBLIC_INPUT_LEN * 2) {
             OP_TOALTSTACK
         }
         { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &challenge_sending_watchtowers_pk) }
-        { reorder_winternitz_output_for_blake3(MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) } 
+        { reorder_winternitz_output_for_blake3(MAX_CHALLENGE_SENDING_WATCHTOWERS_LEN * 2) }
 
         { 0 } // If all of the hashes are valid, this should stay as zero
         OP_TOALTSTACK
@@ -1023,6 +1022,7 @@ mod tests {
                 ),
                 signer_data.deposit_constant,
             );
+            /*
             println!(
                 "new:{:x?}",
                 generate_public_key(
@@ -1033,6 +1033,7 @@ mod tests {
                     &signer_data.payout_tx_blockhash_sk,
                 )
             );
+            */
             non_malicious_test_validate(s.clone(), &signer_data);
             malicious_revealed_preimage_validate(s.clone(), &signer_data);
             malicious_gibberish_g16_data_validate(s.clone(), &signer_data);
