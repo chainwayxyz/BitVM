@@ -50,3 +50,30 @@ pub fn does_unlock(script: Vec<u8>, witness: Vec<Vec<u8>>) -> bool {
     }
     exec.result().unwrap().success
 }
+
+pub fn does_raise_error(script: Vec<u8>, witness: Vec<Vec<u8>>) -> bool {
+    let mut exec = Exec::new(
+        ExecCtx::Tapscript,
+        Default::default(),
+        TxTemplate {
+            tx: Transaction {
+                version: bitcoin::transaction::Version::TWO,
+                lock_time: bitcoin::locktime::absolute::LockTime::ZERO,
+                input: vec![],
+                output: vec![],
+            },
+            prevouts: vec![],
+            input_idx: 0,
+            taproot_annex_scriptleaf: Some((TapLeafHash::all_zeros(), None)),
+        },
+        ScriptBuf::from_bytes(script),
+        witness,
+    )
+    .expect("error creating exec");
+    loop {
+        if exec.exec_next().is_err() {
+            break;
+        }
+    }
+    exec.result().unwrap().error.is_some()
+}
