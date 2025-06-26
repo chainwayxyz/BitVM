@@ -6,7 +6,6 @@ use crate::{
         generate_public_key, ListpickVerifier, Parameters, PublicKey, VoidConverter, Winternitz,
     },
 };
-use bitcoin::opcodes::all::{OP_EQUALVERIFY, OP_FROMALTSTACK};
 use bitcoin::Witness;
 
 use super::utils::does_unlock;
@@ -42,6 +41,7 @@ const PRECALCULATED_REPLACEMENT_INDEX_1: usize = 89793;
     hash_check,
 */
 const DEBUGGING_POSITIONS: [u32; 6] = [4876, 8088, 14264, 17452, 20600, 228749];
+const WITNESS_LENS: [usize; 5] = [88, 88, 160, 88, 136];
 
 /// The Winternitz output reverses the message, and BLAKE3 swaps the nibbles.
 /// This script reorders the nibbles of a Winternitz `checksig_verify` output (message) so that it is in the necessary format for BLAKE3.
@@ -97,14 +97,13 @@ fn change_the_order_of_operator_challenge_acks_according_to_blake3_stack<T>(
     }
 }
 
-/// Given the signatures and acknowledged preimages, returns the witness that will be used to unlock the script (if the parameters are correct)
-fn get_witness_with_signatures(
+fn get_witness_blocks_with_signatures(
     g16_public_input_signature: Witness,
     payout_tx_blockhash_signature: Witness,
     latest_blockhash_signature: Witness,
     challenge_sending_watchtowers_signature: Witness,
     operator_challenge_ack_preimages: Vec<Option<ChallengeHashType>>, // None's are turned into random values
-) -> Witness {
+) -> [Witness; 5] {
     let mut operator_challenge_ack_preimages_arr: [Option<ChallengeHashType>;
         MAX_WATCHTOWER_COUNT] = [None; MAX_WATCHTOWER_COUNT];
     for i in 0..operator_challenge_ack_preimages.len() {
@@ -121,14 +120,43 @@ fn get_witness_with_signatures(
             .try_into()
             .expect("This should be impossible");
 
-    let mut w = Witness::new();
-    extend_witness(&mut w, payout_tx_blockhash_signature);
-    extend_witness(&mut w, latest_blockhash_signature);
+    //extend_witness(&mut w, payout_tx_blockhash_signature);
+    //extend_witness(&mut w, latest_blockhash_signature);
+
+    let mut preimages_witness = Witness::new();
     for preimage in operator_challenge_ack_preimages_push_values {
-        w.push(preimage.to_vec());
+        preimages_witness.push(preimage.to_vec());
     }
-    extend_witness(&mut w, challenge_sending_watchtowers_signature);
-    extend_witness(&mut w, g16_public_input_signature);
+    //extend_witness(&mut w, challenge_sending_watchtowers_signature);
+    //extend_witness(&mut w, g16_public_input_signature);
+    [
+        payout_tx_blockhash_signature,
+        latest_blockhash_signature,
+        preimages_witness,
+        challenge_sending_watchtowers_signature,
+        g16_public_input_signature,
+    ]
+}
+
+/// Given the signatures and acknowledged preimages, returns the witness that will be used to unlock the script (if the parameters are correct)
+fn get_witness_with_signatures(
+    g16_public_input_signature: Witness,
+    payout_tx_blockhash_signature: Witness,
+    latest_blockhash_signature: Witness,
+    challenge_sending_watchtowers_signature: Witness,
+    operator_challenge_ack_preimages: Vec<Option<ChallengeHashType>>, // None's are turned into random values
+) -> Witness {
+    let sigs = get_witness_blocks_with_signatures(
+        g16_public_input_signature,
+        payout_tx_blockhash_signature,
+        latest_blockhash_signature,
+        challenge_sending_watchtowers_signature,
+        operator_challenge_ack_preimages,
+    );
+    let mut w = Witness::new();
+    for s in sigs {
+        extend_witness(&mut w, s);
+    }
     w
 }
 
@@ -360,7 +388,7 @@ fn find_script_debugging_positions(
         }
     }.compile().to_bytes().len();
 
-    let mut payout_tx_blockhash_verif = script! {
+    let payout_tx_blockhash_verif = script! {
         { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((PAYOUT_TX_BLOCKHASH_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &payout_tx_blockhash_pk) } // This will be replaced
         { reorder_winternitz_output_for_blake3(PAYOUT_TX_BLOCKHASH_LEN * 2) }
     }
@@ -610,6 +638,54 @@ pub fn validate_assertions_for_additional_script(
     }
 }
 
+/// Returns ( payout_tx_blockhash_signature, latest_blockhash_signature, witness_preimages, challenge_sending_watchtowers_signature, g16_public_input_signature)
+pub fn split_additional_disprove_witnesses(
+    w: Witness,
+) -> (
+    Witness,
+    Witness,
+    [Vec<u8>; MAX_WATCHTOWER_COUNT],
+    Witness,
+    Witness,
+) {
+    let v = w.to_vec();
+    let mut pref = [0usize; 5];
+    for i in 1..5 {
+        pref[i] = pref[i - 1] + WITNESS_LENS[i - 1];
+    }
+    assert_eq!(v.len(), pref[4] + WITNESS_LENS[4]);
+    let mut payout_tx_blockhash_signature = Witness::new();
+    let mut latest_blockhash_signature = Witness::new();
+    //let mut preimages: [Vec<u8>; MAX_WATCHTOWER_COUNT] = from_fn(|_| Vec::new());
+    let mut challenge_sending_watchtowers_signature = Witness::new();
+    let mut g16_public_input_signature = Witness::new();
+
+    for i in 0..WITNESS_LENS[0] {
+        payout_tx_blockhash_signature.push(v[pref[0] + i].clone());
+    }
+    for i in 0..WITNESS_LENS[1] {
+        latest_blockhash_signature.push(v[pref[1] + i].clone());
+    }
+
+    let mut preimages = v[pref[2]..pref[3]].to_vec().try_into().expect("Impossible");
+
+    for i in 0..WITNESS_LENS[3] {
+        challenge_sending_watchtowers_signature.push(v[pref[3] + i].clone());
+    }
+    for i in 0..WITNESS_LENS[4] {
+        g16_public_input_signature.push(v[pref[4] + i].clone());
+    }
+
+    change_the_order_of_operator_challenge_acks_according_to_blake3_stack(&mut preimages); //this operations inverse is itself, so it works
+    (
+        payout_tx_blockhash_signature,
+        latest_blockhash_signature,
+        preimages,
+        challenge_sending_watchtowers_signature,
+        g16_public_input_signature,
+    )
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum AdditionalDisproveDebugError {
     G16PublicInputChecksig,              //if checksig fails
@@ -729,8 +805,6 @@ pub fn replace_placeholders_in_script(
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Add;
-
     use super::*;
     use crate::{hash::blake3_u4::blake3_bitvm_version, signatures::winternitz::SecretKey};
     use bitcoin::hashes::{hash160, Hash};
@@ -815,6 +889,8 @@ mod tests {
         );
         return (replacement_0, replacement_1);
     }
+
+    #[derive(Debug)]
     struct SignerData {
         combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
         deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
@@ -1179,6 +1255,39 @@ mod tests {
         );
     }
 
+    fn get_witness_partitions_for_data(signer_data: &SignerData) -> [Witness; 5] {
+        let mut preimages: Vec<Option<ChallengeHashType>> =
+            vec![None; signer_data.operator_challenge_ack_preimages.len()];
+        for (i, preimage) in preimages.iter_mut().enumerate() {
+            if (signer_data.challenge_sending_watchtowers[i / 8] >> (i % 8)) % 2 == 1 {
+                *preimage = Some(signer_data.operator_challenge_ack_preimages[i]);
+            }
+        }
+        let (
+            g16_public_input_signature,
+            payout_tx_blockhash_signature,
+            latest_blockhash_signature,
+            challenge_sending_watchtowers_signature,
+        ) = get_signatures(
+            signer_data.g16_public_input,
+            signer_data.payout_tx_blockhash,
+            signer_data.latest_blockhash,
+            signer_data.challenge_sending_watchtowers,
+            signer_data.g16_public_input_sk.clone(),
+            signer_data.payout_tx_blockhash_sk.clone(),
+            signer_data.latest_blockhash_sk.clone(),
+            signer_data.challenge_sending_watchtowers_sk.clone(),
+        )
+        .into();
+        get_witness_blocks_with_signatures(
+            g16_public_input_signature,
+            payout_tx_blockhash_signature,
+            latest_blockhash_signature,
+            challenge_sending_watchtowers_signature,
+            preimages,
+        )
+    }
+
     #[test]
     fn test_calculating_public_input() {
         let signer_data = random_signer_data(4237);
@@ -1452,6 +1561,48 @@ mod tests {
             non_malicious_test_debug(s.clone(), &signer_data);
             malicious_revealed_preimage_debug(s.clone(), &signer_data);
             malicious_gibberish_g16_data_debug(s.clone(), &signer_data);
+        }
+    }
+
+    #[test]
+    fn test_witness_partition_positions() {
+        for seed in 0..100 {
+            let signer_data = random_signer_data(seed);
+            let witness_blocks = get_witness_partitions_for_data(&signer_data);
+            let mut witness_block_lens = [0usize; 5];
+            for i in 0..5 {
+                witness_block_lens[i] = witness_blocks[i].to_vec().len();
+            }
+            assert_eq!(WITNESS_LENS, witness_block_lens);
+        }
+    }
+
+    #[test]
+    fn test_witness_partition() {
+        for seed in 0..100 {
+            let signer_data = random_signer_data(seed);
+            let witness_blocks = get_witness_partitions_for_data(&signer_data);
+            let mut actual_witness = Witness::new();
+            for w in witness_blocks.clone() {
+                extend_witness(&mut actual_witness, w);
+            }
+            let partition = split_additional_disprove_witnesses(actual_witness);
+            for i in 0..MAX_WATCHTOWER_COUNT {
+                if (signer_data.challenge_sending_watchtowers[i / 8] >> (i % 8)) % 2 == 1
+                    && signer_data.operator_challenge_ack_preimages.len() > i
+                {
+                    assert_eq!(
+                        partition.2[i],
+                        signer_data.operator_challenge_ack_preimages[i]
+                    );
+                } else {
+                    assert_eq!(partition.2[i], [0; 20]);
+                }
+            }
+            assert_eq!(partition.0, witness_blocks[0]);
+            assert_eq!(partition.1, witness_blocks[1]);
+            assert_eq!(partition.3, witness_blocks[3]);
+            assert_eq!(partition.4, witness_blocks[4]);
         }
     }
 }
