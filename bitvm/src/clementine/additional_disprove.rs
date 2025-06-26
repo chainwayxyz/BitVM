@@ -639,7 +639,7 @@ pub fn validate_assertions_for_additional_script(
 }
 
 /// Returns ( payout_tx_blockhash_signature, latest_blockhash_signature, witness_preimages, challenge_sending_watchtowers_signature, g16_public_input_signature)
-pub fn split_additional_disprove_witnesses(
+pub fn split_additional_disprove_witness(
     w: Witness,
 ) -> (
     Witness,
@@ -1586,7 +1586,7 @@ mod tests {
             for w in witness_blocks.clone() {
                 extend_witness(&mut actual_witness, w);
             }
-            let partition = split_additional_disprove_witnesses(actual_witness);
+            let partition = split_additional_disprove_witness(actual_witness);
             for i in 0..MAX_WATCHTOWER_COUNT {
                 if (signer_data.challenge_sending_watchtowers[i / 8] >> (i % 8)) % 2 == 1
                     && signer_data.operator_challenge_ack_preimages.len() > i
