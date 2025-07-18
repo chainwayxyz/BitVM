@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 use crate::groth16::constants::{COFACTOR_CUBIC, H, K, LAMBDA, MM, R, S, T, W};
-use ark_ff::{Field, One};
+use ark_ff::{AdditiveGroup, Field, One};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 
@@ -54,6 +54,12 @@ fn tonelli_shanks_cubic(
     t: BigUint,
     k: BigUint,
 ) -> ark_bn254::Fq12 {
+    assert_ne!(a, ark_bn254::Fq12::ZERO);
+    log_assert_eq!(
+        a.pow(&*COFACTOR_CUBIC.to_u64_digits()),
+        ark_bn254::Fq12::ONE
+    );
+    log_assert_ne!(a, ark_bn254::Fq12::ONE);
     let mut r = a.pow(t.to_u64_digits());
     let e = 3_u32.pow(s - 1);
     let exp = 3_u32.pow(s) * &t;
@@ -124,11 +130,6 @@ pub fn compute_c_wi(f: ark_bn254::Fq12) -> (ark_bn254::Fq12, ark_bn254::Fq12) {
     let mm_inv = MM.modinv(&(&*R * &*H)).unwrap();
     log_assert_ne!(mm_inv, BigUint::one());
     let f3 = f2.pow(mm_inv.to_u64_digits());
-    log_assert_eq!(
-        f3.pow(&*COFACTOR_CUBIC.to_u64_digits()),
-        ark_bn254::Fq12::ONE
-    );
-    log_assert_ne!(f3, ark_bn254::Fq12::ONE);
 
     // d-th (cubic) root, say c
     let c = tonelli_shanks_cubic(f3, w, S, T.clone(), K.clone());
