@@ -1,11 +1,8 @@
 use borsh::BorshDeserialize;
-use header_chain::{
-    header_chain::{
-        BlockHeaderCircuitOutput, CircuitBlockHeader, HeaderChainCircuitInput,
-        HeaderChainPrevProofType,
-    },
-    risc0_zkvm::{default_prover, ExecutorEnv},
+use header_chain::header_chain::{
+    BlockHeaderCircuitOutput, CircuitBlockHeader, HeaderChainCircuitInput, HeaderChainPrevProofType,
 };
+use risc0_zkvm::{default_prover, ExecutorEnv};
 
 use risc0_circuit_recursion::control_id::BN254_IDENTITY_CONTROL_ID;
 use risc0_zkvm::{compute_image_id, sha::Digestible};
@@ -24,11 +21,19 @@ pub const REGTEST_HEADER_CHAIN_GUEST_ELF: &[u8] = include_bytes!("../elfs/regtes
 // This is public so these ELFs can be used in other crates
 const HEADER_CHAIN_GUEST_ELF: &[u8] = {
     match option_env!("BITCOIN_NETWORK") {
-        Some(network) if matches!(network.as_bytes(), b"mainnet") => MAINNET_HEADER_CHAIN_GUEST_ELF,
-        Some(network) if matches!(network.as_bytes(), b"testnet4") => TESTNET4_HEADER_CHAIN_GUEST_ELF,
-        Some(network) if matches!(network.as_bytes(), b"signet") => SIGNET_HEADER_CHAIN_GUEST_ELF,
-        Some(network) if matches!(network.as_bytes(), b"regtest") => REGTEST_HEADER_CHAIN_GUEST_ELF,
-        None => MAINNET_HEADER_CHAIN_GUEST_ELF,
+        Some(network) if matches!(network.as_bytes(), b"mainnet") => {
+            include_bytes!("../elfs/mainnet-header-chain-guest.bin")
+        }
+        Some(network) if matches!(network.as_bytes(), b"testnet4") => {
+            include_bytes!("../elfs/testnet4-header-chain-guest.bin")
+        }
+        Some(network) if matches!(network.as_bytes(), b"signet") => {
+            include_bytes!("../elfs/signet-header-chain-guest.bin")
+        }
+        Some(network) if matches!(network.as_bytes(), b"regtest") => {
+            include_bytes!("../elfs/regtest-header-chain-guest.bin")
+        }
+        None => include_bytes!("../elfs/mainnet-header-chain-guest.bin"),
         _ => panic!("Invalid path or ELF file"),
     }
 };

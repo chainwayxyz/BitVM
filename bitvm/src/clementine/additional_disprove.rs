@@ -304,7 +304,7 @@ fn main_script_wrapper(
     return (pre_payout_tx_blockhash, replacement_0, replacement_1);
 }
 
-// THIS WILL BREAK WHEN A CHANGE OCCURS IN THE SCRIPT IS ONLY TEMPORARY
+// THIS WILL BREAK WHEN A CHANGE OCCURS IN THE SCRIPT, ITs IS ONLY TEMPORARY
 fn find_script_debugging_positions(
     combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
     deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
