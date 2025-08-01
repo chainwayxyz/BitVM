@@ -330,6 +330,8 @@ pub struct Wots64;
 /// Winternitz signatures for 80-byte messages.
 pub struct Wots80;
 
+pub struct Wots20;
+
 /// Implements the [`Wots`] and [`CompactWots`] traits for the given type.
 ///
 /// ## Parameters
@@ -365,6 +367,7 @@ macro_rules! impl_wots {
 
 impl_wots!(Wots4, 4, VoidConverter);
 impl_wots!(Wots16, 16, VoidConverter);
+impl_wots!(Wots20, 20, VoidConverter);
 impl_wots!(Wots32, 32, VoidConverter);
 impl_wots!(Wots64, 64, VoidConverter);
 impl_wots!(Wots80, 80, VoidConverter);
