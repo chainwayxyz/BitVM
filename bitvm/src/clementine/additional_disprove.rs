@@ -28,9 +28,9 @@ const BLAKE3_OUTPUT_LEN: u32 = 32; // should be equal to G16_PUBLIC_INPUT_LEN
 /// If any changes are made to the creating script functions, these should be changed to with the corresponding calculation function inside the tests
 
 /// Start of the PAYOUT_TX_BLOCKHASH's checksig's opcodes, precalculated for optimization
-const PRECALCULATED_REPLACEMENT_INDEX_0: usize = 17452;
+const PRECALCULATED_REPLACEMENT_INDEX_0: usize = 18148;
 /// Start of the DEPOSIT_CONSTANT's pushing opcodes, precalculated for optimization
-const PRECALCULATED_REPLACEMENT_INDEX_1: usize = 89793;
+const PRECALCULATED_REPLACEMENT_INDEX_1: usize = 90676;
 
 /*
     g16_public_input_verif,
@@ -40,8 +40,8 @@ const PRECALCULATED_REPLACEMENT_INDEX_1: usize = 89793;
     payout_tx_blockhash_verif,
     hash_check,
 */
-const DEBUGGING_POSITIONS: [u32; 6] = [4876, 8088, 14264, 17452, 20600, 228749];
-const WITNESS_LENS: [usize; 5] = [88, 88, 160, 88, 136];
+const DEBUGGING_POSITIONS: [u32; 6] = [5204, 8600, 14776, 18148, 21480, 229638];
+const WITNESS_LENS: [usize; 5] = [86, 86, 160, 86, 134];
 
 /// The Winternitz output reverses the message, and BLAKE3 swaps the nibbles.
 /// This script reorders the nibbles of a Winternitz `checksig_verify` output (message) so that it is in the necessary format for BLAKE3.

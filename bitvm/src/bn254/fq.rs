@@ -1,6 +1,7 @@
 #![allow(clippy::reversed_empty_ranges)]
 use std::str::FromStr;
 
+use ark_ff::Field;
 use num_bigint::{BigInt, BigUint};
 use num_traits::{FromPrimitive, Num, ToPrimitive};
 
@@ -118,9 +119,10 @@ impl Fq {
         let y = BigInt::from_str(&b.to_string()).unwrap();
         let modulus = &Fq::modulus_as_bigint();
         let q = (x * y) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_1().2;
 
         let script = script! {
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
@@ -134,18 +136,21 @@ impl Fq {
     }
 
     // TODO: Optimize by using the constant feature
-    pub fn hinted_mul_by_constant(
-        a: ark_bn254::Fq,
-        constant: &ark_bn254::Fq,
-    ) -> (Script, Vec<Hint>) {
+    pub fn hinted_mul_by_constant(a: ark_bn254::Fq, constant: &ark_bn254::Fq) -> (Script, Vec<Hint>) {
+        if *constant == ark_bn254::Fq::ONE {
+            return (script! {}, vec![]);
+        } else if *constant == -ark_bn254::Fq::ONE {
+            return (Fq::neg(0), vec![]);
+        }
         let mut hints = Vec::new();
         let x = BigInt::from_str(&a.to_string()).unwrap();
         let y = BigInt::from_str(&constant.to_string()).unwrap();
         let modulus = &Fq::modulus_as_bigint();
         let q = (x * y) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_1().2;
 
         let script = script! {
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
@@ -175,9 +180,10 @@ impl Fq {
         let y = BigInt::from_str(&b.to_string()).unwrap();
         let modulus = &Fq::modulus_as_bigint();
         let q = (x * y) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_1().2;
 
         let script = script! {
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
@@ -213,9 +219,10 @@ impl Fq {
         let w = BigInt::from_str(&d.to_string()).unwrap();
 
         let q = (x * z + y * w) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_2().2;
 
         let script = script! {
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
@@ -247,7 +254,6 @@ impl Fq {
         assert!(a_depth > b_depth && b_depth > c_depth && c_depth > d_depth);
 
         let mut hints = Vec::with_capacity(1);
-
         let modulus = &Fq::modulus_as_bigint();
 
         let x = BigInt::from_str(&a.to_string()).unwrap();
@@ -256,9 +262,10 @@ impl Fq {
         let w = BigInt::from_str(&d.to_string()).unwrap();
 
         let q = (x * z + y * w) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_2_w4().2;
 
         let script = script! {
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
@@ -268,7 +275,7 @@ impl Fq {
             { Fq::roll(d_depth + 4) }
             { Fq::tmul_lc2_w4() }
         };
-        hints.push(Hint::BigIntegerTmulLC2(q));
+        hints.push(Hint::BigIntegerTmulLC2W4(q));
 
         (script, hints)
     }
@@ -318,9 +325,10 @@ impl Fq {
         let w2 = BigInt::from_str(&h.to_string()).unwrap();
 
         let q = (x1 * x2 + y1 * y2 + z1 * z2 + w1 * w2) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_4().2;
 
         let script = script! {
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { fq_push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
@@ -362,9 +370,10 @@ impl Fq {
         let w = BigInt::from_str(&d.to_string()).unwrap();
 
         let q = (x * z + y * w) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_2().2;
 
         let script = script! {
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
@@ -403,9 +412,10 @@ impl Fq {
         let w = BigInt::from_str(&d.to_string()).unwrap();
 
         let q = (x * z + y * w) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_2_w4().2;
 
         let script = script! {
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
@@ -415,7 +425,7 @@ impl Fq {
             { Fq::copy(d_depth + 4) }
             { Fq::tmul_lc2_w4() }
         };
-        hints.push(Hint::BigIntegerTmulLC2(q));
+        hints.push(Hint::BigIntegerTmulLC2W4(q));
 
         (script, hints)
     }
@@ -426,8 +436,10 @@ impl Fq {
         let x = &BigInt::from_str(&a.to_string()).unwrap();
         let modulus = &Fq::modulus_as_bigint();
         let q = (x * x) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_1().2;
+
         let script = script! {
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { Fq::push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
@@ -446,11 +458,13 @@ impl Fq {
         let modulus = &Fq::modulus_as_bigint();
         let y = &x.modinv(modulus).unwrap();
         let q = (x * y) / modulus;
+        const T_N_LIMBS: u32 = Fq::bigint_tmul_lc_1().2;
+
         let script = script! {
             for _ in 0..Self::N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
-            for _ in 0..Self::N_LIMBS {
+            for _ in 0..T_N_LIMBS {
                 OP_DEPTH OP_1SUB OP_ROLL // hints
             }
             // { Fq::push(ark_bn254::Fq::from_str(&y.to_string()).unwrap()) }
