@@ -13,10 +13,14 @@ use std::{env, fs};
 
 pub mod docker;
 
-pub const MAINNET_HEADER_CHAIN_GUEST_ELF: &[u8] = include_bytes!("../elfs/mainnet-header-chain-guest.bin");
-pub const TESTNET4_HEADER_CHAIN_GUEST_ELF: &[u8] = include_bytes!("../elfs/testnet4-header-chain-guest.bin");
-pub const SIGNET_HEADER_CHAIN_GUEST_ELF: &[u8] = include_bytes!("../elfs/signet-header-chain-guest.bin");
-pub const REGTEST_HEADER_CHAIN_GUEST_ELF: &[u8] = include_bytes!("../elfs/regtest-header-chain-guest.bin");
+pub const MAINNET_HEADER_CHAIN_GUEST_ELF: &[u8] =
+    include_bytes!("../elfs/mainnet-header-chain-guest.bin");
+pub const TESTNET4_HEADER_CHAIN_GUEST_ELF: &[u8] =
+    include_bytes!("../elfs/testnet4-header-chain-guest.bin");
+pub const SIGNET_HEADER_CHAIN_GUEST_ELF: &[u8] =
+    include_bytes!("../elfs/signet-header-chain-guest.bin");
+pub const REGTEST_HEADER_CHAIN_GUEST_ELF: &[u8] =
+    include_bytes!("../elfs/regtest-header-chain-guest.bin");
 
 // This is public so these ELFs can be used in other crates
 const HEADER_CHAIN_GUEST_ELF: &[u8] = {

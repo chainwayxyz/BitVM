@@ -696,6 +696,9 @@ pub enum AdditionalDisproveDebugError {
     Blake3HashCheck,                     //if hash != public_input (NOT EQUAL)
 }
 
+/// Returns the first failed checksig (if one checksig fails, rest of them don't get executed)
+/// If necessary checksigs are passed, then returns first spending condition (for WatchtowerPreimageCheck, first 2 needs to pass, for Blake3HashCheck, all of them need to pass)
+/// Orders of the errors are same as they are in the enum
 pub fn debug_assertions_for_additional_script(
     replacable_script: Vec<u8>,
     g16_public_input_signature: Witness,
@@ -703,7 +706,7 @@ pub fn debug_assertions_for_additional_script(
     latest_blockhash_signature: Witness,
     challenge_sending_watchtowers_signature: Witness,
     operator_challenge_ack_preimages: Vec<Option<ChallengeHashType>>, // None's are turned into random values
-) -> Option<AdditionalDisproveDebugError> {
+) -> Vec<AdditionalDisproveDebugError> {
     assert!(
         operator_challenge_ack_preimages.len() <= MAX_WATCHTOWER_COUNT,
         "Number of Watchtowers is more than allowed"
@@ -715,16 +718,18 @@ pub fn debug_assertions_for_additional_script(
         challenge_sending_watchtowers_signature,
         operator_challenge_ack_preimages,
     );
+
+    let mut errors = vec![];
     if does_raise_error(
         replacable_script.clone()[..DEBUGGING_POSITIONS[0] as usize].to_vec(),
         w.to_vec(),
     ) {
-        return Some(AdditionalDisproveDebugError::G16PublicInputChecksig);
+        errors.push(AdditionalDisproveDebugError::G16PublicInputChecksig);
     } else if does_raise_error(
         replacable_script.clone()[..DEBUGGING_POSITIONS[1] as usize].to_vec(),
         w.to_vec(),
     ) {
-        return Some(AdditionalDisproveDebugError::ChallengeSendingWatchtowersChecksig);
+        errors.push(AdditionalDisproveDebugError::ChallengeSendingWatchtowersChecksig);
     } else {
         let mut script = replacable_script.clone()[..DEBUGGING_POSITIONS[2] as usize].to_vec();
         script.extend(
@@ -736,24 +741,26 @@ pub fn debug_assertions_for_additional_script(
             .compile()
             .to_bytes(),
         );
+        let mut watchtower_preimage_check_failed = false;
         if does_raise_error(script, w.to_vec()) {
-            return Some(AdditionalDisproveDebugError::WatchtowerPreimageCheck);
-        } else if does_raise_error(
+            errors.push(AdditionalDisproveDebugError::WatchtowerPreimageCheck);
+            watchtower_preimage_check_failed = true;
+        }
+        if does_raise_error(
             replacable_script.clone()[..DEBUGGING_POSITIONS[3] as usize].to_vec(),
             w.to_vec(),
         ) {
-            return Some(AdditionalDisproveDebugError::LatestBlockhashChecksig);
+            errors.push(AdditionalDisproveDebugError::LatestBlockhashChecksig);
         } else if does_raise_error(
             replacable_script.clone()[..DEBUGGING_POSITIONS[4] as usize].to_vec(),
             w.to_vec(),
         ) {
-            return Some(AdditionalDisproveDebugError::PayoutTxBlockhashChecksig);
-        } else if does_unlock(replacable_script, w.to_vec()) {
-            return Some(AdditionalDisproveDebugError::Blake3HashCheck);
-        } else {
-            return None;
+            errors.push(AdditionalDisproveDebugError::PayoutTxBlockhashChecksig);
+        } else if !watchtower_preimage_check_failed && does_unlock(replacable_script, w.to_vec()) {
+            errors.push(AdditionalDisproveDebugError::Blake3HashCheck);
         }
     }
+    return errors;
 }
 
 /// Replaces the payout Transaction blockhash public Key and deposit constant for the given script
@@ -1161,7 +1168,7 @@ mod tests {
             signer_data.challenge_sending_watchtowers_sk.clone(),
         )
         .into();
-        assert!(!debug_assertions_for_additional_script(
+        assert!(debug_assertions_for_additional_script(
             script,
             g16_public_input_signature,
             payout_tx_blockhash_signature,
@@ -1169,7 +1176,7 @@ mod tests {
             challenge_sending_watchtowers_signature,
             preimages
         )
-        .is_some());
+        .is_empty());
     }
 
     fn malicious_revealed_preimage_debug(script: Vec<u8>, signer_data: &SignerData) {
@@ -1211,9 +1218,8 @@ mod tests {
                 latest_blockhash_signature,
                 challenge_sending_watchtowers_signature,
                 preimages
-            )
-            .unwrap(),
-            AdditionalDisproveDebugError::WatchtowerPreimageCheck
+            ),
+            vec! { AdditionalDisproveDebugError::WatchtowerPreimageCheck }
         );
     }
 
@@ -1249,9 +1255,8 @@ mod tests {
                 latest_blockhash_signature,
                 challenge_sending_watchtowers_signature,
                 preimages
-            )
-            .unwrap(),
-            AdditionalDisproveDebugError::Blake3HashCheck
+            ),
+            vec! { AdditionalDisproveDebugError::Blake3HashCheck }
         );
     }
 
