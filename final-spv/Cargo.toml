@@ -12,6 +12,5 @@ blake3 = { version = "1.5.0", default-features = false }
 bitcoin = "0.32.5"
 serde = { version = "1.0", default-features = false }
 header-chain = { path = "../header-chain" }
-
-[dev-dependencies]
 hex-literal = "0.4.1"
+
