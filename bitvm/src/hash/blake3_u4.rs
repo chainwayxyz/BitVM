@@ -9,7 +9,6 @@ pub fn bytes_to_nibbles(v: Vec<u8>) -> Vec<u8> {
 use crate::clementine::utils::roll_constant;
 
 fn reformat_for_blake3(msg_len: u32) -> Script {
-    //assert!(msg_len <= 192);
     let padding = (64 - msg_len % 64) % 64;
     let total_len = msg_len + padding;
     script! {
@@ -34,7 +33,7 @@ fn reformat_for_blake3(msg_len: u32) -> Script {
                 OP_2DUP
             }
         }
-        // Reverse the 64 chunks because compact wants it
+        // Reverse the 64 chunks
         for i in (0..(total_len / 64 - 1)).rev() {
             for _ in 0..128 {
                 { roll_constant((total_len - i * 64) as usize * 2 - 1) }
@@ -55,7 +54,7 @@ pub fn blake3_u4_script(msg_len: u32) -> Script {
     }
 }
 
-// This is just regular BLAKE3 with %4=0 condition
+// This is just BLAKE3 with %4=0 condition
 pub fn blake3_bitvm_version(v: Vec<u8>) -> [u8; 32] {
     assert!(
         v.len() % 4 == 0,

@@ -25,12 +25,12 @@ const NO_ACKNOWLEDGMENT_VALUE: ChallengeHashType = [0u8; 20]; // for not acknowl
 const WINTERNITZ_BLOCK_LEN: u32 = 4;
 const BLAKE3_OUTPUT_LEN: u32 = 32; // should be equal to G16_PUBLIC_INPUT_LEN
 
-/// If any changes are made to the creating script functions, these should be changed to with the corresponding calculation function inside the tests
+// If any changes are made to the script generating functions, following 4 constants should also be changed with the values reported from the tests
 
 /// Start of the PAYOUT_TX_BLOCKHASH's checksig's opcodes, precalculated for optimization
-const PRECALCULATED_REPLACEMENT_INDEX_0: usize = 17452;
+const PRECALCULATED_REPLACEMENT_INDEX_0: usize = 18153;
 /// Start of the DEPOSIT_CONSTANT's pushing opcodes, precalculated for optimization
-const PRECALCULATED_REPLACEMENT_INDEX_1: usize = 89793;
+const PRECALCULATED_REPLACEMENT_INDEX_1: usize = 92061;
 
 /*
     g16_public_input_verif,
@@ -40,8 +40,8 @@ const PRECALCULATED_REPLACEMENT_INDEX_1: usize = 89793;
     payout_tx_blockhash_verif,
     hash_check,
 */
-const DEBUGGING_POSITIONS: [u32; 6] = [4876, 8088, 14264, 17452, 20600, 228749];
-const WITNESS_LENS: [usize; 5] = [88, 88, 160, 88, 136];
+const DEBUGGING_POSITIONS: [u32; 6] = [5204, 8600, 14781, 18153, 21485, 233783];
+const WITNESS_LENS: [usize; 5] = [86, 86, 160, 86, 134];
 
 /// The Winternitz output reverses the message, and BLAKE3 swaps the nibbles.
 /// This script reorders the nibbles of a Winternitz `checksig_verify` output (message) so that it is in the necessary format for BLAKE3.
@@ -59,6 +59,7 @@ fn reorder_winternitz_output_for_blake3(len: usize) -> Script {
     }
 }
 
+/// Returns the digits of a Winternitz signature
 pub fn raw_witness_to_shuffled_digits(signature: Vec<Vec<u8>>) -> Vec<u8> {
     let mut res: Vec<u8> = vec![];
     for i in (0..signature.len()).step_by(2) {
@@ -72,6 +73,7 @@ pub fn raw_witness_to_shuffled_digits(signature: Vec<Vec<u8>>) -> Vec<u8> {
     res
 }
 
+/// Reformats the Groth 16 public input into Clementine's format
 fn clementine_public_input_reformat(
     mut g16_public_input: [u8; G16_PUBLIC_INPUT_LEN],
 ) -> [u8; G16_PUBLIC_INPUT_LEN] {
@@ -97,6 +99,7 @@ fn change_the_order_of_operator_challenge_acks_according_to_blake3_stack<T>(
     }
 }
 
+/// Given the Winternitz signatures and acknowledgement preimages, reformats the data and reorders the elements to their order in the script
 fn get_witness_blocks_with_signatures(
     g16_public_input_signature: Witness,
     payout_tx_blockhash_signature: Witness,
@@ -120,15 +123,11 @@ fn get_witness_blocks_with_signatures(
             .try_into()
             .expect("This should be impossible");
 
-    //extend_witness(&mut w, payout_tx_blockhash_signature);
-    //extend_witness(&mut w, latest_blockhash_signature);
-
     let mut preimages_witness = Witness::new();
     for preimage in operator_challenge_ack_preimages_push_values {
         preimages_witness.push(preimage.to_vec());
     }
-    //extend_witness(&mut w, challenge_sending_watchtowers_signature);
-    //extend_witness(&mut w, g16_public_input_signature);
+
     [
         payout_tx_blockhash_signature,
         latest_blockhash_signature,
@@ -138,7 +137,7 @@ fn get_witness_blocks_with_signatures(
     ]
 }
 
-/// Given the signatures and acknowledged preimages, returns the witness that will be used to unlock the script (if the parameters are correct)
+/// Given the signatures and acknowledged preimages, returns the witness that will be used to potentially unlock the script
 fn get_witness_with_signatures(
     g16_public_input_signature: Witness,
     payout_tx_blockhash_signature: Witness,
@@ -160,6 +159,7 @@ fn get_witness_with_signatures(
     w
 }
 
+/// Generates the scripts that is split into 3 chunks from the replacement indices, for more detail: [`create_additional_replacable_disprove_script`]
 fn main_script_wrapper(
     combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
     deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
@@ -183,7 +183,6 @@ fn main_script_wrapper(
         &mut operator_challenge_ack_hashes_arr,
     );
     let mut pre_payout_tx_blockhash = script! {
-        // I'm not checking the number of arguments currently, but I maybe should? Think about this
 
         { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((G16_PUBLIC_INPUT_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &g16_public_input_pk) }
         { reorder_winternitz_output_for_blake3(G16_PUBLIC_INPUT_LEN * 2) }
@@ -304,7 +303,256 @@ fn main_script_wrapper(
     return (pre_payout_tx_blockhash, replacement_0, replacement_1);
 }
 
-// THIS WILL BREAK WHEN A CHANGE OCCURS IN THE SCRIPT, ITs IS ONLY TEMPORARY
+/// Generates the additional disprove script using given parameters.
+///
+/// Given the provided constants, public keys, and acknowledgment hashes, this script evaluates three conditions:
+///
+/// 1. **Signature Verification:**  
+///    Ensures that all given signatures (provided in the unlocking script - witness)  
+///    match the corresponding public keys passed as function arguments.
+///
+/// 2. **Hash Equality Check:**  
+///    Verifies whether the signed values satisfy the following equality constraint  
+///    (expressed using two auxiliary variables for clarity):  
+///
+///    - `X = BLAKE3(payout_tx_blockhash, latest_blockhash, challenge_sending_watchtowers)`  
+///    - `Y = BLAKE3(deposit_constant, X)`  
+///    - `groth16_public_input = BLAKE3(combined_method_id_constant, Y)` (except the last byte, which is truncated for field overflows)
+///
+/// 3. **Compliance of Acknowledged Preimages and `challenge_sending_watchtowers` Check:**  
+///    Ensures that there exists at least one watchtower such that:  
+///    - Its acknowledgment bit is set to zero.  
+///    - The given preimage in the unlocking script (witness), when hashed using `OP_HASH160`, matches the watchtower's expected hash.  
+///
+///    The script is spendable if **condition 1 is satisfied** and **at least one of conditions 2 or 3 is not met**, meaning the spending condition is:  
+///
+///    `Signature Verification AND NOT (Hash Equality Check AND Compliance of Acknowledged Preimages and challenge_sending_watchtowers Check)`
+///
+///    To successfully unlock, the script expects a witness in the following format:  
+///
+///    ```text
+///    [
+///      payout_tx_blockhash_signature,  
+///      latest_blockhash_signature,  
+///      `WATCHTOWER_COUNT` preimages (in the corrected format) (if a preimage is not revealed, a dummy value can be used instead),  
+///      challenge_sending_watchtowers_signature,  
+///      g16_public_input_signature  
+///    ]
+///    ```
+///     
+///     The `payout_tx_blockhash_pk` and `deposit_constant` can be replaced with other values, using the function `replace_placeholders_in_script`
+///
+/// ## Arguments
+///
+/// * `combined_method_id_constant` - Combined Method ID, in bytes
+/// * `deposit_constant` - Deposit Constant, in bytes, this constant is later replacable by other functions
+/// * `g16_public_input_pk` - Winternitz Public key for Groth16 Public Input used in BitVM
+/// * `payout_tx_blockhash_pk` - Winternitz Public key for Payout Transaction Blockhash, this public key is later replacable by other functions
+/// * `latest_blockhash_pk` - Winternitz Public key for Latest Blockhash
+/// * `challenge_sending_watchtowers_pk` - Winternitz Public key for the array of challenge sending watchtowers; in this array, watchtowers are numerated in the order of the numbers and their least significant bit
+///   (Even if the number of watchtowers is less than 160, this public key should be for a 20 byte array, and 0's should be used for non existent ones)
+/// * `operator_challenge_ack_hashes` - Operator's acknowledgement hashes for each watchtower, i.e. result of OP_HASH160'd preimages
+///
+/// ## Returns
+///
+/// * `Vec<u8>` - The compiled Bitcoin script as a byte vector.
+///
+/// ## Notes
+///
+/// - Checking the number of arguments might be necessary, in order to block malicious attempts
+/// - To use 'wots_api.rs' public keys, it is enough to cast them to vectors
+pub fn create_additional_replacable_disprove_script(
+    combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
+    deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
+    g16_public_input_pk: PublicKey,
+    payout_tx_blockhash_pk: PublicKey,
+    latest_blockhash_pk: PublicKey,
+    challenge_sending_watchtowers_pk: PublicKey,
+    operator_challenge_ack_hashes: Vec<ChallengeHashType>,
+) -> Vec<u8> {
+    let (res, _, _) = main_script_wrapper(
+        combined_method_id_constant,
+        deposit_constant,
+        g16_public_input_pk,
+        payout_tx_blockhash_pk,
+        latest_blockhash_pk,
+        challenge_sending_watchtowers_pk,
+        operator_challenge_ack_hashes,
+    );
+    return res;
+}
+
+/// Same as `create_additional_replacable_disprove_script`, but creates the script without expecting `payout_tx_blockhash_pk' and `deposit_constant` as an argument, with dummy elements
+pub fn create_additional_replacable_disprove_script_with_dummy(
+    combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
+    /* deposit_constant: [u8; DEPOSIT_CONSTANT_LEN], */
+    g16_public_input_pk: PublicKey,
+    /* payout_tx_blockhash_pk: PublicKey, */
+    latest_blockhash_pk: PublicKey,
+    challenge_sending_watchtowers_pk: PublicKey,
+    operator_challenge_ack_hashes: Vec<ChallengeHashType>,
+) -> Vec<u8> {
+    create_additional_replacable_disprove_script(
+        combined_method_id_constant,
+        [0u8; DEPOSIT_CONSTANT_LEN],
+        g16_public_input_pk,
+        generate_public_key(
+            &Parameters::new_by_bit_length(PAYOUT_TX_BLOCKHASH_LEN as u32 * 8, 4),
+            &vec![0u8; 0],
+        ),
+        latest_blockhash_pk,
+        challenge_sending_watchtowers_pk,
+        operator_challenge_ack_hashes,
+    )
+}
+
+/// Returns the unlocking witness from given parameters for the given additional disprove script
+///
+/// This function constructs a witness from the provided signatures and preimages. \
+/// Checks if the given parameters are make the given compiled additional disprove script spendable
+/// If so, returns the witness that unlocks the script
+///
+/// ## Arguments
+///
+/// * `replacable_script` - The compiled additional script verifies the conditions for spending.  
+/// * `g16_public_input_signature` - The witness signature for the Groth16 Public Input.  
+/// * `payout_tx_blockhash_signature` - The witness signature for the Payout Transaction Blockhash.  
+/// * `latest_blockhash_signature` - The witness signature for the Latest Blockhash.  
+/// * `challenge_sending_watchtowers_signature` - The witness signature for challenge sending watchtowers; in this array, watchtowers are numerated in the order of the numbers and their least significant bit
+/// * `operator_challenge_ack_preimages` - An array of optional (given if it is revealed) challenge acknowledgment preimages from watchtowers. If `None`, a random value is substituted.  
+///
+/// ## Returns
+///
+/// * `Some(Witness)` - If given parameters unlock the additional script
+/// * `None` - If not
+///
+/// ## Notes
+///
+/// - To use `wots_api.rs` signatures, use the function wotsxxx.`signature_to_raw_witness`
+pub fn validate_assertions_for_additional_script(
+    replacable_script: Vec<u8>,
+    g16_public_input_signature: Witness,
+    payout_tx_blockhash_signature: Witness,
+    latest_blockhash_signature: Witness,
+    challenge_sending_watchtowers_signature: Witness,
+    operator_challenge_ack_preimages: Vec<Option<ChallengeHashType>>, // None's are turned into random values
+) -> Option<Witness> {
+    assert!(
+        operator_challenge_ack_preimages.len() <= MAX_WATCHTOWER_COUNT,
+        "Number of Watchtowers is more than allowed"
+    );
+    let w = get_witness_with_signatures(
+        g16_public_input_signature,
+        payout_tx_blockhash_signature,
+        latest_blockhash_signature,
+        challenge_sending_watchtowers_signature,
+        operator_challenge_ack_preimages,
+    );
+    if does_unlock(replacable_script, w.to_vec()) {
+        Some(w)
+    } else {
+        None
+    }
+}
+
+/// Returns (payout_tx_blockhash_signature, latest_blockhash_signature, witness_preimages, challenge_sending_watchtowers_signature, g16_public_input_signature)
+pub fn split_additional_disprove_witness(
+    w: Witness,
+) -> (
+    Witness,
+    Witness,
+    [Vec<u8>; MAX_WATCHTOWER_COUNT],
+    Witness,
+    Witness,
+) {
+    let v = w.to_vec();
+    let mut pref = [0usize; 5];
+    for i in 1..5 {
+        pref[i] = pref[i - 1] + WITNESS_LENS[i - 1];
+    }
+    assert_eq!(v.len(), pref[4] + WITNESS_LENS[4]);
+    let mut payout_tx_blockhash_signature = Witness::new();
+    let mut latest_blockhash_signature = Witness::new();
+    //let mut preimages: [Vec<u8>; MAX_WATCHTOWER_COUNT] = from_fn(|_| Vec::new());
+    let mut challenge_sending_watchtowers_signature = Witness::new();
+    let mut g16_public_input_signature = Witness::new();
+
+    for i in 0..WITNESS_LENS[0] {
+        payout_tx_blockhash_signature.push(v[pref[0] + i].clone());
+    }
+    for i in 0..WITNESS_LENS[1] {
+        latest_blockhash_signature.push(v[pref[1] + i].clone());
+    }
+
+    let mut preimages = v[pref[2]..pref[3]].to_vec().try_into().expect("Impossible");
+
+    for i in 0..WITNESS_LENS[3] {
+        challenge_sending_watchtowers_signature.push(v[pref[3] + i].clone());
+    }
+    for i in 0..WITNESS_LENS[4] {
+        g16_public_input_signature.push(v[pref[4] + i].clone());
+    }
+
+    change_the_order_of_operator_challenge_acks_according_to_blake3_stack(&mut preimages); //this operations inverse is itself, so it works
+    (
+        payout_tx_blockhash_signature,
+        latest_blockhash_signature,
+        preimages,
+        challenge_sending_watchtowers_signature,
+        g16_public_input_signature,
+    )
+}
+
+/// Replaces the payout transaction blockhash public key and deposit constant for the given script
+///
+/// This function modifies the provided script by replacing the `checksig_verify` of the Payout Transaction Blockhash
+///
+/// ## Arguments
+///
+/// * `replacable_script` - Compiled additional disprove script
+/// * `payout_tx_blockhash_pk` - The replacement public key for payout transaction blockhash
+/// * `deposit_constant` - The replacement deposit constant
+///
+/// ## Returns
+///
+/// * `Vec<u8>` - The modified script with the updated payout transaction blockhash verification
+///
+/// ## Note
+/// - To use `wots_api.rs` public keys, cast them to vectors
+pub fn replace_placeholders_in_script(
+    mut replacable_script: Vec<u8>,
+    payout_tx_blockhash_pk: PublicKey,
+    deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
+) -> Vec<u8> {
+    let payout_tx_replacement = WINTERNITZ_VERIFIER
+        .checksig_verify(
+            &Parameters::new_by_bit_length(
+                (PAYOUT_TX_BLOCKHASH_LEN * 8) as u32,
+                WINTERNITZ_BLOCK_LEN,
+            ),
+            &payout_tx_blockhash_pk,
+        )
+        .compile()
+        .to_bytes();
+    let deposit_constant_replacement = script! {
+        for x in bytes_to_nibbles(deposit_constant.to_vec()) {
+            { x }
+        }
+    }
+    .compile()
+    .to_bytes();
+    for i in 0..payout_tx_replacement.len() {
+        replacable_script[PRECALCULATED_REPLACEMENT_INDEX_0 + i] = payout_tx_replacement[i];
+    }
+    for i in 0..deposit_constant_replacement.len() {
+        replacable_script[PRECALCULATED_REPLACEMENT_INDEX_1 + i] = deposit_constant_replacement[i];
+    }
+    replacable_script
+}
+
+/// This function (likewise [`debug_assertions_for_additional_script`]) is not stable,
+/// and would probably break if any substantial script change is done, since some part is copy pasted from the main script \
+/// (writing it otherwise would complicate the actual code a bit more)
 fn find_script_debugging_positions(
     combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
     deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
@@ -342,6 +590,7 @@ fn find_script_debugging_positions(
     }.compile().to_bytes().len();
 
     let result_of_watchtower_preimage_checks_on_stack = script! {
+
         { 0 } // If all of the hashes are valid, this should stay as zero
         OP_TOALTSTACK
 
@@ -396,7 +645,7 @@ fn find_script_debugging_positions(
     .to_bytes()
     .len();
 
-    let hash_check = script! { //this shouldn't be necessary since its the only remaining possibility 
+    let hash_check = script! { //this shouldn't be necessary since its the only remaining possibility
 
         for _ in 0..(LATEST_BLOCKHASH_LEN * 2) {
             OP_FROMALTSTACK
@@ -466,8 +715,7 @@ fn find_script_debugging_positions(
     for i in 1..v.len() {
         pref[i] = pref[i - 1] + v[i] as u32;
     }
-    //println!("{:?}", v);
-    //println!("{:?}", pref);
+
     assert_eq!(
         pref[v.len() - 1],
         main_script_wrapper(
@@ -480,210 +728,10 @@ fn find_script_debugging_positions(
             operator_challenge_ack_hashes
         )
         .0
-        .len() as u32
+        .len() as u32,
+        "This probably indicates that script has changed and debugging doesn't work anymore, you need to patch this function inorder for it to work"
     );
     pref
-}
-
-/// Generates the additional disprove script using given parameters.
-///
-/// Given the provided constants, public keys, and acknowledgment hashes, this script evaluates three conditions:
-///
-/// 1. **Signature Verification:**  
-///    Ensures that all given signatures (provided in the unlocking script - witness)  
-///    match the corresponding public keys passed as function arguments.
-///
-/// 2. **Hash Equality Check:**  
-///    Verifies whether the signed values satisfy the following equality constraint  
-///    (expressed using two auxiliary variables for clarity):  
-///
-///    - `X = BLAKE3(payout_tx_blockhash, latest_blockhash, challenge_sending_watchtowers)`  
-///    - `Y = BLAKE3(deposit_constant, X)`  
-///    - `groth16_public_input = BLAKE3(combined_method_id_constant, Y)` (except the last byte, which is truncated for field overflows)
-///
-/// 3. **Compliance of Acknowledged Preimages and `challenge_sending_watchtowers` Check:**  
-///    Ensures that there exists at least one watchtower such that:  
-///    - Its acknowledgment bit is set to zero.  
-///    - The given preimage in the unlocking script (witness), when hashed using `OP_HASH160`, matches the watchtower's expected hash.  
-///
-///    The script is spendable if **condition 1 is satisfied** and **at least one of conditions 2 or 3 is not met**, meaning the spending condition is:  
-///
-///    `Signature Verification AND NOT (Hash Equality Check AND Compliance of Acknowledged Preimages and challenge_sending_watchtowers Check)`
-///
-///    To successfully unlock, the script expects a witness in the following format:  
-///
-///    ```text
-///    [
-///      payout_tx_blockhash_signature,  
-///      latest_blockhash_signature,  
-///      `WATCHTOWER_COUNT` preimages (in the corrected format) (if a preimage is not revealed, a dummy value can be used instead),  
-///      challenge_sending_watchtowers_signature,  
-///      g16_public_input_signature  
-///    ]
-///    ```
-///     
-///     The `payout_tx_blockhash_pk` and `deposit_constant` can be replaced with other values, using the function `replace_payout_tx_blockhash`
-///
-/// ## Arguments
-///
-/// * `combined_method_id_constant` - Combined Method ID, in bytes
-/// * `deposit_constant` - Deposit Constant, in bytes, this constant is later replacable by other functions
-/// * `g16_public_input_pk` - Winternitz Public key for Groth16 Public Input used in BitVM
-/// * `payout_tx_blockhash_pk` - Winternitz Public key for Payout Transaction Blockhash, this public key is later replacable by other functions
-/// * `latest_blockhash_pk` - Winternitz Public key for Latest Blockhash
-/// * `challenge_sending_watchtowers_pk` - Winternitz Public key for the array of challenge sending watchtowers; in this array, watchtowers are numerated in the order of the numbers and their least significant bit
-///   (Even if the number of watchtowers is less than 160, this public key should be for a 20 byte array, and 0's should be used for non existent ones)
-/// * `operator_challenge_ack_hashes` - Operator's acknowledgement hashes for each watchtower, i.e. result of OP_HASH160'd preimages
-///
-/// ## Returns
-///
-/// * `Vec<u8>` - The compiled Bitcoin script as a byte vector.
-///
-/// ## Notes
-///
-/// - Checking the number of arguments might be necessary, in order to block malicious attempts
-/// - To use 'wots_api.rs' public keys, it is enough to cast them to vectors
-pub fn create_additional_replacable_disprove_script(
-    combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
-    deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
-    g16_public_input_pk: PublicKey,
-    payout_tx_blockhash_pk: PublicKey,
-    latest_blockhash_pk: PublicKey,
-    challenge_sending_watchtowers_pk: PublicKey,
-    operator_challenge_ack_hashes: Vec<ChallengeHashType>,
-) -> Vec<u8> {
-    let (res, _, _) = main_script_wrapper(
-        combined_method_id_constant,
-        deposit_constant,
-        g16_public_input_pk,
-        payout_tx_blockhash_pk,
-        latest_blockhash_pk,
-        challenge_sending_watchtowers_pk,
-        operator_challenge_ack_hashes,
-    );
-    return res;
-}
-
-/// Exactly the same as `create_additional_replacable_disprove_script`, but creates the script without expecting `payout_tx_blockhash_pk' and `deposit_constant` as an argument, with dummy elements
-pub fn create_additional_replacable_disprove_script_with_dummy(
-    combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
-    /* deposit_constant: [u8; DEPOSIT_CONSTANT_LEN], */
-    g16_public_input_pk: PublicKey,
-    /* payout_tx_blockhash_pk: PublicKey, */
-    latest_blockhash_pk: PublicKey,
-    challenge_sending_watchtowers_pk: PublicKey,
-    operator_challenge_ack_hashes: Vec<ChallengeHashType>,
-) -> Vec<u8> {
-    create_additional_replacable_disprove_script(
-        combined_method_id_constant,
-        [0u8; DEPOSIT_CONSTANT_LEN],
-        g16_public_input_pk,
-        generate_public_key(
-            &Parameters::new_by_bit_length(PAYOUT_TX_BLOCKHASH_LEN as u32 * 8, 4),
-            &vec![0u8; 0],
-        ),
-        latest_blockhash_pk,
-        challenge_sending_watchtowers_pk,
-        operator_challenge_ack_hashes,
-    )
-}
-
-/// Returns the unlocking witness from given parameters for the given additional disprove script
-///
-/// This function constructs a witness from the provided signatures and preimages. \
-/// Checks if the given parameters are make the given compiled additional disprove script spendable
-/// If so, returns the witness that unlocks the script
-///
-/// ## Arguments
-///
-/// * `replacable_script` - The compiled additional script verifies the conditions for spending.  
-/// * `g16_public_input_signature` - The witness signature for the Groth16 Public Input.  
-/// * `payout_tx_blockhash_signature` - The witness signature for the Payout Transaction Blockhash.  
-/// * `latest_blockhash_signature` - The witness signature for the Latest Blockhash.  
-/// * `challenge_sending_watchtowers_signature` - The witness signature for challenge sending watchtowers; in this array, watchtowers are numerated in the order of the numbers and their least significant bit
-/// * `operator_challenge_ack_preimages` - An array of optional (given if it is revealed) challenge acknowledgment preimages from watchtowers. If `None`, a random value is substituted.  
-///
-/// ## Returns
-///
-/// * `Some(Witness)` - If given parameters unlock the additional script
-/// * `None` - If not
-///
-/// ## Notes
-///
-/// - MIGHT NOT BE SAFE, DUE TO THE REPLACEMENT INDEX CHANGING WITH WITNESS OPTIMIZATIONS, but seems fine for now
-/// - To use `wots_api.rs` signatures, one can use the function wotsxxx.`signature_to_raw_witness`
-pub fn validate_assertions_for_additional_script(
-    replacable_script: Vec<u8>,
-    g16_public_input_signature: Witness,
-    payout_tx_blockhash_signature: Witness,
-    latest_blockhash_signature: Witness,
-    challenge_sending_watchtowers_signature: Witness,
-    operator_challenge_ack_preimages: Vec<Option<ChallengeHashType>>, // None's are turned into random values
-) -> Option<Witness> {
-    assert!(
-        operator_challenge_ack_preimages.len() <= MAX_WATCHTOWER_COUNT,
-        "Number of Watchtowers is more than allowed"
-    );
-    let w = get_witness_with_signatures(
-        g16_public_input_signature,
-        payout_tx_blockhash_signature,
-        latest_blockhash_signature,
-        challenge_sending_watchtowers_signature,
-        operator_challenge_ack_preimages,
-    );
-    if does_unlock(replacable_script, w.to_vec()) {
-        Some(w)
-    } else {
-        None
-    }
-}
-
-/// Returns ( payout_tx_blockhash_signature, latest_blockhash_signature, witness_preimages, challenge_sending_watchtowers_signature, g16_public_input_signature)
-pub fn split_additional_disprove_witness(
-    w: Witness,
-) -> (
-    Witness,
-    Witness,
-    [Vec<u8>; MAX_WATCHTOWER_COUNT],
-    Witness,
-    Witness,
-) {
-    let v = w.to_vec();
-    let mut pref = [0usize; 5];
-    for i in 1..5 {
-        pref[i] = pref[i - 1] + WITNESS_LENS[i - 1];
-    }
-    assert_eq!(v.len(), pref[4] + WITNESS_LENS[4]);
-    let mut payout_tx_blockhash_signature = Witness::new();
-    let mut latest_blockhash_signature = Witness::new();
-    //let mut preimages: [Vec<u8>; MAX_WATCHTOWER_COUNT] = from_fn(|_| Vec::new());
-    let mut challenge_sending_watchtowers_signature = Witness::new();
-    let mut g16_public_input_signature = Witness::new();
-
-    for i in 0..WITNESS_LENS[0] {
-        payout_tx_blockhash_signature.push(v[pref[0] + i].clone());
-    }
-    for i in 0..WITNESS_LENS[1] {
-        latest_blockhash_signature.push(v[pref[1] + i].clone());
-    }
-
-    let mut preimages = v[pref[2]..pref[3]].to_vec().try_into().expect("Impossible");
-
-    for i in 0..WITNESS_LENS[3] {
-        challenge_sending_watchtowers_signature.push(v[pref[3] + i].clone());
-    }
-    for i in 0..WITNESS_LENS[4] {
-        g16_public_input_signature.push(v[pref[4] + i].clone());
-    }
-
-    change_the_order_of_operator_challenge_acks_according_to_blake3_stack(&mut preimages); //this operations inverse is itself, so it works
-    (
-        payout_tx_blockhash_signature,
-        latest_blockhash_signature,
-        preimages,
-        challenge_sending_watchtowers_signature,
-        g16_public_input_signature,
-    )
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -696,6 +744,8 @@ pub enum AdditionalDisproveDebugError {
     Blake3HashCheck,                     //if hash != public_input (NOT EQUAL)
 }
 
+/// Returns the first applicable debugging condition, in the order of the enum [`AdditionalDisproveDebugError`]
+/// Should be used with caution if any substantial change is done to the main script
 pub fn debug_assertions_for_additional_script(
     replacable_script: Vec<u8>,
     g16_public_input_signature: Witness,
@@ -756,53 +806,6 @@ pub fn debug_assertions_for_additional_script(
     }
 }
 
-/// Replaces the payout Transaction blockhash public Key and deposit constant for the given script
-///
-/// This function modifies the provided script by replacing the `checksig_verify` of the Payout Transaction Blockhash
-///
-/// ## Arguments
-///
-/// * `replacable_script` - Compiled additional disprove script
-/// * `payout_tx_blockhash_pk` - The replacement public key for payout transaction blockhash
-/// * `deposit_constant` - The replacement deposit constant
-///
-/// ## Returns
-///
-/// * `Vec<u8>` - The modified script with the updated payout transaction blockhash verification.  
-///
-/// ## Note
-/// - To use `wots_api.rs` public keys, it is enough to cast them to vectors
-pub fn replace_placeholders_in_script(
-    mut replacable_script: Vec<u8>,
-    payout_tx_blockhash_pk: PublicKey,
-    deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
-) -> Vec<u8> {
-    let payout_tx_replacement = WINTERNITZ_VERIFIER
-        .checksig_verify(
-            &Parameters::new_by_bit_length(
-                (PAYOUT_TX_BLOCKHASH_LEN * 8) as u32,
-                WINTERNITZ_BLOCK_LEN,
-            ),
-            &payout_tx_blockhash_pk,
-        )
-        .compile()
-        .to_bytes();
-    let deposit_constant_replacement = script! {
-        for x in bytes_to_nibbles(deposit_constant.to_vec()) {
-            { x }
-        }
-    }
-    .compile()
-    .to_bytes();
-    for i in 0..payout_tx_replacement.len() {
-        replacable_script[PRECALCULATED_REPLACEMENT_INDEX_0 + i] = payout_tx_replacement[i];
-    }
-    for i in 0..deposit_constant_replacement.len() {
-        replacable_script[PRECALCULATED_REPLACEMENT_INDEX_1 + i] = deposit_constant_replacement[i];
-    }
-    replacable_script
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -812,7 +815,7 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
     const WINTERNITZ_SECRET_KEY_LEN: usize = 40;
 
-    /// Given the secret keys and the values of the variables, generated the signature witnesses for each one
+    /// Given the secret keys and the values of the variables, generates the signature witnesses for each one
     fn get_signatures(
         g16_public_input: [u8; G16_PUBLIC_INPUT_LEN],
         payout_tx_blockhash: [u8; PAYOUT_TX_BLOCKHASH_LEN],
@@ -860,7 +863,7 @@ mod tests {
     }
 
     fn generate_winternitz_secret_key() -> SecretKey {
-        let mut rng = thread_rng(); // might be unsafe, dicuss this (Probably won't be used in production anyway and will be just for tests)
+        let mut rng = thread_rng();
         (0..WINTERNITZ_SECRET_KEY_LEN).map(|_| rng.gen()).collect()
     }
 
@@ -868,7 +871,7 @@ mod tests {
         lists.iter().flat_map(|list| list.iter().cloned()).collect()
     }
 
-    /// This function changes with the `create_additional_replacable_disprove_script` (just copy pasted from it) and calculates the starting index of replacements
+    /// This function changes with the `create_additional_replacable_disprove_script` and calculates the starting index of replacements
     fn calculate_additional_replacable_disprove_script_replacement_indices(
         combined_method_id_constant: [u8; COMBINED_METHOD_ID_LEN],
         deposit_constant: [u8; DEPOSIT_CONSTANT_LEN],
@@ -1496,7 +1499,7 @@ mod tests {
     }
 
     #[test]
-    fn tests_replacement() {
+    fn test_replacement() {
         for seed in 0..100 {
             let mut signer_data = random_signer_data(seed);
             let public_data = get_public_data_from_signer(&signer_data);
@@ -1513,18 +1516,6 @@ mod tests {
                 ),
                 signer_data.deposit_constant,
             );
-            /*
-            println!(
-                "new:{:x?}",
-                generate_public_key(
-                    &Parameters::new_by_bit_length(
-                        PAYOUT_TX_BLOCKHASH_LEN as u32 * 8,
-                        WINTERNITZ_BLOCK_LEN,
-                    ),
-                    &signer_data.payout_tx_blockhash_sk,
-                )
-            );
-            */
             non_malicious_test_validate(s.clone(), &signer_data);
             malicious_revealed_preimage_validate(s.clone(), &signer_data);
             malicious_gibberish_g16_data_validate(s.clone(), &signer_data);
