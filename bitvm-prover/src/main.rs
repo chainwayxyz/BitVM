@@ -1,4 +1,4 @@
-use prover::prove;
+use bitvm_prover::prove;
 
 fn main() {
     prove();
