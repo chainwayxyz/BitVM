@@ -183,6 +183,9 @@ fn main_script_wrapper(
         &mut operator_challenge_ack_hashes_arr,
     );
     let mut pre_payout_tx_blockhash = script! {
+        OP_DEPTH
+        { WITNESS_LENS.iter().sum::<usize>() as u32 }
+        OP_EQUALVERIFY
 
         { WINTERNITZ_VERIFIER.checksig_verify(&Parameters::new_by_bit_length((G16_PUBLIC_INPUT_LEN * 8) as u32, WINTERNITZ_BLOCK_LEN), &g16_public_input_pk) }
         { reorder_winternitz_output_for_blake3(G16_PUBLIC_INPUT_LEN * 2) }
@@ -590,6 +593,9 @@ fn find_script_debugging_positions(
     }.compile().to_bytes().len();
 
     let result_of_watchtower_preimage_checks_on_stack = script! {
+        OP_DEPTH
+        { WITNESS_LENS.iter().sum::<usize>() as u32 }
+        OP_EQUALVERIFY
 
         { 0 } // If all of the hashes are valid, this should stay as zero
         OP_TOALTSTACK
