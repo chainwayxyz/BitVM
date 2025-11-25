@@ -293,6 +293,28 @@ pub fn validate_assertions(
     exec_result
 }
 
+/// Returns the index of the disprove script that can be executed and unlocking vector that can be directly transformed to a [`bitcoin::Witness`]`
+pub fn validate_assertions_return_vector(
+    vk: ark_groth16::VerifyingKey<Bn254>,
+    signed_asserts: Signatures,
+    disprove_scripts: &[ScriptBuf; NUM_TAPS],
+) -> Option<(usize, Vec<Vec<u8>>)> {
+    let dummy_pk32 = [[0u8; 20]; Wots32::TOTAL_DIGIT_LEN as usize];
+    let dummy_pk16 = [[0u8; 20]; Wots16::TOTAL_DIGIT_LEN as usize];
+    let dummy_pks = (
+        [dummy_pk32.clone(); NUM_PUBS],
+        [dummy_pk32.clone(); NUM_U256],
+        [dummy_pk16.clone(); NUM_HASH],
+    ); //Just for consistency, these add unnecessary overhead
+
+    validate_assertions(&vk, signed_asserts, dummy_pks, disprove_scripts).map(|(idx, script)| {
+        (
+            idx,
+            crate::clementine::utils::extract_pushed_data_from_script(script),
+        )
+    })
+}
+
 // doesn't crash even if the proof may be incorrect
 // should be used only for test purposes,
 // as in production, its best to throw error
