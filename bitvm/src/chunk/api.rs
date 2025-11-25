@@ -295,7 +295,7 @@ pub fn validate_assertions(
 
 /// Returns the index of the disprove script that can be executed and unlocking vector that can be directly transformed to a [`bitcoin::Witness`]`
 pub fn validate_assertions_return_vector(
-    vk: ark_groth16::VerifyingKey<Bn254>,
+    vk: &ark_groth16::VerifyingKey<Bn254>,
     signed_asserts: Signatures,
     disprove_scripts: &[ScriptBuf; NUM_TAPS],
 ) -> Option<(usize, Vec<Vec<u8>>)> {

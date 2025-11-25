@@ -97,7 +97,7 @@ pub fn extract_pushed_data_from_script(script: StructuredScript) -> Vec<Vec<u8>>
 
             Ok(Instruction::Op(op)) => {
                 match op {
-                    // 0, already captured with PushBytes, leaved for consistency
+                    // 0, already captured with PushBytes, left for consistency
                     OP_PUSHBYTES_0 => vec![],
 
                     // 1..=16
