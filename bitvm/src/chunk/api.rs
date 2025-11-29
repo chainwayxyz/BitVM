@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use crate::chunk::api_compiletime_utils::{
     append_bitcom_locking_script_to_partial_scripts, generate_partial_script,
     generate_segments_using_mock_vk_and_mock_proof, partial_scripts_from_segments,
@@ -298,7 +300,7 @@ pub fn validate_assertions_return_vector(
     vk: &ark_groth16::VerifyingKey<Bn254>,
     signed_asserts: Signatures,
     disprove_scripts: &[ScriptBuf; NUM_TAPS],
-) -> Option<(usize, Vec<Vec<u8>>)> {
+) -> Result<Option<(usize, Vec<Vec<u8>>)>, Box<dyn Error>> {
     let dummy_pk32 = [[0u8; 20]; Wots32::TOTAL_DIGIT_LEN as usize];
     let dummy_pk16 = [[0u8; 20]; Wots16::TOTAL_DIGIT_LEN as usize];
     let dummy_pks = (
@@ -307,12 +309,12 @@ pub fn validate_assertions_return_vector(
         [dummy_pk16.clone(); NUM_HASH],
     ); //Just for consistency, these add unnecessary overhead
 
-    validate_assertions(&vk, signed_asserts, dummy_pks, disprove_scripts).map(|(idx, script)| {
-        (
-            idx,
-            crate::clementine::utils::extract_pushed_data_from_script(script),
-        )
-    })
+    validate_assertions(&vk, signed_asserts, dummy_pks, disprove_scripts)
+        .map(|(idx, script)| {
+            let data = crate::clementine::utils::extract_pushed_data_from_script(script)?;
+            Ok((idx, data))
+        })
+        .transpose()
 }
 
 // doesn't crash even if the proof may be incorrect

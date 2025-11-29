@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::error::Error;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -88,17 +89,19 @@ pub fn does_raise_error(script: Vec<u8>, witness: Vec<Vec<u8>>) -> bool {
     exec.result().unwrap().error.is_some()
 }
 
-pub fn extract_pushed_data_from_script(script: StructuredScript) -> Vec<Vec<u8>> {
+pub fn extract_pushed_data_from_script(
+    script: StructuredScript,
+) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
     let compiled_script = script.compile();
     compiled_script
         .instructions()
         .map(|ins_res| match ins_res {
-            Ok(Instruction::PushBytes(bytes)) => bytes.as_bytes().to_vec(),
+            Ok(Instruction::PushBytes(bytes)) => Ok(bytes.as_bytes().to_vec()),
 
             Ok(Instruction::Op(op)) => {
                 match op {
                     // 0, already captured with PushBytes, left for consistency
-                    OP_PUSHBYTES_0 => vec![],
+                    OP_PUSHBYTES_0 => Ok(vec![]),
 
                     // 1..=16
                     op_code
@@ -106,25 +109,26 @@ pub fn extract_pushed_data_from_script(script: StructuredScript) -> Vec<Vec<u8>>
                             && op_code.to_u8() <= OP_PUSHNUM_16.to_u8() =>
                     {
                         let val = op_code.to_u8() - 0x50;
-                        vec![val]
+                        Ok(vec![val])
                     }
 
                     // -1
-                    OP_PUSHNUM_NEG1 => vec![0x81],
+                    OP_PUSHNUM_NEG1 => Ok(vec![0x81]),
 
-                    unexpected_op => panic!(
+                    unexpected_op => Err(format!(
                         "Unexpected Opcode encountered in disprove_script \
                      Expected a data push, but found opcode: {:?}\n in script: {:?}",
                         unexpected_op, compiled_script
-                    ),
+                    )),
                 }
             }
-            Err(e) => panic!(
+            Err(e) => Err(format!(
                 "Failed to parse disprove script, returned with error: {:?}\n for script: {:?}",
                 e, compiled_script
-            ),
+            )),
         })
-        .collect()
+        .collect::<Result<Vec<_>, String>>()
+        .map_err(|s| s.into())
 }
 
 static SORTED_OPCODE_NAMES: Lazy<Vec<(String, u8)>> = Lazy::new(|| {
@@ -454,7 +458,7 @@ mod tests {
         }
 
         for script in test_scripts {
-            let v = extract_pushed_data_from_script(script);
+            let v = extract_pushed_data_from_script(script).expect("Failed to extract pushed data");
             let mut witness = Witness::new();
             v.iter().for_each(|element| witness.push(element));
             assert!(
