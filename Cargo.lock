@@ -1812,11 +1812,31 @@ checksum = "0b47c4ab7a93edb0c7198c5535ed9b52b63095f4e9b45279c6736cec4b856baf"
 [[package]]
 name = "bitcoin-script"
 version = "0.4.0"
+source = "git+https://github.com/BitVM/rust-bitcoin-script?rev=01b4cb66cbf5b525079cabe006f9f99627da97cd#01b4cb66cbf5b525079cabe006f9f99627da97cd"
+dependencies = [
+ "bitcoin",
+ "script-macro 0.4.0 (git+https://github.com/BitVM/rust-bitcoin-script?rev=01b4cb66cbf5b525079cabe006f9f99627da97cd)",
+ "stdext",
+]
+
+[[package]]
+name = "bitcoin-script"
+version = "0.4.0"
 source = "git+https://github.com/BitVM/rust-bitcoin-script#3c75a6e4cfddb800f57710d8270c0a1dc60eb57e"
 dependencies = [
  "bitcoin",
- "script-macro",
+ "script-macro 0.4.0 (git+https://github.com/BitVM/rust-bitcoin-script)",
  "stdext",
+]
+
+[[package]]
+name = "bitcoin-script-stack"
+version = "0.0.1"
+source = "git+https://github.com/chainwayxyz/rust-bitcoin-script-stack?rev=6d53ae93ed5bdf2ccd53afe6bd6e4652ca30d46c#6d53ae93ed5bdf2ccd53afe6bd6e4652ca30d46c"
+dependencies = [
+ "bitcoin",
+ "bitcoin-script 0.4.0 (git+https://github.com/BitVM/rust-bitcoin-script?rev=01b4cb66cbf5b525079cabe006f9f99627da97cd)",
+ "bitcoin-scriptexec",
 ]
 
 [[package]]
@@ -1825,7 +1845,7 @@ version = "0.0.1"
 source = "git+https://github.com/BitVM/rust-bitcoin-script-stack#643c5f1a44af448274849c01a5ae7fbdd54d8213"
 dependencies = [
  "bitcoin",
- "bitcoin-script",
+ "bitcoin-script 0.4.0 (git+https://github.com/BitVM/rust-bitcoin-script)",
  "bitcoin-scriptexec",
 ]
 
@@ -1903,8 +1923,8 @@ dependencies = [
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
  "bitcoin",
- "bitcoin-script",
- "bitcoin-script-stack",
+ "bitcoin-script 0.4.0 (git+https://github.com/BitVM/rust-bitcoin-script?rev=01b4cb66cbf5b525079cabe006f9f99627da97cd)",
+ "bitcoin-script-stack 0.0.1 (git+https://github.com/chainwayxyz/rust-bitcoin-script-stack?rev=6d53ae93ed5bdf2ccd53afe6bd6e4652ca30d46c)",
  "bitcoin-scriptexec",
  "blake3",
  "colored",
@@ -1929,8 +1949,8 @@ version = "0.0.0"
 dependencies = [
  "arbitrary",
  "bitcoin",
- "bitcoin-script",
- "bitcoin-script-stack",
+ "bitcoin-script 0.4.0 (git+https://github.com/BitVM/rust-bitcoin-script)",
+ "bitcoin-script-stack 0.0.1 (git+https://github.com/BitVM/rust-bitcoin-script-stack)",
  "bitvm",
  "blake3",
  "libfuzzer-sys",
@@ -2062,7 +2082,7 @@ dependencies = [
  "aws-sdk-s3",
  "bitcode",
  "bitcoin",
- "bitcoin-script",
+ "bitcoin-script 0.4.0 (git+https://github.com/BitVM/rust-bitcoin-script?rev=01b4cb66cbf5b525079cabe006f9f99627da97cd)",
  "bitcoin-scriptexec",
  "bitvm",
  "clap",
@@ -6321,6 +6341,17 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "script-macro"
+version = "0.4.0"
+source = "git+https://github.com/BitVM/rust-bitcoin-script?rev=01b4cb66cbf5b525079cabe006f9f99627da97cd#01b4cb66cbf5b525079cabe006f9f99627da97cd"
+dependencies = [
+ "bitcoin",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+]
 
 [[package]]
 name = "script-macro"
