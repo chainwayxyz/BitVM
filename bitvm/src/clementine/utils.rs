@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::error::Error;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -88,17 +89,19 @@ pub fn does_raise_error(script: Vec<u8>, witness: Vec<Vec<u8>>) -> bool {
     exec.result().unwrap().error.is_some()
 }
 
-pub fn extract_pushed_data_from_script(script: StructuredScript) -> Vec<Vec<u8>> {
+pub fn extract_pushed_data_from_script(
+    script: StructuredScript,
+) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
     let compiled_script = script.compile();
     compiled_script
         .instructions()
         .map(|ins_res| match ins_res {
-            Ok(Instruction::PushBytes(bytes)) => bytes.as_bytes().to_vec(),
+            Ok(Instruction::PushBytes(bytes)) => Ok(bytes.as_bytes().to_vec()),
 
             Ok(Instruction::Op(op)) => {
                 match op {
                     // 0, already captured with PushBytes, left for consistency
-                    OP_PUSHBYTES_0 => vec![],
+                    OP_PUSHBYTES_0 => Ok(vec![]),
 
                     // 1..=16
                     op_code
@@ -106,25 +109,26 @@ pub fn extract_pushed_data_from_script(script: StructuredScript) -> Vec<Vec<u8>>
                             && op_code.to_u8() <= OP_PUSHNUM_16.to_u8() =>
                     {
                         let val = op_code.to_u8() - 0x50;
-                        vec![val]
+                        Ok(vec![val])
                     }
 
                     // -1
-                    OP_PUSHNUM_NEG1 => vec![0x81],
+                    OP_PUSHNUM_NEG1 => Ok(vec![0x81]),
 
-                    unexpected_op => panic!(
+                    unexpected_op => Err(format!(
                         "Unexpected Opcode encountered in disprove_script \
                      Expected a data push, but found opcode: {:?}\n in script: {:?}",
                         unexpected_op, compiled_script
-                    ),
+                    )),
                 }
             }
-            Err(e) => panic!(
+            Err(e) => Err(format!(
                 "Failed to parse disprove script, returned with error: {:?}\n for script: {:?}",
                 e, compiled_script
-            ),
+            )),
         })
-        .collect()
+        .collect::<Result<Vec<_>, String>>()
+        .map_err(|s| s.into())
 }
 
 static SORTED_OPCODE_NAMES: Lazy<Vec<(String, u8)>> = Lazy::new(|| {
@@ -427,45 +431,111 @@ pub fn parse_structuredscript_debug_to_bytes(debug_output: String) -> Vec<u8> {
 
 mod tests {
     use super::*;
+    use crate::execute_script_buf;
+    use bitcoin::script::{Builder, PushBytes};
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
     #[test]
     fn test_extract_pushed_data_from_script() {
-        let mut rng = ChaCha20Rng::seed_from_u64(37);
-        let mut test_scripts = vec![];
-        for i in -512..=512 {
+        for seed in 0..40 {
+            let mut rng = ChaCha20Rng::seed_from_u64(seed);
+            let mut test_scripts = vec![];
+            let mut values = vec![];
+            for i in -512..=512 {
+                let script = Builder::new().push_int(i).into_script();
+                values.push(script.clone());
+                test_scripts.push(script! {
+                    { i }
+                });
+            }
+
+            for _ in 0..128 {
+                let value = rng.gen::<i32>();
+                let script = Builder::new().push_int(value as i64).into_script();
+                values.push(script.clone());
+                test_scripts.push(script! {
+                    { value }
+                })
+            }
+
+            for i in 1..=128 {
+                let v = (0..(rng.gen_range(1..=i)))
+                    .map(|_| rng.gen::<u8>())
+                    .collect::<Vec<u8>>();
+
+                //rust-bitcoin-script doesn't support non-minimal pushes (-1, [0, 16] cases) and minimal testing of these cases are already covered, so skip
+                if v.len() == 1 && (v[0] == 129 || v[0] <= 16) {
+                    continue;
+                }
+
+                let push_bytes_buf = PushBytesBuf::try_from(v.clone()).unwrap();
+                values.push(Builder::new().push_slice(&push_bytes_buf).into_script());
+                test_scripts.push(script! {
+                    { v }
+                })
+            }
+
+            // OP_PUSHDATA2
+            let large_data = (0..520).map(|_| rng.gen::<u8>()).collect::<Vec<u8>>();
+            let push_bytes_buf = PushBytesBuf::try_from(large_data.clone()).unwrap();
+            let bitcoin_script = Builder::new().push_slice(&push_bytes_buf).into_script();
+            let rust_bitcoin_script = script! {
+                { large_data.clone() }
+            };
+            assert_eq!(rust_bitcoin_script.compile(), bitcoin_script);
+            values.push(bitcoin_script);
             test_scripts.push(script! {
-                { i }
+                { large_data }
             });
+
+            for (expected, script) in values.into_iter().zip(test_scripts.into_iter()) {
+                //println!("Testing script: {:?}", script);
+                let extracted = extract_pushed_data_from_script(script.clone())
+                    .expect("Failed to extract pushed data");
+
+                let mut witness = Witness::new();
+                extracted.iter().for_each(|element| witness.push(element));
+
+                let execution_info = execute_script_buf(expected);
+
+                let result_stack = (0..execution_info.final_stack.len())
+                    .map(|i| execution_info.final_stack.get(i))
+                    .collect::<Vec<_>>();
+
+                assert_eq!(extracted, result_stack);
+
+                assert!(
+                    execute_script(script! {
+                        { witness }
+                        { extracted }
+                        OP_EQUAL
+                    })
+                    .success
+                );
+            }
         }
-        for _ in 0..128 {
-            test_scripts.push(script! {
-                { rng.gen::<i32>() }
-            })
-        }
-        for i in 1..=128 {
-            let v = (0..(rng.gen_range(1..=i)))
-                .map(|_| rng.gen::<u8>())
-                .collect::<Vec<u8>>();
-            test_scripts.push(script! {
-                { v }
-            })
+    }
+
+    #[test]
+    fn test_extract_large_pushed_data() {
+        let mut large_data = vec![];
+        
+        // OP_PUSHDATA4
+        for i in 0..70000 {
+            large_data.push((i % 256) as u8);
         }
 
-        for script in test_scripts {
-            let v = extract_pushed_data_from_script(script);
-            let mut witness = Witness::new();
-            v.iter().for_each(|element| witness.push(element));
-            assert!(
-                execute_script(script! {
-                    { witness }
-                    { v }
-                    OP_EQUAL
-                })
-                .success
-            );
-        }
+        let script = script! {
+            { large_data.clone() }
+        };
+        
+
+        let extracted = extract_pushed_data_from_script(script.clone())
+            .expect("Failed to extract pushed data");
+
+        assert_eq!(extracted.len(), 1);
+        assert_eq!(extracted[0], large_data);
     }
 
     #[test]
