@@ -431,81 +431,89 @@ pub fn parse_structuredscript_debug_to_bytes(debug_output: String) -> Vec<u8> {
 
 mod tests {
     use super::*;
+    use crate::execute_script_buf;
     use bitcoin::script::{Builder, PushBytes};
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
     #[test]
     fn test_extract_pushed_data_from_script() {
-        let mut rng = ChaCha20Rng::seed_from_u64(38);
-        let mut test_scripts = vec![];
-        let mut values = vec![];
-        for i in -512..=512 {
-            let script = Builder::new().push_int(i).into_script();
-            values.push(script.clone());
-            test_scripts.push(script! {
-                { i }
-            });
-        }
+        for seed in 0..40 {
+            let mut rng = ChaCha20Rng::seed_from_u64(seed);
+            let mut test_scripts = vec![];
+            let mut values = vec![];
+            for i in -512..=512 {
+                let script = Builder::new().push_int(i).into_script();
+                values.push(script.clone());
+                test_scripts.push(script! {
+                    { i }
+                });
+            }
 
-        for _ in 0..128 {
-            let value = rng.gen::<i32>();
-            let script = Builder::new().push_int(value as i64).into_script();
-            values.push(script.clone());
-            test_scripts.push(script! {
-                { value }
-            })
-        }
-
-        for i in 1..=128 {
-            let v = (0..(rng.gen_range(1..=i)))
-                .map(|_| rng.gen::<u8>())
-                .collect::<Vec<u8>>();
-            let push_bytes_buf = PushBytesBuf::try_from(v.clone()).unwrap();
-            values.push(Builder::new().push_slice(&push_bytes_buf).into_script());
-            test_scripts.push(script! {
-                { v }
-            })
-        }
-
-        // OP_PUSHDATA2
-        let large_data = (0..520).map(|_| rng.gen::<u8>()).collect::<Vec<u8>>();
-        let push_bytes_buf = PushBytesBuf::try_from(large_data.clone()).unwrap();
-        values.push(Builder::new().push_slice(&push_bytes_buf).into_script());
-        test_scripts.push(script! {
-            { large_data }
-        });
-
-        for (expected, script) in values.into_iter().zip(test_scripts.into_iter()) {
-            println!("Testing script: {:?}", script);
-            let extracted = extract_pushed_data_from_script(script.clone())
-                .expect("Failed to extract pushed data");
-
-            let mut witness = Witness::new();
-            extracted.iter().for_each(|element| witness.push(element));
-
-            let expected_script = script! {
-                { expected }
-            };
-
-            let execution_info = execute_script(expected_script);
-
-            let result_stack = (0..execution_info.final_stack.len()).map(|i| {
-                execution_info
-                    .final_stack
-                    .get(i)
-            }).collect::<Vec<_>>();
-
-            assert_eq!(extracted, result_stack);
-
-            assert!(
-                execute_script(script! {
-                    { witness }
-                    { extracted }
-                    OP_EQUAL
+            for _ in 0..128 {
+                let value = rng.gen::<i32>();
+                let script = Builder::new().push_int(value as i64).into_script();
+                values.push(script.clone());
+                test_scripts.push(script! {
+                    { value }
                 })
-                .success
-            );
+            }
+
+            for i in 1..=128 {
+                let v = (0..(rng.gen_range(1..=i)))
+                    .map(|_| rng.gen::<u8>())
+                    .collect::<Vec<u8>>();
+
+                //rust-bitcoin-script doesn't support non-minimal pushes (-1, [0, 16] cases) and minimal testing of these cases are already covered, so skip
+                if v.len() == 1 && (v[0] == 129 || v[0] <= 16) {
+                    continue;
+                }
+
+                let push_bytes_buf = PushBytesBuf::try_from(v.clone()).unwrap();
+                values.push(Builder::new().push_slice(&push_bytes_buf).into_script());
+                test_scripts.push(script! {
+                    { v }
+                })
+            }
+
+            // OP_PUSHDATA2
+            let large_data = (0..520).map(|_| rng.gen::<u8>()).collect::<Vec<u8>>();
+            let push_bytes_buf = PushBytesBuf::try_from(large_data.clone()).unwrap();
+            let bitcoin_script = Builder::new().push_slice(&push_bytes_buf).into_script();
+            let rust_bitcoin_script = script! {
+                { large_data.clone() }
+            };
+            assert_eq!(rust_bitcoin_script.compile(), bitcoin_script);
+            values.push(bitcoin_script);
+            test_scripts.push(script! {
+                { large_data }
+            });
+
+            for (expected, script) in values.into_iter().zip(test_scripts.into_iter()) {
+                //println!("Testing script: {:?}", script);
+                let extracted = extract_pushed_data_from_script(script.clone())
+                    .expect("Failed to extract pushed data");
+
+                let mut witness = Witness::new();
+                extracted.iter().for_each(|element| witness.push(element));
+
+                let execution_info = execute_script_buf(expected);
+
+                let result_stack = (0..execution_info.final_stack.len())
+                    .map(|i| execution_info.final_stack.get(i))
+                    .collect::<Vec<_>>();
+
+                assert_eq!(extracted, result_stack);
+
+                assert!(
+                    execute_script(script! {
+                        { witness }
+                        { extracted }
+                        OP_EQUAL
+                    })
+                    .success
+                );
+            }
         }
     }
 
