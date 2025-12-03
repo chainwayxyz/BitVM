@@ -518,6 +518,27 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_large_pushed_data() {
+        let mut large_data = vec![];
+        
+        // OP_PUSHDATA4
+        for i in 0..70000 {
+            large_data.push((i % 256) as u8);
+        }
+
+        let script = script! {
+            { large_data.clone() }
+        };
+        
+
+        let extracted = extract_pushed_data_from_script(script.clone())
+            .expect("Failed to extract pushed data");
+
+        assert_eq!(extracted.len(), 1);
+        assert_eq!(extracted[0], large_data);
+    }
+
+    #[test]
     fn test_parsing_scriptbuf() {
         let mut s = ScriptBuf::new();
         s.push_opcode(OP_PUSHBYTES_0);
