@@ -300,7 +300,7 @@ pub fn validate_assertions_return_vector(
     vk: &ark_groth16::VerifyingKey<Bn254>,
     signed_asserts: Signatures,
     disprove_scripts: &[ScriptBuf; NUM_TAPS],
-) -> Result<Option<(usize, Vec<Vec<u8>>)>, Box<dyn Error>> {
+) -> Result<Option<(usize, Vec<Vec<u8>>)>, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let dummy_pk32 = [[0u8; 20]; Wots32::TOTAL_DIGIT_LEN as usize];
     let dummy_pk16 = [[0u8; 20]; Wots16::TOTAL_DIGIT_LEN as usize];
     let dummy_pks = (

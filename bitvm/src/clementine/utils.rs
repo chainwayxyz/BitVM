@@ -91,7 +91,7 @@ pub fn does_raise_error(script: Vec<u8>, witness: Vec<Vec<u8>>) -> bool {
 
 pub fn extract_pushed_data_from_script(
     script: StructuredScript,
-) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
+) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let compiled_script = script.compile();
     compiled_script
         .instructions()
@@ -520,7 +520,7 @@ mod tests {
     #[test]
     fn test_extract_large_pushed_data() {
         let mut large_data = vec![];
-        
+
         // OP_PUSHDATA4
         for i in 0..70000 {
             large_data.push((i % 256) as u8);
@@ -529,10 +529,9 @@ mod tests {
         let script = script! {
             { large_data.clone() }
         };
-        
 
-        let extracted = extract_pushed_data_from_script(script.clone())
-            .expect("Failed to extract pushed data");
+        let extracted =
+            extract_pushed_data_from_script(script.clone()).expect("Failed to extract pushed data");
 
         assert_eq!(extracted.len(), 1);
         assert_eq!(extracted[0], large_data);
